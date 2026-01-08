@@ -10,3 +10,4 @@ export * from './recipe.js';
 export * from './storage.js';
 export * from './log-manager.js';
 export * from './orchestrator.js';
+export * from './executor/index.js';

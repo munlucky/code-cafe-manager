@@ -1,0 +1,19 @@
+name: "test-parallel"
+version: "0.1.0"
+defaults:
+  provider: "claude-code"
+  workspace:
+    mode: "in-place"
+inputs:
+  counter: "."
+vars: {}
+steps:
+  - id: step1
+    type: "ai.prompt"
+    prompt: "Say hello"
+    timeout_sec: 60
+  - id: step2
+    type: "ai.prompt"
+    prompt: "Say goodbye"
+    depends_on: ["step1"]
+    timeout_sec: 60

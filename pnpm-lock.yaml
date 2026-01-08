@@ -26,6 +26,9 @@ importers:
       '@codecafe/core':
         specifier: workspace:*
         version: link:../core
+      '@codecafe/git-worktree':
+        specifier: workspace:*
+        version: link:../git-worktree
       '@codecafe/provider-claude-code':
         specifier: workspace:*
         version: link:../providers/claude-code

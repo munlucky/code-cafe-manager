@@ -9,6 +9,7 @@ import { registerDoctorCommand } from './commands/doctor.js';
 import { registerRunCommand } from './commands/run.js';
 import { registerUiCommand } from './commands/ui.js';
 import { registerStatusCommand } from './commands/status.js';
+import { registerBrewCommand } from './commands/brew.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -30,6 +31,7 @@ async function main() {
   registerInitCommand(program);
   registerDoctorCommand(program);
   registerRunCommand(program);
+  registerBrewCommand(program);
   registerStatusCommand(program);
   registerUiCommand(program);
 
