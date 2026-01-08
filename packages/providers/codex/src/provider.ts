@@ -7,16 +7,11 @@ import {
   ValidationResult,
 } from '@codecafe/providers-common';
 
-export interface ProviderEvent {
-  type: 'data' | 'exit' | 'error';
-  data: any;
-}
-
 /**
- * Claude Code Provider
- * PTY를 사용해 Claude Code CLI를 실행하고 로그를 스트리밍합니다.
+ * Codex Provider
+ * PTY를 사용해 Codex CLI를 실행하고 로그를 스트리밍합니다.
  */
-export class ClaudeCodeProvider extends EventEmitter implements IProvider {
+export class CodexProvider extends EventEmitter implements IProvider {
   private ptyProcess: pty.IPty | null = null;
   private isRunning: boolean = false;
 
@@ -25,7 +20,7 @@ export class ClaudeCodeProvider extends EventEmitter implements IProvider {
   }
 
   /**
-   * Claude Code CLI 실행
+   * Codex CLI 실행
    */
   async run(config: ProviderConfig): Promise<void> {
     if (this.isRunning) {
@@ -35,8 +30,8 @@ export class ClaudeCodeProvider extends EventEmitter implements IProvider {
     // Windows와 Unix 계열 OS에 따라 shell 선택
     const shell = platform() === 'win32' ? 'powershell.exe' : 'bash';
 
-    // Claude CLI 명령
-    const command = config.prompt ? `claude "${config.prompt}"` : 'claude';
+    // Codex CLI 명령 (사전 합의서 확인: codex <prompt>)
+    const command = config.prompt ? `codex "${config.prompt}"` : 'codex';
 
     this.ptyProcess = pty.spawn(shell, [], {
       name: 'xterm-color',
@@ -59,7 +54,7 @@ export class ClaudeCodeProvider extends EventEmitter implements IProvider {
       this.emit('exit', { exitCode, signal });
     });
 
-    // Claude 명령 실행
+    // Codex 명령 실행
     if (platform() === 'win32') {
       this.ptyProcess.write(`${command}\r`);
     } else {
@@ -106,17 +101,16 @@ export class ClaudeCodeProvider extends EventEmitter implements IProvider {
   }
 
   /**
-   * 환경 검증 (Claude CLI 설치 여부)
-   * PTY 대신 간단한 spawn 사용으로 타임아웃 문제 해결
+   * 환경 검증 (Codex CLI 설치 여부)
    */
   static async validateEnv(): Promise<ValidationResult> {
     return new Promise((resolve) => {
       const { spawn } = require('child_process');
       const command = platform() === 'win32' ? 'where' : 'which';
-      const args = platform() === 'win32' ? ['claude.exe'] : ['claude'];
+      const args = platform() === 'win32' ? ['codex.exe'] : ['codex'];
 
       const proc = spawn(command, args, {
-        timeout: 5000, // 5초 타임아웃
+        timeout: 5000,
         stdio: 'pipe',
       });
 
@@ -126,7 +120,7 @@ export class ClaudeCodeProvider extends EventEmitter implements IProvider {
         proc.kill();
         resolve({
           valid: false,
-          message: 'Claude CLI check timed out',
+          message: 'Codex CLI check timed out',
         });
       }, 5000);
 
@@ -135,7 +129,7 @@ export class ClaudeCodeProvider extends EventEmitter implements IProvider {
           clearTimeout(timeout);
           resolve({
             valid: false,
-            message: 'Claude CLI is not installed or not in PATH',
+            message: 'Codex CLI is not installed or not in PATH',
           });
         }
       });
@@ -148,7 +142,7 @@ export class ClaudeCodeProvider extends EventEmitter implements IProvider {
           } else {
             resolve({
               valid: false,
-              message: 'Claude CLI is not installed or not in PATH',
+              message: 'Codex CLI is not installed or not in PATH',
             });
           }
         }
@@ -160,6 +154,6 @@ export class ClaudeCodeProvider extends EventEmitter implements IProvider {
    * 인증 힌트 제공
    */
   static getAuthHint(): string {
-    return 'Run "claude login" to authenticate with Claude';
+    return 'Run "codex login" or configure Codex authentication to proceed';
   }
 }

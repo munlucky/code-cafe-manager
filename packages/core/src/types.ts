@@ -49,13 +49,19 @@ export interface Order {
   recipeName: string;
   baristaId: string | null;
   status: OrderStatus;
-  counter: string; // 실행 대상 프로젝트 경로
+  counter: string; // 실행 대상 프로젝트 경로 (worktree 모드 시 worktree 경로)
   provider: ProviderType;
   vars: Record<string, string>;
   createdAt: Date;
   startedAt: Date | null;
   endedAt: Date | null;
   error?: string;
+  // M2 추가: Worktree 정보
+  worktreeInfo?: {
+    path: string;
+    branch: string;
+    baseBranch: string;
+  };
 }
 
 /**

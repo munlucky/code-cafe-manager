@@ -29,6 +29,9 @@ importers:
       '@codecafe/provider-claude-code':
         specifier: workspace:*
         version: link:../providers/claude-code
+      '@codecafe/providers-codex':
+        specifier: workspace:*
+        version: link:../providers/codex
       chalk:
         specifier: ^5.3.0
         version: 5.6.2
@@ -108,14 +111,51 @@ importers:
         specifier: ^5.3.3
         version: 5.9.3
 
+  packages/git-worktree:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.19.27
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+
   packages/providers/claude-code:
     dependencies:
       '@codecafe/core':
         specifier: workspace:*
         version: link:../../core
+      '@codecafe/providers-common':
+        specifier: workspace:*
+        version: link:../common
       node-pty:
         specifier: ^1.0.0
         version: 1.1.0
+    devDependencies:
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.19.27
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+
+  packages/providers/codex:
+    dependencies:
+      '@codecafe/providers-common':
+        specifier: workspace:*
+        version: link:../common
+      node-pty:
+        specifier: ^1.0.0
+        version: 1.1.0
+    devDependencies:
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.19.27
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+
+  packages/providers/common:
     devDependencies:
       '@types/node':
         specifier: ^20.10.0

@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { ConfigManager } from '../config.js';
 import { ClaudeCodeProvider } from '@codecafe/provider-claude-code';
+import { CodexProvider } from '@codecafe/providers-codex';
 import { spawn } from 'child_process';
 
 export function registerDoctorCommand(program: Command): void {
@@ -30,12 +31,24 @@ export function registerDoctorCommand(program: Command): void {
         hasErrors = true;
       }
 
-      // 2. Git 확인
+      // 2. Git 확인 (버전 체크 포함)
       const gitSpinner = ora('Checking git...').start();
       try {
-        const hasGit = await checkCommand('git', ['--version']);
-        if (hasGit) {
-          gitSpinner.succeed('Git OK');
+        const gitVersion = await getGitVersion();
+        if (gitVersion) {
+          // Git 버전 체크 (2.20+ 필요)
+          const versionMatch = gitVersion.match(/(\d+)\.(\d+)/);
+          if (versionMatch) {
+            const major = parseInt(versionMatch[1]);
+            const minor = parseInt(versionMatch[2]);
+            if (major < 2 || (major === 2 && minor < 20)) {
+              gitSpinner.warn(`Git ${gitVersion} (2.20+ recommended for worktree support)`);
+            } else {
+              gitSpinner.succeed(`Git ${gitVersion} OK`);
+            }
+          } else {
+            gitSpinner.succeed(`Git ${gitVersion} OK`);
+          }
         } else {
           gitSpinner.fail('Git not found');
           hasErrors = true;
@@ -64,7 +77,24 @@ export function registerDoctorCommand(program: Command): void {
         hasErrors = true;
       }
 
-      // 4. Node.js 버전 확인
+      // 4. Codex CLI 확인 (M2 추가)
+      const codexSpinner = ora('Checking Codex CLI...').start();
+      try {
+        const result = await CodexProvider.validateEnv();
+        if (result.valid) {
+          codexSpinner.succeed('Codex CLI OK');
+        } else {
+          codexSpinner.warn(result.message || 'Codex CLI not found (optional)');
+          console.log(
+            chalk.yellow(`  Install: https://github.com/google/codex`)
+          );
+          console.log(chalk.yellow(`  Hint: ${CodexProvider.getAuthHint()}`));
+        }
+      } catch (error) {
+        codexSpinner.warn('Codex CLI not found (optional)');
+      }
+
+      // 5. Node.js 버전 확인
       const nodeSpinner = ora('Checking Node.js version...').start();
       const nodeVersion = process.versions.node;
       const major = parseInt(nodeVersion.split('.')[0]);
@@ -93,5 +123,27 @@ async function checkCommand(
 
     proc.on('error', () => resolve(false));
     proc.on('exit', (code) => resolve(code === 0));
+  });
+}
+
+async function getGitVersion(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const proc = spawn('git', ['--version'], { stdio: 'pipe' });
+
+    let output = '';
+    proc.stdout?.on('data', (data) => {
+      output += data.toString();
+    });
+
+    proc.on('error', () => resolve(null));
+    proc.on('exit', (code) => {
+      if (code === 0) {
+        // "git version 2.39.1" -> "2.39.1"
+        const match = output.match(/git version ([\d.]+)/);
+        resolve(match ? match[1] : output.trim());
+      } else {
+        resolve(null);
+      }
+    });
   });
 }
