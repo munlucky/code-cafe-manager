@@ -1,0 +1,20 @@
+name: "house-blend-pm-agent"
+version: "0.1.0"
+defaults:
+  provider: "claude-code"
+  workspace:
+    mode: "in-place"
+inputs:
+  counter: "."
+vars:
+  issue: ""
+steps:
+  - id: pm_agent_session
+    type: "ai.interactive"
+    provider: "claude-code"
+    agent_ref:
+      type: "github"
+      url: "https://github.com/munlucky/claude-settings/blob/main/.claude/agents/pm-agent.md"
+    prompt: |
+      {{ issue }}
+    timeout_sec: 7200

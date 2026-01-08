@@ -1,0 +1,31 @@
+{
+  "name": "@codecafe/provider-claude-code",
+  "version": "0.1.0",
+  "description": "Claude Code provider for CodeCafe",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["codecafe", "provider", "claude"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@codecafe/core": "workspace:*",
+    "node-pty": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3"
+  }
+}

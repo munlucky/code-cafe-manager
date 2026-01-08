@@ -1,0 +1,34 @@
+{
+  "name": "codecafe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI CLI Orchestrator - Manage multiple AI CLI instances (baristas) in parallel",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel dev",
+    "clean": "pnpm -r clean",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test"
+  },
+  "keywords": [
+    "ai",
+    "cli",
+    "orchestrator",
+    "claude",
+    "codex",
+    "workflow"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "prettier": "^3.1.0",
+    "eslint": "^8.55.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
