@@ -7,6 +7,7 @@ import type { WorktreeInfo } from '../../types/models';
 
 export function Worktrees() {
   const [repoPath, setRepoPath] = useState('.');
+  const [baseBranch, setBaseBranch] = useState('main');
   const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -33,11 +34,13 @@ export function Worktrees() {
   };
 
   const handleExportPatch = async (worktreePath: string) => {
-    const baseBranch = prompt('Enter base branch:', 'main');
-    if (!baseBranch) return;
+    if (!baseBranch.trim()) {
+      alert('Enter a base branch to export patch.');
+      return;
+    }
 
     try {
-      const result = await window.codecafe.exportPatch(worktreePath, baseBranch);
+      const result = await window.codecafe.exportPatch(worktreePath, baseBranch.trim());
       if (result.success && result.data) {
         alert(`Patch exported to: ${result.data}`);
       } else {
@@ -103,6 +106,14 @@ export function Worktrees() {
           <Button onClick={handleLoad} disabled={isLoading}>
             {isLoading ? 'Loading...' : 'Load'}
           </Button>
+        </div>
+        <div className="mt-4">
+          <label className="block text-coffee mb-2">Base Branch</label>
+          <Input
+            type="text"
+            value={baseBranch}
+            onChange={(e) => setBaseBranch(e.target.value)}
+          />
         </div>
       </div>
 
