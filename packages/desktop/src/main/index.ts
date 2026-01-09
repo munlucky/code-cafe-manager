@@ -221,6 +221,16 @@ function setupIpcHandlers() {
     }
   });
 
+  ipcMain.handle('deleteRecipe', async (_, recipeName: string) => {
+    try {
+      const recipePath = join(recipesDir, recipeName);
+      await fs.unlink(recipePath);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
   ipcMain.handle('validateRecipe', async (_, recipeData: any) => {
     const result = safeValidateRecipe(recipeData);
     if (result.success) {

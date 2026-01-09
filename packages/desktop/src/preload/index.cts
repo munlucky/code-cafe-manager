@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('codecafe', {
   saveRecipe: (recipeName: string, recipeData: any) =>
     ipcRenderer.invoke('saveRecipe', recipeName, recipeData),
   validateRecipe: (recipeData: any) => ipcRenderer.invoke('validateRecipe', recipeData),
+  deleteRecipe: (recipeName: string) => ipcRenderer.invoke('deleteRecipe', recipeName),
 
   onBaristaEvent: (callback: (event: any) => void) => {
     ipcRenderer.removeAllListeners('barista:event');

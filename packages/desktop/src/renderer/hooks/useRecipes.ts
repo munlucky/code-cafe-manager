@@ -49,6 +49,22 @@ export function useRecipes() {
     }
   };
 
+  const deleteRecipe = async (name: string) => {
+    try {
+      const result = await window.codecafe.deleteRecipe(name);
+      if (result.success) {
+        await fetchRecipes();
+        if (currentRecipeName === name) {
+          setCurrentRecipe(null, null);
+        }
+      }
+      return result;
+    } catch (error) {
+      console.error('Failed to delete recipe:', error);
+      throw error;
+    }
+  };
+
   return {
     recipes,
     currentRecipe,
@@ -57,5 +73,7 @@ export function useRecipes() {
     loadRecipe,
     saveRecipe,
     validateRecipe,
+    deleteRecipe,
+    setCurrentRecipe,
   };
 }

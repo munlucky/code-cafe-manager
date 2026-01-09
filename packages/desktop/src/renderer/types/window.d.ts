@@ -19,7 +19,7 @@ export interface CreateOrderParams {
   recipeName: string;
   counter: string;
   provider: ProviderType;
-  vars: Record<string, string>;
+  vars: Record<string, any>;
 }
 
 export interface ProviderInfo {
@@ -68,6 +68,7 @@ declare global {
         recipeData: Recipe
       ) => Promise<IpcResult<void>>;
       validateRecipe: (recipeData: Recipe) => Promise<IpcResult<void>>;
+      deleteRecipe: (recipeName: string) => Promise<IpcResult<void>>;
 
       // Event Listeners
       onBaristaEvent: (callback: (event: any) => void) => void;
