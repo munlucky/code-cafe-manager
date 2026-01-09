@@ -1,7 +1,7 @@
 {
-  "name": "@codecafe/provider-claude-code",
+  "name": "@codecafe/providers-codex",
   "version": "0.1.0",
-  "description": "Claude Code provider for CodeCafe",
+  "description": "Codex provider for CodeCafe",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -17,11 +17,10 @@
     "clean": "rm -rf dist *.tsbuildinfo",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": ["codecafe", "provider", "claude"],
+  "keywords": ["codecafe", "provider", "codex"],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@codecafe/core": "workspace:*",
     "@codecafe/providers-common": "workspace:*",
     "node-pty": "^1.0.0"
   },
