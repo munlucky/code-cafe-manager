@@ -37,15 +37,21 @@ contextBridge.exposeInMainWorld('codecafe', {
 
   // 이벤트 리스너
   onBaristaEvent: (callback: (event: any) => void) => {
+    // 기존 리스너 제거 후 새로 등록
+    ipcRenderer.removeAllListeners('barista:event');
     ipcRenderer.on('barista:event', (_, event) => callback(event));
   },
   onOrderEvent: (callback: (event: any) => void) => {
+    // 기존 리스너 제거 후 새로 등록
+    ipcRenderer.removeAllListeners('order:event');
     ipcRenderer.on('order:event', (_, event) => callback(event));
   },
   onOrderAssigned: (callback: (data: any) => void) => {
+    ipcRenderer.removeAllListeners('order:assigned');
     ipcRenderer.on('order:assigned', (_, data) => callback(data));
   },
   onOrderCompleted: (callback: (data: any) => void) => {
+    ipcRenderer.removeAllListeners('order:completed');
     ipcRenderer.on('order:completed', (_, data) => callback(data));
   },
 });

@@ -7,9 +7,11 @@ import { WorktreeManager } from '@codecafe/git-worktree';
 import { safeValidateRecipe } from '@codecafe/schema';
 import { promises as fs } from 'fs';
 import * as YAML from 'yaml';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+dotenv.config({ path: join(__dirname, '..', '..', '.env') });
 
 let mainWindow: BrowserWindow | null = null;
 let orchestrator: Orchestrator | null = null;
@@ -31,7 +33,17 @@ async function createWindow() {
   }
 
   // HTML 로드
-  await mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+  // Development: webpack dev server
+  // Production: built HTML
+  const isDev = process.env.NODE_ENV === 'development';
+  if (isDev) {
+    const devServerPort = process.env.RENDERER_PORT || '8081';
+    const devServerUrl =
+      process.env.RENDERER_URL || `http://localhost:${devServerPort}`;
+    await mainWindow.loadURL(devServerUrl);
+  } else {
+    await mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+  }
 
   mainWindow.on('closed', () => {
     mainWindow = null;
