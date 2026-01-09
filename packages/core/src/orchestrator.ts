@@ -71,6 +71,14 @@ export class Orchestrator extends EventEmitter {
     vars: Record<string, string> = {}
   ): Order {
     const order = this.orderManager.createOrder(recipeId, recipeName, counter, provider, vars);
+    const idleBarista = this.baristaManager.findIdleBarista(provider);
+    if (!idleBarista) {
+      try {
+        this.baristaManager.createBarista(provider);
+      } catch (error) {
+        console.error('Failed to auto-create barista:', error);
+      }
+    }
     this.saveState(); // 비동기 저장
     this.tryAssignOrders(); // 즉시 할당 시도
     return order;
