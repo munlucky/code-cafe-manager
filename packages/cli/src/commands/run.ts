@@ -4,6 +4,10 @@ import ora from 'ora';
 import { ConfigManager } from '../config.js';
 import { ClaudeCodeProvider } from '@codecafe/provider-claude-code';
 import { resolve } from 'path';
+import { RecipeManager } from '@codecafe/core';
+import { executeRecipe, type ExecutionContext } from '@codecafe/core';
+import { BaristaManager } from '@codecafe/core';
+import { OrderManager } from '@codecafe/core';
 
 export function registerRunCommand(program: Command): void {
   program
@@ -77,9 +81,79 @@ export function registerRunCommand(program: Command): void {
             prompt: issue,
           });
         } else {
-          // TODO: 레시피 기반 실행 (M1에서는 미구현)
-          spinner.fail('Recipe-based execution is not yet implemented');
-          process.exit(1);
+          // 레시피 기반 실행
+          const recipeManager = new RecipeManager();
+          const recipe = await recipeManager.loadRecipe(resolve(options.recipe));
+
+          spinner.text = `Loading recipe: ${recipe.name} v${recipe.version}`;
+
+          // Create managers
+          const baristaManager = new BaristaManager(4);
+          const orderManager = new OrderManager();
+
+          // Create order
+          const order = orderManager.createOrder(
+            recipe.name,
+            recipe.name,
+            counter,
+            provider as any,
+            { userMessage: issue || '' }
+          );
+
+          // Create provider factory
+          const providerFactory = {
+            create: (type: string, config?: any) => {
+              if (type === 'claude-code') {
+                return new ClaudeCodeProvider();
+              }
+              throw new Error(`Unknown provider: ${type}`);
+            },
+          };
+
+          // Create execution context
+          const ctx: ExecutionContext = {
+            order,
+            recipe,
+            baristaManager,
+            providerFactory,
+            stepOutputs: new Map(),
+          };
+
+          spinner.succeed('Recipe loaded');
+          console.log(chalk.cyan(`Recipe: ${recipe.name} v${recipe.version}`));
+          console.log(chalk.cyan(`Counter: ${counter}`));
+          console.log(chalk.cyan(`Provider: ${provider}\n`));
+
+          // Execute recipe
+          const executionSpinner = ora('Executing recipe...').start();
+
+          try {
+            const result = await executeRecipe(ctx);
+
+            if (result.status === 'completed') {
+              executionSpinner.succeed('Recipe execution completed');
+              console.log(chalk.green('\n✓ All steps completed successfully'));
+
+              // Print step results
+              console.log(chalk.cyan('\nStep Results:'));
+              for (const stepResult of result.steps) {
+                const statusIcon = stepResult.status === 'success' ? '✓' : '✗';
+                const statusColor = stepResult.status === 'success' ? chalk.green : chalk.red;
+                console.log(statusColor(`  ${statusIcon} ${stepResult.stepId}`));
+                if (stepResult.output) {
+                  console.log(chalk.gray(`    ${stepResult.output.slice(0, 200)}...`));
+                }
+              }
+            } else {
+              executionSpinner.fail('Recipe execution failed');
+              console.log(chalk.red(`\n✗ Execution failed: ${result.error}`));
+              process.exit(1);
+            }
+          } catch (error) {
+            executionSpinner.fail('Recipe execution error');
+            console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+            process.exit(1);
+          }
         }
       } catch (error) {
         spinner.fail('Execution failed');

@@ -34,12 +34,24 @@ export async function executeRecipe(
               ctx,
               step.id
             );
+          } else if (step.type === 'conditional') {
+            // Execute conditional step
+            return executeStepWithRetry(step, ctx);
           } else {
             // Execute single step
             return executeStepWithRetry(step, ctx);
           }
         })
       );
+
+      // Store step outputs in context for future steps
+      for (const result of groupResults) {
+        ctx.stepOutputs.set(result.stepId, {
+          output: result.output,
+          outputs: result.outputs,
+          status: result.status,
+        });
+      }
 
       results.push(...groupResults);
 

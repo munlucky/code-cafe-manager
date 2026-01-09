@@ -9,6 +9,7 @@ export interface ExecutionContext {
   recipe: Recipe;
   baristaManager: BaristaManager;
   providerFactory: ProviderFactory;
+  stepOutputs: Map<string, any>; // Store outputs from executed steps
 }
 
 /**
@@ -29,6 +30,7 @@ export interface StepResult {
   output?: string;
   error?: string;
   retryCount?: number;
+  outputs?: Record<string, any>; // Named outputs for data flow
 }
 
 /**

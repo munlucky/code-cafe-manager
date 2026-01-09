@@ -1,5 +1,11 @@
 import { RecipeStep, BaristaStatus } from '../types.js';
 import { ExecutionContext, StepResult } from './types.js';
+import { collectContext } from './context-collector.js';
+import {
+  processTemplateObject,
+  evaluateCondition,
+  TemplateContext,
+} from './template-engine.js';
 
 /**
  * Step Executor
@@ -100,13 +106,25 @@ async function executeStepCore(
   const startedAt = new Date();
 
   try {
-    switch (step.type) {
+    // Process template variables in step
+    const processedStep = processStepTemplates(step, ctx);
+
+    switch (processedStep.type) {
       case 'ai.interactive':
       case 'ai.prompt':
-        return await executeAIStep(step, ctx, startedAt);
+        return await executeAIStep(processedStep, ctx, startedAt);
 
       case 'shell':
-        return await executeShellStep(step, ctx, startedAt);
+        return await executeShellStep(processedStep, ctx, startedAt);
+
+      case 'context.collect':
+        return await executeContextCollectStep(processedStep, ctx, startedAt);
+
+      case 'conditional':
+        return await executeConditionalStep(processedStep, ctx, startedAt);
+
+      case 'data.passthrough':
+        return await executeDataPassthroughStep(processedStep, ctx, startedAt);
 
       case 'parallel':
         // Parallel steps are handled by parallel-executor
@@ -124,6 +142,28 @@ async function executeStepCore(
       error: (err as Error).message,
     };
   }
+}
+
+/**
+ * Process template variables in step
+ */
+function processStepTemplates(step: RecipeStep, ctx: ExecutionContext): RecipeStep {
+  // Build template context from step outputs
+  const templateContext: TemplateContext = {
+    order: ctx.order,
+    recipe: ctx.recipe,
+  };
+
+  // Add step outputs
+  for (const [stepId, outputs] of ctx.stepOutputs.entries()) {
+    templateContext[stepId] = {
+      output: outputs.output || '',
+      outputs: outputs.outputs || {},
+    };
+  }
+
+  // Process templates in step
+  return processTemplateObject(step, templateContext) as RecipeStep;
 }
 
 /**
@@ -219,7 +259,144 @@ async function executeShellStep(
     throw new Error(`Shell step "${step.id}" missing command`);
   }
 
-  // TODO: Execute shell command
-  // For now, just simulate
-  throw new Error('Shell step execution not yet implemented');
+  // Dynamic import for child_process
+  const { exec } = await import('child_process');
+  const { promisify } = await import('util');
+  const execAsync = promisify(exec);
+
+  try {
+    const { stdout, stderr } = await execAsync(step.command, {
+      cwd: order.counter,
+      timeout: (step.timeout_sec || 7200) * 1000,
+      maxBuffer: 10 * 1024 * 1024, // 10MB
+    });
+
+    const output = stdout + (stderr ? `\nSTDERR:\n${stderr}` : '');
+
+    return {
+      stepId: step.id,
+      status: 'success',
+      startedAt,
+      endedAt: new Date(),
+      output: output.slice(0, 10000), // Limit to 10KB
+    };
+  } catch (err: any) {
+    return {
+      stepId: step.id,
+      status: 'failed',
+      startedAt,
+      endedAt: new Date(),
+      error: err.message || 'Shell command failed',
+      output: err.stdout ? err.stdout.slice(0, 10000) : undefined,
+    };
+  }
+}
+
+/**
+ * Execute context collection step
+ */
+async function executeContextCollectStep(
+  step: RecipeStep,
+  ctx: ExecutionContext,
+  startedAt: Date
+): Promise<StepResult> {
+  if (!step.collect || step.collect.length === 0) {
+    throw new Error(`Context collect step "${step.id}" missing collect items`);
+  }
+
+  try {
+    const context = await collectContext(step.collect, ctx.order.counter);
+
+    return {
+      stepId: step.id,
+      status: 'success',
+      startedAt,
+      endedAt: new Date(),
+      output: JSON.stringify(context, null, 2),
+      outputs: context,
+    };
+  } catch (err: any) {
+    return {
+      stepId: step.id,
+      status: 'failed',
+      startedAt,
+      endedAt: new Date(),
+      error: err.message || 'Context collection failed',
+    };
+  }
+}
+
+/**
+ * Execute conditional step
+ */
+async function executeConditionalStep(
+  step: RecipeStep,
+  ctx: ExecutionContext,
+  startedAt: Date
+): Promise<StepResult> {
+  if (!step.condition) {
+    throw new Error(`Conditional step "${step.id}" missing condition`);
+  }
+
+  // Build template context
+  const templateContext: TemplateContext = {
+    order: ctx.order,
+    recipe: ctx.recipe,
+  };
+
+  for (const [stepId, outputs] of ctx.stepOutputs.entries()) {
+    templateContext[stepId] = {
+      output: outputs.output || '',
+      outputs: outputs.outputs || {},
+    };
+  }
+
+  // Evaluate condition
+  const conditionResult = evaluateCondition(step.condition, templateContext);
+
+  // Select steps to execute
+  const stepsToExecute = conditionResult ? step.when_true : step.when_false;
+
+  if (!stepsToExecute || stepsToExecute.length === 0) {
+    return {
+      stepId: step.id,
+      status: 'success',
+      startedAt,
+      endedAt: new Date(),
+      output: `Condition evaluated to ${conditionResult}, no steps to execute`,
+    };
+  }
+
+  // Execute selected steps
+  // Import dynamically to avoid circular dependency
+  const { executeParallelSteps } = await import('./parallel-executor.js');
+
+  const result = await executeParallelSteps(stepsToExecute, ctx, step.id);
+
+  return {
+    ...result,
+    stepId: step.id,
+    output: `Condition: ${conditionResult}\n${result.output || ''}`,
+  };
+}
+
+/**
+ * Execute data passthrough step
+ */
+async function executeDataPassthroughStep(
+  step: RecipeStep,
+  ctx: ExecutionContext,
+  startedAt: Date
+): Promise<StepResult> {
+  // Simply pass through input data as outputs
+  const outputs = step.inputs || {};
+
+  return {
+    stepId: step.id,
+    status: 'success',
+    startedAt,
+    endedAt: new Date(),
+    output: JSON.stringify(outputs, null, 2),
+    outputs,
+  };
 }

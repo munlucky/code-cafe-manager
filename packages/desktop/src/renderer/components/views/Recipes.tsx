@@ -10,6 +10,7 @@ import type { Recipe, RecipeStep, StepType, ProviderType } from '../../types/mod
 
 const STEP_TYPES: StepType[] = ['ai.interactive', 'ai.prompt', 'shell', 'parallel'];
 const PROVIDER_OPTIONS: ProviderType[] = ['claude-code', 'codex'];
+const DEFAULT_RECIPE_NAMES = new Set(['pm-agent.yaml', 'pm-agent.yml']);
 
 function normalizeRecipe(recipe: Recipe): Recipe {
   return {
@@ -66,6 +67,9 @@ export function Recipes() {
     type: 'success' | 'error' | null;
     message: string;
   }>({ type: null, message: '' });
+  const isDefaultRecipe = Boolean(
+    currentRecipeName && DEFAULT_RECIPE_NAMES.has(currentRecipeName)
+  );
 
   useEffect(() => {
     fetchRecipes();
@@ -334,7 +338,7 @@ export function Recipes() {
                 <Button variant="secondary" onClick={handleCopyYaml}>
                   Copy YAML
                 </Button>
-                {currentRecipeName && (
+                {currentRecipeName && !isDefaultRecipe && (
                   <Button
                     variant="secondary"
                     className="bg-red-700 hover:bg-red-600"
@@ -342,6 +346,11 @@ export function Recipes() {
                   >
                     Delete
                   </Button>
+                )}
+                {isDefaultRecipe && (
+                  <div className="text-xs text-gray-500 self-center">
+                    Default recipe is protected.
+                  </div>
                 )}
               </div>
             </div>
@@ -396,54 +405,6 @@ export function Recipes() {
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-coffee mb-1 text-sm">Default Counter</label>
-                      <Input
-                        type="text"
-                        value={recipeDraft?.inputs.counter || ''}
-                        onChange={(e) =>
-                          updateDraft((draft) => {
-                            draft.inputs.counter = e.target.value;
-                            return draft;
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-sm font-semibold text-coffee mb-2">Workspace</div>
-                  <div className="space-y-3">
-                    <div className="text-xs text-gray-500">
-                      Mode: worktree (fixed)
-                    </div>
-                    <div>
-                      <label className="block text-coffee mb-1 text-sm">Base Branch</label>
-                      <Input
-                        type="text"
-                        value={recipeDraft?.defaults.workspace.baseBranch || ''}
-                        onChange={(e) =>
-                          updateDraft((draft) => {
-                            draft.defaults.workspace.baseBranch = e.target.value;
-                            return draft;
-                          })
-                        }
-                      />
-                    </div>
-                    <label className="flex items-center gap-2 text-sm text-bone">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(recipeDraft?.defaults.workspace.clean)}
-                        onChange={(e) =>
-                          updateDraft((draft) => {
-                            draft.defaults.workspace.clean = e.target.checked;
-                            return draft;
-                          })
-                        }
-                      />
-                      Clean worktree after completion
-                    </label>
                   </div>
                 </div>
 

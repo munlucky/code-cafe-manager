@@ -92,6 +92,22 @@ export class RecipeManager {
           throw new Error(`Step ${step.id}: parallel step must have substeps`);
         }
         this.validateSteps(step.steps);
+      } else if (step.type === 'conditional') {
+        if (!step.condition) {
+          throw new Error(`Step ${step.id}: condition is required for conditional step`);
+        }
+        if (step.when_true && step.when_true.length > 0) {
+          this.validateSteps(step.when_true);
+        }
+        if (step.when_false && step.when_false.length > 0) {
+          this.validateSteps(step.when_false);
+        }
+      } else if (step.type === 'context.collect') {
+        if (!step.collect || step.collect.length === 0) {
+          throw new Error(`Step ${step.id}: collect is required for context.collect step`);
+        }
+      } else if (step.type === 'data.passthrough') {
+        // No specific validation needed
       }
 
       // depends_on 검증

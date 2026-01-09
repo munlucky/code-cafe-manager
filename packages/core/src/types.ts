@@ -26,7 +26,14 @@ export type ProviderType = 'claude-code' | 'codex' | 'gemini' | 'grok';
 export type WorkspaceMode = 'in-place' | 'worktree' | 'temp';
 
 // Step 타입
-export type StepType = 'ai.interactive' | 'ai.prompt' | 'shell' | 'parallel';
+export type StepType =
+  | 'ai.interactive'
+  | 'ai.prompt'
+  | 'shell'
+  | 'parallel'
+  | 'conditional'
+  | 'context.collect'
+  | 'data.passthrough';
 
 /**
  * Barista (실행 유닛)
@@ -101,13 +108,28 @@ export interface RecipeStep {
   depends_on?: string[];
   timeout_sec?: number;
   retry?: number;
+
+  // Data flow
+  inputs?: Record<string, any>;
+  outputs?: string[];
+
   // ai.interactive / ai.prompt 전용
   agent_ref?: AgentReference;
   prompt?: string;
+
   // shell 전용
   command?: string;
+
   // parallel 전용
   steps?: RecipeStep[];
+
+  // conditional 전용
+  condition?: string;
+  when_true?: RecipeStep[];
+  when_false?: RecipeStep[];
+
+  // context.collect 전용
+  collect?: string[];
 }
 
 export interface AgentReference {

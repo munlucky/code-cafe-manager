@@ -1,20 +1,213 @@
 name: "house-blend-pm-agent"
-version: "0.1.0"
+version: "0.2.0"
 defaults:
   provider: "claude-code"
   workspace:
     mode: "in-place"
+
 inputs:
   counter: "."
+  userMessage: ""
+
 vars:
-  issue: ""
+  userMessage: "{{ userMessage }}"
+
 steps:
-  - id: pm_agent_session
-    type: "ai.interactive"
-    provider: "claude-code"
+  # Phase 1: Context Collection
+  - id: collect_git_info
+    type: context.collect
+    collect:
+      - git.branch
+      - git.status
+      - git.recentCommits
+
+  - id: collect_project_info
+    type: context.collect
+    collect:
+      - project.hasContextMd
+      - project.hasPendingQuestions
+      - project.packageJson
+
+  # Phase 2: Requirements Analysis
+  - id: analyze_requirements
+    type: ai.interactive
+    provider: claude-code
+    depends_on:
+      - collect_git_info
+      - collect_project_info
     agent_ref:
-      type: "github"
-      url: "https://github.com/munlucky/claude-settings/blob/main/.claude/agents/pm-agent.md"
+      type: local
+      path: .claude/agents/requirements-analyzer.md
     prompt: |
-      {{ issue }}
-    timeout_sec: 7200
+      # 요구사항 분석
+
+      ## 사용자 요청
+      {{ userMessage }}
+
+      ## Git 정보
+      {{ collect_git_info.output }}
+
+      ## 프로젝트 정보
+      {{ collect_project_info.output }}
+
+      다음 정보를 분석하여 JSON 형식으로 출력하세요:
+      {
+        "taskType": "feature|modification|bugfix|refactor",
+        "complexity": "simple|medium|complex",
+        "phase": "Planning|Implementation|Integration|Verification",
+        "missingInfo": [],
+        "questions": []
+      }
+    timeout_sec: 300
+
+  # Phase 3: Conditional - Check Uncertainty
+  - id: check_uncertainty
+    type: conditional
+    depends_on:
+      - analyze_requirements
+    condition: "{{ analyze_requirements.outputs.missingInfo.length > 0 }}"
+    when_true:
+      # 불확실성이 있으면 질문
+      - id: ask_questions
+        type: ai.interactive
+        provider: claude-code
+        prompt: |
+          다음 질문들에 답변해주세요:
+          {{ analyze_requirements.outputs.questions }}
+        timeout_sec: 300
+
+      - id: finalize_requirements
+        type: ai.interactive
+        provider: claude-code
+        depends_on:
+          - ask_questions
+        prompt: |
+          초기 분석: {{ analyze_requirements.output }}
+          답변: {{ ask_questions.output }}
+
+          최종 요구사항을 정리하세요.
+        timeout_sec: 300
+
+    when_false:
+      # 불확실성이 없으면 그대로 진행
+      - id: use_initial_requirements
+        type: data.passthrough
+        inputs:
+          requirements: "{{ analyze_requirements.output }}"
+
+  # Phase 4: Agent Sequence Execution
+  - id: sequence_decision
+    type: conditional
+    depends_on:
+      - check_uncertainty
+    condition: "{{ analyze_requirements.outputs.complexity == 'simple' }}"
+    when_true:
+      # Simple: 직접 구현
+      - id: implement_simple
+        type: ai.interactive
+        provider: claude-code
+        prompt: |
+          요구사항: {{ final_requirements }}
+
+          간단한 작업이므로 직접 구현합니다.
+        timeout_sec: 3600
+
+    when_false:
+      # Medium/Complex: 계획 -> 구현
+      - id: create_plan
+        type: ai.interactive
+        provider: claude-code
+        prompt: |
+          요구사항: {{ final_requirements }}
+
+          구현 계획을 작성하세요.
+        timeout_sec: 1800
+
+      - id: parallel_execution_decision
+        type: conditional
+        depends_on:
+          - create_plan
+        condition: "{{ analyze_requirements.outputs.complexity == 'complex' }}"
+        when_true:
+          # Complex: Validator + Implementation 병렬
+          - id: validate_and_implement
+            type: parallel
+            steps:
+              - id: validate_plan
+                type: ai.interactive
+                provider: claude-code
+                prompt: |
+                  계획 검증: {{ create_plan.output }}
+                timeout_sec: 1800
+
+              - id: implement_with_plan_parallel
+                type: ai.interactive
+                provider: claude-code
+                prompt: |
+                  계획 기반 구현: {{ create_plan.output }}
+                timeout_sec: 3600
+
+        when_false:
+          # Medium: 순차 실행
+          - id: implement_with_plan_sequential
+            type: ai.interactive
+            provider: claude-code
+            prompt: |
+              계획 기반 구현: {{ create_plan.output }}
+            timeout_sec: 3600
+
+  # Phase 5: Verification
+  - id: verify_implementation
+    type: ai.interactive
+    provider: claude-code
+    depends_on:
+      - sequence_decision
+    prompt: |
+      요구사항: {{ final_requirements }}
+
+      구현 검증을 수행하고 미완료 항목을 확인하세요.
+
+      JSON 형식으로 출력:
+      {
+        "verificationResult": "pass|fail",
+        "missingItems": []
+      }
+    timeout_sec: 1800
+
+  # Phase 6: Completion Check
+  - id: completion_check
+    type: conditional
+    depends_on:
+      - verify_implementation
+    condition: "{{ verify_implementation.outputs.missingItems.length > 0 }}"
+    when_true:
+      # 미완료 항목이 있으면 재구현
+      - id: implement_missing
+        type: ai.interactive
+        provider: claude-code
+        prompt: |
+          미완료 항목: {{ verify_implementation.outputs.missingItems }}
+
+          누락된 항목을 구현하세요.
+        timeout_sec: 3600
+
+      - id: reverify
+        type: ai.interactive
+        provider: claude-code
+        depends_on:
+          - implement_missing
+        prompt: |
+          재검증을 수행하세요.
+        timeout_sec: 1800
+
+    when_false:
+      # 완료되었으면 문서화
+      - id: document_results
+        type: ai.interactive
+        provider: claude-code
+        prompt: |
+          요구사항: {{ final_requirements }}
+          검증 결과: {{ verify_implementation.output }}
+
+          결과를 문서화하세요.
+        timeout_sec: 600

@@ -1,0 +1,50 @@
+name: "test-simple"
+version: "0.1.0"
+defaults:
+  provider: "claude-code"
+  workspace:
+    mode: "in-place"
+
+inputs:
+  counter: "."
+
+vars: {}
+
+steps:
+  # Test 1: Context Collection
+  - id: collect_git
+    type: context.collect
+    collect:
+      - git.branch
+      - git.status
+
+  # Test 2: Shell Command
+  - id: test_shell
+    type: shell
+    command: "echo Hello from CodeCafe"
+    depends_on:
+      - collect_git
+
+  # Test 3: Data Passthrough
+  - id: passthrough_test
+    type: data.passthrough
+    inputs:
+      message: "Test message"
+      number: 42
+    depends_on:
+      - test_shell
+
+  # Test 4: Conditional (should execute when_true)
+  - id: conditional_test
+    type: conditional
+    condition: "42 == 42"
+    depends_on:
+      - passthrough_test
+    when_true:
+      - id: conditional_true_branch
+        type: shell
+        command: "echo Condition is true"
+    when_false:
+      - id: conditional_false_branch
+        type: shell
+        command: "echo Condition is false"

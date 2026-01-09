@@ -131,6 +131,7 @@ export function registerBrewCommand(program: Command): void {
           recipe,
           baristaManager,
           providerFactory: new SimpleProviderFactory(),
+          stepOutputs: new Map(),
         };
 
         // Execute recipe
