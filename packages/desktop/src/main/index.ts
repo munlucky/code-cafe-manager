@@ -1,7 +1,11 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { join } from 'path';
 import { Orchestrator } from '@codecafe/core';
 import { homedir } from 'os';
+import { WorktreeManager } from '@codecafe/git-worktree';
+import { safeValidateRecipe } from '@codecafe/schema';
+import { promises as fs } from 'fs';
+import * as YAML from 'yaml';
 
 let mainWindow: BrowserWindow | null = null;
 let orchestrator: Orchestrator | null = null;
@@ -109,6 +113,105 @@ function setupIpcHandlers() {
   ipcMain.handle('cancelOrder', async (_, orderId: string) => {
     if (!orchestrator) throw new Error('Orchestrator not initialized');
     await orchestrator.cancelOrder(orderId);
+  });
+
+  // Provider 관리 (M2)
+  ipcMain.handle('getAvailableProviders', async () => {
+    // M2: claude-code, codex 지원
+    return [
+      { id: 'claude-code', name: 'Claude Code' },
+      { id: 'codex', name: 'Codex' },
+    ];
+  });
+
+  // Worktree 관리 (M2)
+  ipcMain.handle('listWorktrees', async (_, repoPath: string) => {
+    try {
+      const worktrees = await WorktreeManager.listWorktrees(repoPath);
+      return { success: true, data: worktrees };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(
+    'exportPatch',
+    async (_, worktreePath: string, baseBranch: string, outputPath?: string) => {
+      try {
+        const patchPath = await WorktreeManager.exportPatch({
+          worktreePath,
+          baseBranch,
+          outputPath,
+        });
+        return { success: true, data: patchPath };
+      } catch (error: any) {
+        return { success: false, error: error.message };
+      }
+    }
+  );
+
+  ipcMain.handle('removeWorktree', async (_, worktreePath: string, force?: boolean) => {
+    try {
+      await WorktreeManager.removeWorktree({ worktreePath, force });
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('openWorktreeFolder', async (_, worktreePath: string) => {
+    try {
+      await shell.openPath(worktreePath);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Recipe Studio (M2)
+  const recipesDir = join(homedir(), '.codecafe', 'recipes');
+
+  ipcMain.handle('listRecipes', async () => {
+    try {
+      await fs.mkdir(recipesDir, { recursive: true });
+      const files = await fs.readdir(recipesDir);
+      const yamlFiles = files.filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'));
+      return { success: true, data: yamlFiles };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('getRecipe', async (_, recipeName: string) => {
+    try {
+      const recipePath = join(recipesDir, recipeName);
+      const content = await fs.readFile(recipePath, 'utf-8');
+      const data = YAML.parse(content);
+      return { success: true, data };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('saveRecipe', async (_, recipeName: string, recipeData: any) => {
+    try {
+      await fs.mkdir(recipesDir, { recursive: true });
+      const recipePath = join(recipesDir, recipeName);
+      const yamlContent = YAML.stringify(recipeData);
+      await fs.writeFile(recipePath, yamlContent, 'utf-8');
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('validateRecipe', async (_, recipeData: any) => {
+    const result = safeValidateRecipe(recipeData);
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, errors: result.errors };
+    }
   });
 }
 
