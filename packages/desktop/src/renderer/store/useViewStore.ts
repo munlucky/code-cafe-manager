@@ -4,7 +4,6 @@ export type ViewName =
   | 'dashboard'
   | 'new-order'
   | 'orders'
-  | 'baristas'
   | 'worktrees'
   | 'recipes';
 

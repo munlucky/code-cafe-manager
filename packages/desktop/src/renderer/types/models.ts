@@ -22,7 +22,7 @@ export interface Order {
   status: OrderStatus;
   counter: string;
   provider: ProviderType;
-  vars: Record<string, string>;
+  vars: Record<string, any>;
   createdAt: Date | string;
   startedAt: Date | string | null;
   endedAt: Date | string | null;
@@ -76,9 +76,13 @@ export interface WorktreeInfo {
 }
 
 export interface Receipt {
-  id: string;
   orderId: string;
-  timestamp: Date | string;
-  status: 'success' | 'failure';
-  data?: any;
+  status: OrderStatus;
+  startedAt: Date | string;
+  endedAt: Date | string;
+  provider: ProviderType;
+  counter: string;
+  errorSummary?: string;
+  changedFiles?: string[];
+  logs?: string;
 }

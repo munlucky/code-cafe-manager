@@ -4,7 +4,6 @@ const VIEW_TITLES: Record<string, string> = {
   dashboard: 'Dashboard',
   'new-order': 'New Order',
   orders: 'Orders',
-  baristas: 'Baristas',
   worktrees: 'Worktrees',
   recipes: 'Recipe Studio',
 };

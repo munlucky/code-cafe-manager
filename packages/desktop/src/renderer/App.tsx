@@ -4,8 +4,7 @@ import { useIpcEffect } from './hooks/useIpcEffect';
 import {
   Dashboard,
   NewOrder,
-  Orders,
-  Baristas,
+  OrderDetail,
   Worktrees,
   Recipes,
 } from './components/views';
@@ -13,8 +12,7 @@ import {
 const VIEW_MAP = {
   dashboard: Dashboard,
   'new-order': NewOrder,
-  orders: Orders,
-  baristas: Baristas,
+  orders: OrderDetail,
   worktrees: Worktrees,
   recipes: Recipes,
 };
