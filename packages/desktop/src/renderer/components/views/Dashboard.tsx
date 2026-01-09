@@ -4,6 +4,7 @@ import { useOrders } from '../../hooks/useOrders';
 import { Card } from '../ui/Card';
 import { StatusBadge } from '../ui/Badge';
 import { EmptyState } from '../ui/EmptyState';
+import { formatRelativeTime } from '../../utils/formatters';
 
 export function Dashboard() {
   const { baristas, fetchBaristas } = useBaristas();
@@ -32,6 +33,9 @@ export function Dashboard() {
                 <div>
                   <strong className="text-bone">{barista.provider}</strong>
                   <div className="text-xs text-gray-500 mt-1">ID: {barista.id}</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Current Order: {barista.currentOrderId || 'None'}
+                  </div>
                 </div>
                 <StatusBadge status={barista.status} />
               </div>
@@ -56,6 +60,19 @@ export function Dashboard() {
                   <div className="text-xs text-gray-500 mt-1">
                     Provider: {order.provider}
                   </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Started: {order.startedAt ? formatRelativeTime(order.startedAt) : 'Not started'}
+                  </div>
+                  {order.endedAt && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Ended: {formatRelativeTime(order.endedAt)}
+                    </div>
+                  )}
+                  {order.error && (
+                    <div className="text-xs text-red-500 mt-1">
+                      Error: {order.error}
+                    </div>
+                  )}
                 </div>
                 <StatusBadge status={order.status} />
               </div>
