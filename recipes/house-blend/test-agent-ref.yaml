@@ -1,0 +1,23 @@
+name: "test-agent-ref"
+version: "0.1.0"
+defaults:
+  provider: "claude-code"
+  workspace:
+    mode: "in-place"
+
+inputs:
+  counter: "."
+
+vars: {}
+
+steps:
+  # Test 1: Load and use agent_ref
+  - id: test_agent_load
+    type: ai.interactive
+    agent_ref:
+      type: local
+      path: agents/requirements-analyzer.md
+    prompt: |
+      간단한 테스트 메시지입니다.
+      에이전트 파일이 제대로 로드되는지 확인합니다.
+    timeout_sec: 60

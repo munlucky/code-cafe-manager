@@ -6,6 +6,8 @@ import {
   evaluateCondition,
   TemplateContext,
 } from './template-engine.js';
+import { readFile } from 'fs/promises';
+import { resolve } from 'path';
 
 /**
  * Step Executor
@@ -198,8 +200,24 @@ async function executeAIStep(
 
     // If agent_ref is provided, load agent prompt
     if (step.agent_ref) {
-      // TODO: Load agent prompt from reference
-      // For now, just use the prompt field
+      try {
+        if (step.agent_ref.type === 'local' && step.agent_ref.path) {
+          const agentPath = resolve(order.counter, step.agent_ref.path);
+          const agentContent = await readFile(agentPath, 'utf-8');
+
+          // If prompt is provided, append it to agent content
+          if (prompt) {
+            prompt = `${agentContent}\n\n---\n\n${prompt}`;
+          } else {
+            prompt = agentContent;
+          }
+        } else {
+          // TODO: Support github and url types
+          throw new Error(`Unsupported agent_ref type: ${step.agent_ref.type}`);
+        }
+      } catch (err) {
+        throw new Error(`Failed to load agent from ${step.agent_ref.path}: ${(err as Error).message}`);
+      }
     }
 
     // Run provider

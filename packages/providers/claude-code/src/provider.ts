@@ -1,6 +1,7 @@
 import * as pty from 'node-pty';
 import { EventEmitter } from 'events';
 import { platform } from 'os';
+import { spawn } from 'child_process';
 import {
   IProvider,
   ProviderConfig,
@@ -111,7 +112,6 @@ export class ClaudeCodeProvider extends EventEmitter implements IProvider {
    */
   static async validateEnv(): Promise<ValidationResult> {
     return new Promise((resolve) => {
-      const { spawn } = require('child_process');
       const command = platform() === 'win32' ? 'where' : 'which';
       const args = platform() === 'win32' ? ['claude.exe'] : ['claude'];
 

@@ -1,0 +1,59 @@
+name: "test-pm-simple"
+version: "0.1.0"
+defaults:
+  provider: "claude-code"
+  workspace:
+    mode: "in-place"
+
+inputs:
+  counter: "."
+  userMessage: "간단한 기능을 추가해줘"
+
+vars:
+  userMessage: "{{ userMessage }}"
+
+steps:
+  # Phase 1: Context Collection
+  - id: collect_git_info
+    type: context.collect
+    collect:
+      - git.branch
+      - git.status
+      - git.recentCommits
+
+  - id: collect_project_info
+    type: context.collect
+    collect:
+      - project.hasContextMd
+      - project.hasPendingQuestions
+      - project.packageJson
+
+  # Phase 2: Requirements Analysis (Simplified)
+  - id: analyze_requirements
+    type: ai.interactive
+    provider: claude-code
+    depends_on:
+      - collect_git_info
+      - collect_project_info
+    agent_ref:
+      type: local
+      path: agents/requirements-analyzer.md
+    prompt: |
+      # 요구사항 분석
+
+      ## 사용자 요청
+      {{ userMessage }}
+
+      ## Git 정보
+      {{ collect_git_info.output }}
+
+      ## 프로젝트 정보
+      {{ collect_project_info.output }}
+
+      간단히 요구사항을 분석하고 JSON 형식으로 출력하세요:
+      {
+        "taskType": "feature|modification|bugfix|refactor",
+        "complexity": "simple|medium|complex",
+        "phase": "Planning|Implementation|Integration|Verification"
+      }
+    timeout_sec: 120

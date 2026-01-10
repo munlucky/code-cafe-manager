@@ -37,7 +37,7 @@ steps:
       - collect_project_info
     agent_ref:
       type: local
-      path: .claude/agents/requirements-analyzer.md
+      path: agents/requirements-analyzer.md
     prompt: |
       # 요구사항 분석
 
