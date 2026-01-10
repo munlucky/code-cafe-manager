@@ -11,6 +11,18 @@ import { Order, OrderStatus } from '@codecafe/core';
 import { ClaudeCodeProvider } from '@codecafe/provider-claude-code';
 
 /**
+ * Collect --var options into an object
+ */
+function collectVar(value: string, previous: Record<string, string>): Record<string, string> {
+  const [key, ...valueParts] = value.split('=');
+  if (!key || valueParts.length === 0) {
+    throw new Error(`Invalid --var format: ${value}. Use --var key=value`);
+  }
+  const val = valueParts.join('='); // Handle values with '=' in them
+  return { ...previous, [key.trim()]: val.trim() };
+}
+
+/**
  * Simple provider factory for CLI
  */
 class SimpleProviderFactory {
@@ -34,6 +46,7 @@ export function registerBrewCommand(program: Command): void {
     .option('--recipe <path>', 'Recipe file path (YAML)', 'recipes/house-blend/pm-agent.yaml')
     .option('--counter <path>', 'Project directory (overrides recipe input)', '.')
     .option('--max-baristas <number>', 'Maximum number of baristas', '4')
+    .option('--var <key=value>', 'Set a variable (can be used multiple times)', collectVar, {})
     .action(async (options) => {
       const spinner = ora('Starting CodeCafe Brew...').start();
 
@@ -85,7 +98,7 @@ export function registerBrewCommand(program: Command): void {
           status: OrderStatus.PENDING,
           counter: counter,
           provider: provider,
-          vars: {},
+          vars: options.var || {},
           createdAt: new Date(),
           startedAt: null,
           endedAt: null,

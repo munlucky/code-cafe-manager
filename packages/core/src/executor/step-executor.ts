@@ -154,6 +154,8 @@ function processStepTemplates(step: RecipeStep, ctx: ExecutionContext): RecipeSt
   const templateContext: TemplateContext = {
     order: ctx.order,
     recipe: ctx.recipe,
+    // Add order.vars to context for direct variable access
+    ...ctx.order.vars,
   };
 
   // Add step outputs
@@ -360,6 +362,8 @@ async function executeConditionalStep(
   const templateContext: TemplateContext = {
     order: ctx.order,
     recipe: ctx.recipe,
+    // Add order.vars to context for direct variable access
+    ...ctx.order.vars,
   };
 
   for (const [stepId, outputs] of ctx.stepOutputs.entries()) {

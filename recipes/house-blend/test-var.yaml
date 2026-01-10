@@ -1,0 +1,26 @@
+name: "test-var"
+version: "0.1.0"
+defaults:
+  provider: "claude-code"
+  workspace:
+    mode: "in-place"
+
+inputs:
+  counter: "."
+
+vars: {}
+
+steps:
+  # Test 1: Echo variable
+  - id: echo_var
+    type: shell
+    command: "echo Variable test_message = {{ test_message }}"
+
+  # Test 2: Test passthrough with variable
+  - id: passthrough_var
+    type: data.passthrough
+    depends_on:
+      - echo_var
+    inputs:
+      message: "{{ test_message }}"
+      number: 42
