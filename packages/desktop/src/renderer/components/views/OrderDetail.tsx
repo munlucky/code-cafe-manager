@@ -61,6 +61,15 @@ export function OrderDetail() {
     }
   }, [sortedOrders, selectedOrderId]);
 
+  /* Moved sortedRuns up to fix used-before-declaration error */
+  const sortedRuns = useMemo(() => {
+    return [...workflowRuns].sort((a, b) => {
+      const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return bTime - aTime;
+    });
+  }, [workflowRuns]);
+
   useEffect(() => {
     if (detailMode !== 'runs') {
       return;
@@ -93,14 +102,6 @@ export function OrderDetail() {
       setRunsLoading(false);
     }
   };
-
-  const sortedRuns = useMemo(() => {
-    return [...workflowRuns].sort((a, b) => {
-      const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
-      const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
-      return bTime - aTime;
-    });
-  }, [workflowRuns]);
 
   const selectedRun = useMemo(() => {
     return sortedRuns.find((run) => run.runId === selectedRunId) || null;
@@ -360,7 +361,7 @@ export function OrderDetail() {
         <div>
           Updated:{' '}
           {run.updatedAt || run.createdAt
-            ? formatRelativeTime(run.updatedAt || run.createdAt)
+            ? formatRelativeTime((run.updatedAt || run.createdAt)!)
             : 'Unknown'}
         </div>
       </div>
