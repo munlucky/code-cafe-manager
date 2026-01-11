@@ -51,7 +51,7 @@ export { RunStateManager } from './storage/run-state';
 export { EventLogger } from './storage/event-logger';
 
 // Export UI integration
-export { renderInteractiveRunner } from './ui/InteractiveRunner';
+// export { renderInteractiveRunner } from './ui/InteractiveRunner';
 export { registerElectronHandlers } from './ui/electron-api';
 export type {
   WorkflowInfo,

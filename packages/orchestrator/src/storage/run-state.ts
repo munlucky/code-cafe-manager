@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { nanoid } from 'nanoid';
 import { RunState, StageType } from '../types';
 
 export interface CreateRunOptions {
@@ -16,10 +15,15 @@ export class RunStateManager {
     this.runsDir = path.join(orchDir, 'runs');
   }
 
-  createRun(options: CreateRunOptions): RunState {
+  async createRun(options: CreateRunOptions): Promise<RunState> {
     this.ensureRunsDir();
 
-    const runId = options.runId || nanoid();
+    let runId = options.runId;
+    if (!runId) {
+      const { nanoid } = await import('nanoid');
+      runId = nanoid();
+    }
+    
     const now = new Date().toISOString();
 
     const state: RunState = {

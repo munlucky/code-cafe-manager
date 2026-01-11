@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import chalk from 'chalk';
-import { nanoid } from 'nanoid';
+// import { nanoid } from 'nanoid'; // ESM dynamic import needed
 import { ProviderExecutor } from '../../provider/executor';
 import { RoleManager } from '../../role/role-manager';
 import { validateJson, loadStageProfile, loadWorkflow } from '../../schema/validator';
@@ -46,7 +46,12 @@ export async function runWorkflow(
 
   const workflowPath = resolveWorkflowPath(orchDir, workflowId);
   const workflow = await loadWorkflowFile(workflowPath);
-  const runId = options.runId || nanoid();
+  
+  let runId = options.runId;
+  if (!runId) {
+    const { nanoid } = await import('nanoid');
+    runId = nanoid();
+  }
 
   return executeWorkflow({
     orchDir,
@@ -135,7 +140,7 @@ async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunStat
     stateManager.saveRun(runState);
     notifyStateUpdate(runState);
   } else {
-    runState = stateManager.createRun({
+    runState = await stateManager.createRun({
       workflow: options.workflowId,
       initialStage: options.workflow.stages[0],
       runId: options.runId,
