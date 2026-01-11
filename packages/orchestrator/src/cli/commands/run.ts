@@ -28,11 +28,13 @@ interface RunWorkflowOptions {
   orchDir?: string;
   mode?: ExecutionMode;
   runId?: string;
+  interactive?: boolean;
 }
 
 interface ResumeWorkflowOptions {
   orchDir?: string;
   mode?: ExecutionMode;
+  interactive?: boolean;
 }
 
 export async function runWorkflow(
@@ -52,6 +54,7 @@ export async function runWorkflow(
     workflowId,
     runId,
     mode: options.mode || 'auto',
+    interactive: options.interactive,
   });
 }
 
@@ -78,6 +81,7 @@ export async function resumeWorkflow(
     runId,
     mode: options.mode || 'auto',
     resumeState: existing,
+    interactive: options.interactive,
   });
 }
 
@@ -88,6 +92,7 @@ interface ExecuteWorkflowOptions {
   runId: string;
   mode: ExecutionMode;
   resumeState?: RunState;
+  interactive?: boolean;
 }
 
 async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunState> {
@@ -96,6 +101,28 @@ async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunStat
   const assignments = loadAssignments(options.orchDir);
   const providerExecutor = new ProviderExecutor(options.orchDir);
   const roleManager = new RoleManager(options.orchDir);
+
+  // Interactive mode setup
+  let tuiHandle: { unmount: () => void; waitUntilExit: () => Promise<void> } | undefined;
+  const stateUpdateCallbacks: Array<(state: RunState) => void> = [];
+  const eventUpdateCallbacks: Array<(event: any) => void> = [];
+
+  if (options.interactive) {
+    const { renderInteractiveRunner } = await import('../../ui/InteractiveRunner.js');
+    tuiHandle = renderInteractiveRunner(
+      options.runId,
+      (callback) => stateUpdateCallbacks.push(callback),
+      (callback) => eventUpdateCallbacks.push(callback)
+    );
+  }
+
+  const notifyStateUpdate = (state: RunState) => {
+    stateUpdateCallbacks.forEach((cb) => cb(state));
+  };
+
+  const notifyEventUpdate = (event: any) => {
+    eventUpdateCallbacks.forEach((cb) => cb(event));
+  };
 
   let runState: RunState;
 
@@ -106,12 +133,14 @@ async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunStat
       lastError: undefined,
     };
     stateManager.saveRun(runState);
+    notifyStateUpdate(runState);
   } else {
     runState = stateManager.createRun({
       workflow: options.workflowId,
       initialStage: options.workflow.stages[0],
       runId: options.runId,
     });
+    notifyStateUpdate(runState);
   }
 
   const fsm = new FSMEngine(options.workflow, runState.currentStage);
@@ -121,7 +150,8 @@ async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunStat
     history: [],
   });
 
-  while (true) {
+  try {
+    while (true) {
     const stage = fsm.getCurrentStage();
     const stageConfig = assignments[stage];
     if (!stageConfig) {
@@ -135,6 +165,7 @@ async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunStat
       status: 'running',
       lastError: undefined,
     });
+    notifyStateUpdate(runState);
 
     const profilePath = resolveStageProfilePath(
       options.orchDir,
@@ -146,10 +177,12 @@ async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunStat
     if (!profileResult.valid || !profileResult.data) {
       const message = formatValidationErrors(profileResult.errors, 'stage profile');
       eventLogger.log({ type: 'error', stage, error: message });
+      notifyEventUpdate({ event_type: 'error', stage, error: message });
       runState = stateManager.updateRun(options.runId, {
         status: 'failed',
         lastError: message,
       });
+      notifyStateUpdate(runState);
       return runState;
     }
 
@@ -287,11 +320,14 @@ async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunStat
     if (!dagResult.success) {
       const message = dagResult.error || `Stage ${stage} failed`;
       eventLogger.log({ type: 'error', stage, error: message });
+      notifyEventUpdate({ event_type: 'error', stage, error: message });
       eventLogger.log({ type: 'stage_end', stage, data: { success: false } });
+      notifyEventUpdate({ event_type: 'stage_end', stage, data: { success: false } });
       runState = stateManager.updateRun(options.runId, {
         status: 'failed',
         lastError: message,
       });
+      notifyStateUpdate(runState);
       return runState;
     }
 
@@ -305,6 +341,7 @@ async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunStat
         runState = stateManager.updateRun(options.runId, {
           status: 'completed',
         });
+        notifyStateUpdate(runState);
         return runState;
       }
 
@@ -317,9 +354,17 @@ async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunStat
       runState = stateManager.updateRun(options.runId, {
         status: 'completed',
       });
+      notifyStateUpdate(runState);
       return runState;
     }
   }
+  } finally {
+    if (tuiHandle) {
+      tuiHandle.unmount();
+    }
+  }
+
+  return runState;
 }
 
 function loadAssignments(orchDir: string): Record<StageType, StageAssignment> {

@@ -5,6 +5,8 @@ export { runWorkflow, resumeWorkflow } from './cli/commands/run';
 export { resumeRun } from './cli/commands/resume';
 export { showRunStatus } from './cli/commands/status';
 export { showRunLogs } from './cli/commands/logs';
+export { setProfile, getProfile, listProfiles } from './cli/commands/profile';
+export { setAssignment, getAssignment, listRoles } from './cli/commands/assign';
 
 // Export role management
 export { RoleManager } from './role/role-manager';
@@ -47,6 +49,18 @@ export type {
 // Export storage
 export { RunStateManager } from './storage/run-state';
 export { EventLogger } from './storage/event-logger';
+
+// Export UI integration
+export { renderInteractiveRunner } from './ui/InteractiveRunner';
+export { registerElectronHandlers } from './ui/electron-api';
+export type {
+  WorkflowInfo,
+  RunProgress,
+  RunLogEntry,
+  ProviderAssignmentInfo,
+  ElectronIPCMessages,
+  ElectronEventEmitters,
+} from './ui/types';
 
 // Export types
 export * from './types';
