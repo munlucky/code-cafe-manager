@@ -1,0 +1,7 @@
+workflow:
+  name: default
+  stages: [plan, code, test, check]
+  loop:
+    max_iters: 5
+    fallback_next_stage: plan
+    stop_when: "$.done == true"

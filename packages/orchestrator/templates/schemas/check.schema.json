@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["done", "quality_score", "summary"],
+  "properties": {
+    "done": {
+      "type": "boolean"
+    },
+    "quality_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "description"],
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "description": {
+            "type": "string"
+          },
+          "recommendation": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "recommended_next_stage": {
+      "type": ["string", "null"],
+      "enum": ["plan", "code", "test", null]
+    },
+    "summary": {
+      "type": "string"
+    }
+  }
+}

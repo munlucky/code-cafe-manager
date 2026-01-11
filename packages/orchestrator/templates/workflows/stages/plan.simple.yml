@@ -1,0 +1,10 @@
+graph:
+  - id: planner
+    type: run
+    provider: ${stage.provider}
+    role: planner
+
+  - id: plan_out
+    type: export
+    from: planner
+    output_schema: schemas/plan.schema.json

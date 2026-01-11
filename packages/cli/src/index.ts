@@ -10,6 +10,7 @@ import { registerRunCommand } from './commands/run.js';
 import { registerUiCommand } from './commands/ui.js';
 import { registerStatusCommand } from './commands/status.js';
 import { registerBrewCommand } from './commands/brew.js';
+import { registerOrchCommand } from './commands/orch.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -34,6 +35,7 @@ async function main() {
   registerBrewCommand(program);
   registerStatusCommand(program);
   registerUiCommand(program);
+  registerOrchCommand(program);
 
   await program.parseAsync(process.argv);
 }

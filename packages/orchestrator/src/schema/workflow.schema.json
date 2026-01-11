@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["workflow"],
+  "properties": {
+    "workflow": {
+      "type": "object",
+      "required": ["name", "stages", "loop"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Workflow name"
+        },
+        "stages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["plan", "code", "test", "check"]
+          },
+          "minItems": 1,
+          "description": "List of stages to execute in order"
+        },
+        "loop": {
+          "type": "object",
+          "required": ["max_iters", "fallback_next_stage", "stop_when"],
+          "properties": {
+            "max_iters": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "description": "Maximum number of iterations before stopping"
+            },
+            "fallback_next_stage": {
+              "type": "string",
+              "enum": ["plan", "code", "test", "check"],
+              "description": "Default stage to return to if check fails"
+            },
+            "stop_when": {
+              "type": "string",
+              "description": "JSONPath condition for stopping (e.g., '$.done == true')"
+            }
+          }
+        }
+      }
+    }
+  }
+}

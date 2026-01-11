@@ -1,0 +1,20 @@
+assignments:
+  plan:
+    provider: claude-code
+    role: planner
+    profile: simple
+
+  code:
+    provider: claude-code
+    role: coder
+    profile: simple
+
+  test:
+    provider: claude-code
+    role: tester
+    profile: simple
+
+  check:
+    provider: claude-code
+    role: checker
+    profile: simple

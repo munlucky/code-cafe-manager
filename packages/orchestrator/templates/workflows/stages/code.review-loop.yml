@@ -1,0 +1,24 @@
+graph:
+  - id: coder
+    type: run
+    provider: ${stage.provider}
+    role: coder
+
+  - id: reviewer
+    type: run
+    provider: ${stage.provider}
+    role: reviewer
+    inputs:
+      - coder
+
+  - id: improve
+    type: run
+    provider: ${stage.provider}
+    role: coder
+    inputs:
+      - reviewer
+
+  - id: code_out
+    type: export
+    from: improve
+    output_schema: schemas/code.schema.json

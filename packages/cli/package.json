@@ -18,6 +18,7 @@
   "dependencies": {
     "@codecafe/core": "workspace:*",
     "@codecafe/git-worktree": "workspace:*",
+    "@codecafe/orchestrator": "workspace:*",
     "@codecafe/provider-claude-code": "workspace:*",
     "@codecafe/providers-codex": "workspace:*",
     "commander": "^11.1.0",

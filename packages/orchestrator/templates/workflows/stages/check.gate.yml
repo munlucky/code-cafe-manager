@@ -1,0 +1,10 @@
+graph:
+  - id: checker
+    type: run
+    provider: ${stage.provider}
+    role: checker
+
+  - id: check_out
+    type: export
+    from: checker
+    output_schema: schemas/check.schema.json

@@ -1,0 +1,10 @@
+graph:
+  - id: smoke_tester
+    type: run
+    provider: ${stage.provider}
+    role: tester
+
+  - id: test_out
+    type: export
+    from: smoke_tester
+    output_schema: schemas/test.schema.json

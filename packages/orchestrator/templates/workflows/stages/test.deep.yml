@@ -1,0 +1,23 @@
+graph:
+  - id: test_parallel
+    type: foreach
+    items: ${vars.test_types}
+    mode: parallel
+    concurrency: 3
+    run:
+      type: run
+      provider: ${stage.provider}
+      role: ${item.role}
+    out: test_results
+
+  - id: synthesize_report
+    type: run
+    provider: claude-code
+    role: tester
+    inputs:
+      - test_results
+
+  - id: test_out
+    type: export
+    from: synthesize_report
+    output_schema: schemas/test.schema.json

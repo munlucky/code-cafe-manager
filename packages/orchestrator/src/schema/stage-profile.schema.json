@@ -1,0 +1,110 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["graph"],
+  "properties": {
+    "graph": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique node identifier"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["run", "foreach", "reduce", "branch", "export"],
+            "description": "Node type"
+          },
+          "provider": {
+            "type": "string",
+            "description": "Provider to use (supports variable interpolation)"
+          },
+          "role": {
+            "type": "string",
+            "description": "Role to use (supports variable interpolation)"
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Input dependencies or file paths"
+          },
+          "from": {
+            "type": "string",
+            "description": "Source node ID for export/reduce"
+          },
+          "output_schema": {
+            "type": "string",
+            "description": "Path to output JSON schema"
+          },
+          "items": {
+            "type": "string",
+            "description": "Variable reference for foreach items"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["parallel", "sequential"],
+            "description": "Execution mode for foreach"
+          },
+          "concurrency": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Max concurrent executions for foreach"
+          },
+          "run": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["run"],
+                "description": "Node type (only 'run' allowed in foreach)"
+              },
+              "provider": {
+                "type": "string",
+                "description": "Provider to use (supports variable interpolation)"
+              },
+              "role": {
+                "type": "string",
+                "description": "Role to use (supports variable interpolation)"
+              }
+            },
+            "description": "Nested node template for foreach"
+          },
+          "out": {
+            "type": "string",
+            "description": "Output variable name for foreach"
+          },
+          "strategy": {
+            "type": "string",
+            "enum": ["summarize"],
+            "description": "Reduce strategy"
+          },
+          "when": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["condition", "then"],
+              "properties": {
+                "condition": {
+                  "type": "string",
+                  "description": "Condition expression"
+                },
+                "then": {
+                  "type": "string",
+                  "description": "Next node ID if condition is true"
+                }
+              }
+            },
+            "description": "Conditional branches"
+          }
+        }
+      },
+      "minItems": 1
+    }
+  }
+}

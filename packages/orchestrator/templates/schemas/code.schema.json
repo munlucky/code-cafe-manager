@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["files", "summary"],
+  "properties": {
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "action"],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["create", "modify", "delete"]
+          },
+          "content": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "action", "content"],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["create", "modify"]
+          },
+          "content": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "approved": {
+      "type": "boolean"
+    },
+    "comments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "line": {
+            "type": "number"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "major", "minor", "info"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "suggestion": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "required_changes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

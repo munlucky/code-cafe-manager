@@ -1,0 +1,15 @@
+providers:
+  claude-code:
+    headless_cmd: 'claude -p @PROMPT_FILE --output-format json'
+    assisted_hint: 'Run in Claude Code terminal: paste prompt.txt and save result to result.json'
+    timeout: 1800000
+
+  codex:
+    headless_cmd: 'codex exec --json -i @PROMPT_FILE'
+    assisted_hint: 'Run in Codex terminal and save JSON result to result.json'
+    timeout: 1800000
+
+  gemini:
+    headless_cmd: 'gemini -p @PROMPT_TEXT --output-format json'
+    assisted_hint: 'Run in Gemini CLI and save JSON result to result.json'
+    timeout: 1800000

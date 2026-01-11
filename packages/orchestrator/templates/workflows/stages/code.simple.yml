@@ -1,0 +1,10 @@
+graph:
+  - id: coder
+    type: run
+    provider: ${stage.provider}
+    role: coder
+
+  - id: code_out
+    type: export
+    from: coder
+    output_schema: schemas/code.schema.json

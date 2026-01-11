@@ -1,0 +1,23 @@
+graph:
+  - id: committee
+    type: foreach
+    items: ${vars.plan_committee}
+    mode: parallel
+    concurrency: 3
+    run:
+      type: run
+      provider: ${item.provider}
+      role: ${item.role}
+    out: committee_outputs
+
+  - id: synthesize
+    type: run
+    provider: claude-code
+    role: planner-synthesizer
+    inputs:
+      - committee_outputs
+
+  - id: plan_out
+    type: export
+    from: synthesize
+    output_schema: schemas/plan.schema.json
