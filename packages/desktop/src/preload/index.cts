@@ -29,6 +29,22 @@ contextBridge.exposeInMainWorld('codecafe', {
   validateRecipe: (recipeData: any) => ipcRenderer.invoke('validateRecipe', recipeData),
   deleteRecipe: (recipeName: string) => ipcRenderer.invoke('deleteRecipe', recipeName),
 
+  listWorkflows: () => ipcRenderer.invoke('workflow:list'),
+  getWorkflow: (workflowId: string) => ipcRenderer.invoke('workflow:get', workflowId),
+  runWorkflow: (workflowId: string, options?: { mode?: string; interactive?: boolean }) =>
+    ipcRenderer.invoke('workflow:run', workflowId, options),
+  listRuns: () => ipcRenderer.invoke('run:list'),
+  getRunStatus: (runId: string) => ipcRenderer.invoke('run:status', runId),
+  resumeRun: (runId: string) => ipcRenderer.invoke('run:resume', runId),
+  getRunLogs: (runId: string) => ipcRenderer.invoke('run:logs', runId),
+  getAssignments: () => ipcRenderer.invoke('config:assignments:get'),
+  setAssignment: (stage: string, provider: string, role: string) =>
+    ipcRenderer.invoke('config:assignments:set', stage, provider, role),
+  listProfiles: (stage: string) => ipcRenderer.invoke('config:profiles:list', stage),
+  setProfile: (stage: string, profile: string) =>
+    ipcRenderer.invoke('config:profiles:set', stage, profile),
+  listRoles: () => ipcRenderer.invoke('config:roles:list'),
+
   onBaristaEvent: (callback: (event: any) => void) => {
     ipcRenderer.removeAllListeners('barista:event');
     ipcRenderer.on('barista:event', (_event: unknown, event: any) => callback(event));

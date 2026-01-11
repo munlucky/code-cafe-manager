@@ -29,18 +29,6 @@ export function OrderDetail() {
     fetchOrders();
   }, []);
 
-  useEffect(() => {
-    if (detailMode !== 'runs') {
-      return;
-    }
-
-    fetchRuns();
-    const timer = setInterval(fetchRuns, 4000);
-    return () => {
-      clearInterval(timer);
-    };
-  }, [detailMode]);
-
   const sortedOrders = useMemo(() => {
     return [...orders].sort((a, b) => {
       const aTime = new Date(a.createdAt).getTime();
@@ -61,7 +49,6 @@ export function OrderDetail() {
     }
   }, [sortedOrders, selectedOrderId]);
 
-  /* Moved sortedRuns up to fix used-before-declaration error */
   const sortedRuns = useMemo(() => {
     return [...workflowRuns].sort((a, b) => {
       const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
@@ -102,6 +89,18 @@ export function OrderDetail() {
       setRunsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (detailMode !== 'runs') {
+      return;
+    }
+
+    fetchRuns();
+    const timer = setInterval(fetchRuns, 4000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [detailMode]);
 
   const selectedRun = useMemo(() => {
     return sortedRuns.find((run) => run.runId === selectedRunId) || null;
