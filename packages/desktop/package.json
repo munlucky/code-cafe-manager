@@ -26,6 +26,7 @@
   "dependencies": {
     "@codecafe/core": "workspace:*",
     "@codecafe/git-worktree": "workspace:*",
+    "@codecafe/orchestrator": "workspace:*",
     "@codecafe/schema": "workspace:*",
     "clsx": "^2.1.0",
     "dotenv": "^16.4.5",

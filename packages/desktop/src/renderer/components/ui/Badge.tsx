@@ -14,6 +14,8 @@ const STATUS_STYLES: Record<string, string> = {
   error: 'border-l-4 border-red-500 bg-red-500/10',
   FAILED: 'border-l-4 border-red-500 bg-red-500/10',
   failed: 'border-l-4 border-red-500 bg-red-500/10',
+  paused: 'border-l-4 border-yellow-500 bg-yellow-500/10',
+  PAUSED: 'border-l-4 border-yellow-500 bg-yellow-500/10',
   CANCELLED: 'border-l-4 border-gray-500 bg-gray-500/10',
   STOPPED: 'border-l-4 border-gray-500 bg-gray-500/10',
 };

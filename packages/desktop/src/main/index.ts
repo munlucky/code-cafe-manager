@@ -2,10 +2,11 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { Orchestrator } from '@codecafe/core';
+import { registerElectronHandlers } from '@codecafe/orchestrator';
 import { homedir } from 'os';
 import { WorktreeManager } from '@codecafe/git-worktree';
 import { safeValidateRecipe } from '@codecafe/schema';
-import { promises as fs } from 'fs';
+import { promises as fs, existsSync } from 'fs';
 import * as YAML from 'yaml';
 import dotenv from 'dotenv';
 
@@ -15,6 +16,29 @@ dotenv.config({ path: join(__dirname, '..', '..', '.env') });
 
 let mainWindow: BrowserWindow | null = null;
 let orchestrator: Orchestrator | null = null;
+
+function resolveOrchDir(): string {
+  const envDir = process.env.CODECAFE_ORCH_DIR;
+  if (envDir && existsSync(envDir)) {
+    return envDir;
+  }
+
+  const candidates = [
+    process.cwd(),
+    app.getAppPath(),
+    join(app.getAppPath(), '..'),
+    join(app.getAppPath(), '..', '..'),
+  ];
+
+  for (const base of candidates) {
+    const candidate = join(base, '.orch');
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return join(process.cwd(), '.orch');
+}
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -79,6 +103,7 @@ async function initOrchestrator() {
 
 // IPC Handlers
 function setupIpcHandlers() {
+  const orchDir = resolveOrchDir();
   // 바리스타 생성
   ipcMain.handle('createBarista', async (_, provider: string) => {
     if (!orchestrator) throw new Error('Orchestrator not initialized');
@@ -329,6 +354,8 @@ steps:
       return { success: false, errors: result.errors };
     }
   });
+
+  registerElectronHandlers(ipcMain, orchDir);
 }
 
 app.whenReady().then(async () => {

@@ -36,6 +36,23 @@ contextBridge.exposeInMainWorld('codecafe', {
   validateRecipe: (recipeData: any) => ipcRenderer.invoke('validateRecipe', recipeData),
   deleteRecipe: (recipeName: string) => ipcRenderer.invoke('deleteRecipe', recipeName),
 
+  // Orchestrator UI (M2-4)
+  listWorkflows: () => ipcRenderer.invoke('workflow:list'),
+  getWorkflow: (workflowId: string) => ipcRenderer.invoke('workflow:get', workflowId),
+  runWorkflow: (workflowId: string, options?: { mode?: string; interactive?: boolean }) =>
+    ipcRenderer.invoke('workflow:run', workflowId, options),
+  listRuns: () => ipcRenderer.invoke('run:list'),
+  getRunStatus: (runId: string) => ipcRenderer.invoke('run:status', runId),
+  resumeRun: (runId: string) => ipcRenderer.invoke('run:resume', runId),
+  getRunLogs: (runId: string) => ipcRenderer.invoke('run:logs', runId),
+  getAssignments: () => ipcRenderer.invoke('config:assignments:get'),
+  setAssignment: (stage: string, provider: string, role: string) =>
+    ipcRenderer.invoke('config:assignments:set', stage, provider, role),
+  listProfiles: (stage: string) => ipcRenderer.invoke('config:profiles:list', stage),
+  setProfile: (stage: string, profile: string) =>
+    ipcRenderer.invoke('config:profiles:set', stage, profile),
+  listRoles: () => ipcRenderer.invoke('config:roles:list'),
+
   // 이벤트 리스너
   onBaristaEvent: (callback: (event: any) => void) => {
     // 기존 리스너 제거 후 새로 등록

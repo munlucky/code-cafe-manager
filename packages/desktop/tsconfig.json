@@ -5,12 +5,17 @@
     "rootDir": "./src",
     "lib": ["ES2022", "DOM"],
     "module": "NodeNext",
-    "moduleResolution": "NodeNext"
+    "moduleResolution": "NodeNext",
+    "baseUrl": ".",
+    "paths": {
+      "@codecafe/orchestrator": ["../orchestrator/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.cts"],
   "exclude": ["node_modules", "dist", "out", "src/renderer"],
   "references": [
-    { "path": "../core" }
+    { "path": "../core" },
+    { "path": "../orchestrator" }
   ]
 }
 
