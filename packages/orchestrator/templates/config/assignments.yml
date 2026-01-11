@@ -12,9 +12,9 @@ assignments:
   test:
     provider: claude-code
     role: tester
-    profile: simple
+    profile: smoke
 
   check:
     provider: claude-code
     role: checker
-    profile: simple
+    profile: gate

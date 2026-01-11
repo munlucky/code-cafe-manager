@@ -66,16 +66,18 @@ export class FSMEngine {
       throw new Error(`Invalid stage: ${stage}`);
     }
 
+    const previousStage = this.currentStage;
+
     // Record history
     this.stageHistory.push({
-      stage: this.currentStage,
+      stage: previousStage,
       iter: this.currentIter,
     });
 
     this.currentStage = stage;
 
     // Increment iteration if we're looping back
-    const isLoopingBack = this.isLoopingBack(stage);
+    const isLoopingBack = this.isLoopingBack(previousStage, stage);
     if (isLoopingBack) {
       this.currentIter++;
     }
@@ -84,10 +86,10 @@ export class FSMEngine {
   /**
    * Check if transitioning to this stage is a loop back
    */
-  private isLoopingBack(stage: StageType): boolean {
-    // If the stage is earlier in the workflow or same as first stage, it's a loop back
-    const currentIndex = this.workflow.stages.indexOf(this.currentStage);
-    const targetIndex = this.workflow.stages.indexOf(stage);
+  private isLoopingBack(previousStage: StageType, nextStage: StageType): boolean {
+    // If the next stage is earlier or same as the previous stage, it's a loop back
+    const currentIndex = this.workflow.stages.indexOf(previousStage);
+    const targetIndex = this.workflow.stages.indexOf(nextStage);
 
     return targetIndex <= currentIndex;
   }

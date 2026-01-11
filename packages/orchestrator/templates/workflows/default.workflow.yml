@@ -4,4 +4,4 @@ workflow:
   loop:
     max_iters: 5
     fallback_next_stage: plan
-    stop_when: "$.done == true"
+    stop_when: "$.done"
