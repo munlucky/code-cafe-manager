@@ -1,25 +1,16 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "baseUrl": ".",
-    "paths": {
-      "@codecafe/orchestrator": ["packages/orchestrator/src/index.ts"]
-    },
-    "lib": ["ES2022"],
-    "outDir": "./dist",
-    "rootDir": "./",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "composite": true,
-    "incremental": true
-  },
-  "exclude": ["node_modules", "dist", "**/node_modules", "**/dist"]
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "references": [
+    { "path": "packages/schema" },
+    { "path": "packages/git-worktree" },
+    { "path": "packages/core" },
+    { "path": "packages/providers/common" },
+    { "path": "packages/providers/claude-code" },
+    { "path": "packages/providers/codex" },
+    { "path": "packages/orchestrator" },
+    { "path": "packages/cli" },
+    { "path": "packages/desktop" },
+    { "path": "packages/desktop/src/renderer" }
+  ]
 }
