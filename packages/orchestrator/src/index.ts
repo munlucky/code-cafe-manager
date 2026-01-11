@@ -30,6 +30,19 @@ export type {
   AssistedExecutionResult,
   AssistedSchemaExecutionOptions,
 } from './provider/assisted';
+export { HeadlessExecutor } from './provider/headless';
+export type {
+  HeadlessExecutionOptions,
+  HeadlessExecutionResult,
+  HeadlessSchemaExecutionOptions,
+} from './provider/headless';
+export { ProviderExecutor } from './provider/executor';
+export type {
+  ExecutionMode,
+  ExecutionOptions,
+  ExecutionResult,
+  SchemaExecutionOptions,
+} from './provider/executor';
 
 // Export storage
 export { RunStateManager } from './storage/run-state';

@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import chalk from 'chalk';
 import { nanoid } from 'nanoid';
-import { AssistedExecutor } from '../../provider/assisted';
+import { ProviderExecutor } from '../../provider/executor';
 import { RoleManager } from '../../role/role-manager';
 import { validateJson, loadStageProfile, loadWorkflow } from '../../schema/validator';
 import { DAGExecutor } from '../../engine/dag-executor';
@@ -51,7 +51,7 @@ export async function runWorkflow(
     workflow,
     workflowId,
     runId,
-    mode: options.mode || 'assisted',
+    mode: options.mode || 'auto',
   });
 }
 
@@ -76,7 +76,7 @@ export async function resumeWorkflow(
     workflow,
     workflowId: existing.workflow,
     runId,
-    mode: options.mode || 'assisted',
+    mode: options.mode || 'auto',
     resumeState: existing,
   });
 }
@@ -94,7 +94,7 @@ async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunStat
   const stateManager = new RunStateManager(options.orchDir);
   const eventLogger = new EventLogger(options.orchDir, options.runId);
   const assignments = loadAssignments(options.orchDir);
-  const assistedExecutor = new AssistedExecutor(options.orchDir);
+  const providerExecutor = new ProviderExecutor(options.orchDir);
   const roleManager = new RoleManager(options.orchDir);
 
   let runState: RunState;
@@ -112,10 +112,6 @@ async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunStat
       initialStage: options.workflow.stages[0],
       runId: options.runId,
     });
-  }
-
-  if (options.mode !== 'assisted') {
-    console.log(chalk.yellow('Headless mode not implemented; using assisted mode'));
   }
 
   const fsm = new FSMEngine(options.workflow, runState.currentStage);
@@ -192,12 +188,13 @@ async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunStat
         const schemaRef = role.output_schema || node.output_schema;
 
         if (!schemaRef) {
-          const result = await assistedExecutor.execute({
+          const result = await providerExecutor.execute({
             provider,
             role: roleId,
             context: executionContext,
             outputDir,
             orchDir: options.orchDir,
+            mode: options.mode,
           });
 
           if (!result.success) {
@@ -208,13 +205,14 @@ async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunStat
         }
 
         const schemaPath = resolveSchemaPath(options.orchDir, schemaRef);
-        const result = await assistedExecutor.executeWithSchema({
+        const result = await providerExecutor.executeWithSchema({
           provider,
           role: roleId,
           context: executionContext,
           outputDir,
           orchDir: options.orchDir,
           schemaPath,
+          mode: options.mode,
           maxRetries: 3,
           onValidationFail: (errors) => {
             eventLogger.log({
@@ -231,6 +229,14 @@ async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunStat
               nodeId: node.id,
               stage,
               data: { attempt, remaining },
+            });
+          },
+          onFallback: (reason) => {
+            eventLogger.log({
+              type: 'fallback',
+              nodeId: node.id,
+              stage,
+              data: { reason },
             });
           },
         });

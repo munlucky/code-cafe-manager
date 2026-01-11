@@ -10,6 +10,25 @@ export interface ProviderConfig {
 }
 
 /**
+ * Schema 기반 실행 설정
+ */
+export interface SchemaExecutionConfig extends ProviderConfig {
+  schemaPath: string;
+  outputDir: string;
+  env?: Record<string, string>;
+}
+
+/**
+ * Schema 기반 실행 결과
+ */
+export interface SchemaExecutionResult {
+  success: boolean;
+  output?: any;
+  rawText?: string;
+  error?: string;
+}
+
+/**
  * Provider 공통 인터페이스
  */
 export interface IProvider extends EventEmitter {
@@ -35,6 +54,12 @@ export interface IProvider extends EventEmitter {
    * 실행 상태 확인
    */
   isActive(): boolean;
+
+  /**
+   * Schema 기반 실행 (Orchestrator용)
+   * JSON Schema를 기반으로 구조화된 출력을 생성합니다.
+   */
+  executeWithSchema?(config: SchemaExecutionConfig): Promise<SchemaExecutionResult>;
 }
 
 /**

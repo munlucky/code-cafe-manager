@@ -12,7 +12,7 @@ export type NodeType = 'run' | 'foreach' | 'reduce' | 'branch' | 'export'
 export type ProviderType = 'claude-code' | 'codex' | 'gemini'
 
 // Execution mode
-export type ExecutionMode = 'assisted' | 'headless'
+export type ExecutionMode = 'assisted' | 'headless' | 'auto'
 
 /**
  * Workflow definition
@@ -112,7 +112,7 @@ export interface RunState {
  */
 export interface EventLog {
   timestamp: string
-  type: 'node_start' | 'node_end' | 'validation_fail' | 'retry' | 'stage_end' | 'error'
+  type: 'node_start' | 'node_end' | 'validation_fail' | 'retry' | 'fallback' | 'stage_end' | 'error'
   nodeId?: string
   stage?: StageType
   data?: any
