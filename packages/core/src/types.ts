@@ -73,6 +73,7 @@ export interface Order {
 
 /**
  * Recipe (워크플로우 정의)
+ * @deprecated Recipe system is deprecated. Use Workflow system from @code-cafe/orchestrator instead.
  */
 export interface Recipe {
   name: string;
@@ -100,6 +101,7 @@ export interface WorkspaceConfig {
 
 /**
  * Recipe Step
+ * @deprecated Recipe system is deprecated. Use Workflow system from @code-cafe/orchestrator instead.
  */
 export interface RecipeStep {
   id: string;
