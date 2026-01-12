@@ -281,4 +281,4 @@ steps:
 ## 오픈 이슈(Open Questions)
 1) pm-agent를 프로젝트 `.claude/agents/`에 “복사”할지 “참조만” 할지의 기본 정책  
 2) 바리스타=주문 1:1 매핑을 언제 “바리스타가 여러 주문을 순차 처리(큐)”로 확장할지  
-3) 레시피 스펙 v0의 최소 step type 확정(ai.prompt vs ai.interactive 구분 기준)  
+3) 레시피 스펙 v0의 최소 step type 확정(ai.prompt vs ai.interactive 구분 기준)
