@@ -54,6 +54,21 @@ export interface IProviderAdapter {
    * @returns 프로세스가 살아있는지 여부
    */
   isAlive(process: IPty): boolean;
+
+  /**
+   * Phase 2: Execute command with context
+   * @param process - node-pty 프로세스
+   * @param context - Execution context
+   * @returns Execution result
+   */
+  execute(process: IPty, context: any): Promise<{ success: boolean; output?: string; error?: string }>;
+
+  /**
+   * Phase 2: Setup exit handler
+   * @param process - node-pty 프로세스
+   * @param handler - Exit handler
+   */
+  onExit(process: IPty, handler: (event: { exitCode: number }) => void): void;
 }
 
 /**
@@ -122,6 +137,17 @@ export class MockProviderAdapter implements IProviderAdapter {
 
   isAlive(process: IPty): boolean {
     return true;
+  }
+
+  async execute(process: IPty, context: any): Promise<{ success: boolean; output?: string; error?: string }> {
+    console.log(`Mock execute: ${JSON.stringify(context).substring(0, 100)}...`);
+    return { success: true, output: 'Mock execution completed' };
+  }
+
+  onExit(process: IPty, handler: (event: { exitCode: number }) => void): void {
+    console.log('Mock onExit handler registered');
+    // Store handler for later triggering
+    (process as any)._exitHandler = handler;
   }
 }
 

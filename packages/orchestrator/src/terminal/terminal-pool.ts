@@ -226,9 +226,94 @@ export class TerminalPool {
     };
 
     this.terminals.set(terminal.id, terminal);
+    this.setupProcessHandlers(terminal);
     this.updateMetrics();
 
     return terminal;
+  }
+
+  /**
+   * Setup process event handlers for crash recovery (Gap 5)
+   */
+  private setupProcessHandlers(terminal: Terminal): void {
+    const adapter = ProviderAdapterFactory.get(terminal.provider);
+
+    adapter.onExit(terminal.process, ({ exitCode }) => {
+      console.log(`Terminal ${terminal.id} exited with code ${exitCode}`);
+
+      if (exitCode !== 0) {
+        terminal.status = 'crashed';
+        this.updateMetrics();
+
+        // If terminal had an active lease, attempt recovery
+        if (terminal.leaseToken && !terminal.leaseToken.released) {
+          this.handleCrashDuringLease(terminal).catch((error) => {
+            console.error(`Crash recovery failed for terminal ${terminal.id}:`, error);
+            this.releaseSemaphoreOnCrashFailure(terminal);
+          });
+        }
+      } else {
+        // Normal exit
+        terminal.status = 'idle';
+        terminal.currentBarista = undefined;
+        terminal.leaseToken = undefined;
+        this.updateMetrics();
+      }
+    });
+  }
+
+  /**
+   * Handle crash during active lease (Gap 5)
+   */
+  private async handleCrashDuringLease(crashedTerminal: Terminal): Promise<void> {
+    const provider = crashedTerminal.provider;
+    const providerConfig = this.config.perProvider[provider];
+
+    console.warn(`Attempting auto-restart for crashed terminal ${crashedTerminal.id}`);
+
+    try {
+      // Attempt restart (within maxRetries)
+      for (let attempt = 0; attempt < providerConfig.maxRetries; attempt++) {
+        try {
+          const newTerminal = await this.getOrCreateTerminal(provider);
+
+          // Transfer lease to new terminal
+          if (crashedTerminal.leaseToken) {
+            newTerminal.status = 'busy';
+            newTerminal.currentBarista = crashedTerminal.leaseToken.baristaId;
+            newTerminal.leaseToken = crashedTerminal.leaseToken;
+            newTerminal.leaseToken.terminalId = newTerminal.id;
+          }
+
+          // Remove old terminal
+          this.terminals.delete(crashedTerminal.id);
+          this.updateMetrics();
+
+          console.log(`Terminal ${crashedTerminal.id} restarted as ${newTerminal.id}`);
+          return;
+        } catch (spawnError) {
+          console.error(`Restart attempt ${attempt + 1} failed:`, spawnError);
+          if (attempt === providerConfig.maxRetries - 1) {
+            throw spawnError;
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+        }
+      }
+    } catch (error) {
+      console.error(`All restart attempts failed for terminal ${crashedTerminal.id}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Release semaphore on crash recovery failure (Gap 5)
+   */
+  private releaseSemaphoreOnCrashFailure(terminal: Terminal): void {
+    const semaphore = this.semaphores.get(terminal.provider);
+    if (semaphore && terminal.leaseToken) {
+      semaphore.release(terminal.id);
+      console.warn(`Semaphore released for crashed terminal ${terminal.id}`);
+    }
   }
 
   private updateMetrics(): void {

@@ -6,6 +6,7 @@
 export enum BaristaStatus {
   IDLE = 'IDLE',
   RUNNING = 'RUNNING',
+  BUSY = 'BUSY',
   ERROR = 'ERROR',
   STOPPED = 'STOPPED',
 }
@@ -22,6 +23,10 @@ export enum OrderStatus {
 // Provider (원두) 타입
 export type ProviderType = 'claude-code' | 'codex' | 'gemini' | 'grok';
 
+// Phase 2: Role-based execution
+import { Step } from './types/step.js';
+export { Step };
+
 // Workspace 모드
 export type WorkspaceMode = 'in-place' | 'worktree' | 'temp';
 
@@ -33,6 +38,7 @@ export interface Barista {
   status: BaristaStatus;
   currentOrderId: string | null;
   provider: ProviderType;
+  role?: string; // Phase 2: Role ID
   createdAt: Date;
   lastActivityAt: Date;
 }
@@ -53,6 +59,8 @@ export interface Order {
   startedAt: Date | null;
   endedAt: Date | null;
   error?: string;
+  // Phase 2: Role-based execution steps
+  steps?: Step[];
   // M2 추가: Worktree 정보
   worktreeInfo?: {
     path: string;
@@ -85,6 +93,7 @@ export interface Receipt {
 export enum EventType {
   BARISTA_CREATED = 'barista:created',
   BARISTA_STATUS_CHANGED = 'barista:status-changed',
+  BARISTA_REMOVED = 'barista:removed',
   ORDER_CREATED = 'order:created',
   ORDER_ASSIGNED = 'order:assigned',
   ORDER_STATUS_CHANGED = 'order:status-changed',
