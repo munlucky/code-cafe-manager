@@ -5,6 +5,7 @@ import type {
   WorktreeInfo,
   Receipt,
 } from './models';
+import type { Cafe, CreateCafeParams, UpdateCafeParams } from '@codecafe/core';
 
 export interface IpcResult<T = any> {
   success: boolean;
@@ -14,11 +15,14 @@ export interface IpcResult<T = any> {
 }
 
 export interface CreateOrderParams {
-  workflowId: string;
-  workflowName: string;
+  workflowId?: string; // Optional for backward compatibility
+  workflowName?: string; // Optional for backward compatibility
   counter: string;
   provider: ProviderType;
   vars: Record<string, any>;
+  // @deprecated Legacy fields for backward compatibility
+  recipeId?: string;
+  recipeName?: string;
 }
 
 export interface ProviderInfo {
@@ -72,6 +76,17 @@ export interface ProviderAssignmentInfo {
 declare global {
   interface Window {
     codecafe: {
+      // Phase 1: Cafe Management
+      cafe: {
+        list: () => Promise<Cafe[]>;
+        get: (id: string) => Promise<Cafe | null>;
+        create: (params: CreateCafeParams) => Promise<Cafe>;
+        update: (id: string, params: UpdateCafeParams) => Promise<Cafe>;
+        delete: (id: string) => Promise<void>;
+        setLastAccessed: (id: string) => Promise<void>;
+        getLastAccessed: () => Promise<Cafe | null>;
+      };
+
       // Barista 관리
       createBarista: (provider: ProviderType) => Promise<Barista>;
       getAllBaristas: () => Promise<Barista[]>;

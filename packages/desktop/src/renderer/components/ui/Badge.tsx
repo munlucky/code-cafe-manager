@@ -36,3 +36,31 @@ export function StatusBadge({
     </div>
   );
 }
+
+// Generic Badge component with variants
+const BADGE_VARIANTS = {
+  default: 'bg-gray-500/10 text-gray-300 border border-gray-500/30',
+  success: 'bg-green-500/10 text-green-300 border border-green-500/30',
+  error: 'bg-red-500/10 text-red-300 border border-red-500/30',
+  warning: 'bg-yellow-500/10 text-yellow-300 border border-yellow-500/30',
+};
+
+interface BadgeProps {
+  variant?: 'default' | 'success' | 'error' | 'warning';
+  className?: string;
+  children: React.ReactNode;
+}
+
+export function Badge({ variant = 'default', className, children }: BadgeProps) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
+        BADGE_VARIANTS[variant],
+        className
+      )}
+    >
+      {children}
+    </span>
+  );
+}

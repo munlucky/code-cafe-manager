@@ -1,0 +1,103 @@
+[
+  {
+    "id": "order-001",
+    "workflowId": "feature-implementation",
+    "workflowName": "Feature Implementation",
+    "baristaId": "barista-001",
+    "status": "running",
+    "counter": "/path/to/cafe/worktree-1",
+    "provider": "claude-code",
+    "vars": {
+      "feature": "User Authentication",
+      "description": "Implement JWT-based authentication"
+    },
+    "createdAt": "2026-01-12T09:00:00.000Z",
+    "startedAt": "2026-01-12T09:01:00.000Z",
+    "endedAt": null,
+    "worktreeInfo": {
+      "path": "/path/to/cafe/.codecafe-worktrees/feature-auth",
+      "branch": "feature/auth",
+      "baseBranch": "main"
+    }
+  },
+  {
+    "id": "order-002",
+    "workflowId": "bug-fix",
+    "workflowName": "Bug Fix",
+    "baristaId": "barista-002",
+    "status": "completed",
+    "counter": "/path/to/cafe/worktree-2",
+    "provider": "codex",
+    "vars": {
+      "issue": "Memory leak in event handler",
+      "severity": "high"
+    },
+    "createdAt": "2026-01-12T08:00:00.000Z",
+    "startedAt": "2026-01-12T08:05:00.000Z",
+    "endedAt": "2026-01-12T08:45:00.000Z",
+    "worktreeInfo": {
+      "path": "/path/to/cafe/.codecafe-worktrees/fix-memory-leak",
+      "branch": "fix/memory-leak",
+      "baseBranch": "main"
+    }
+  },
+  {
+    "id": "order-003",
+    "workflowId": "refactor",
+    "workflowName": "Code Refactoring",
+    "baristaId": null,
+    "status": "pending",
+    "counter": "/path/to/cafe",
+    "provider": "claude-code",
+    "vars": {
+      "target": "Database layer",
+      "goal": "Extract to separate module"
+    },
+    "createdAt": "2026-01-12T10:00:00.000Z",
+    "startedAt": null,
+    "endedAt": null
+  },
+  {
+    "id": "order-004",
+    "workflowId": "feature-implementation",
+    "workflowName": "Feature Implementation",
+    "baristaId": "barista-003",
+    "status": "running",
+    "counter": "/path/to/cafe/worktree-3",
+    "provider": "claude-code",
+    "vars": {
+      "feature": "Dark Mode",
+      "description": "Add theme toggle with localStorage persistence"
+    },
+    "createdAt": "2026-01-12T09:30:00.000Z",
+    "startedAt": "2026-01-12T09:35:00.000Z",
+    "endedAt": null,
+    "worktreeInfo": {
+      "path": "/path/to/cafe/.codecafe-worktrees/feature-dark-mode",
+      "branch": "feature/dark-mode",
+      "baseBranch": "main"
+    }
+  },
+  {
+    "id": "order-005",
+    "workflowId": "test-coverage",
+    "workflowName": "Test Coverage Improvement",
+    "baristaId": "barista-004",
+    "status": "failed",
+    "counter": "/path/to/cafe/worktree-4",
+    "provider": "codex",
+    "vars": {
+      "module": "User Service",
+      "targetCoverage": "90%"
+    },
+    "createdAt": "2026-01-12T07:00:00.000Z",
+    "startedAt": "2026-01-12T07:10:00.000Z",
+    "endedAt": "2026-01-12T07:55:00.000Z",
+    "error": "Test execution failed: TypeError in mock setup",
+    "worktreeInfo": {
+      "path": "/path/to/cafe/.codecafe-worktrees/test-user-service",
+      "branch": "test/user-service",
+      "baseBranch": "main"
+    }
+  }
+]

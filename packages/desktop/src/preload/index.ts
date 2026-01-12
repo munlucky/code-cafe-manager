@@ -1,7 +1,19 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { Cafe, CreateCafeParams, UpdateCafeParams } from '@codecafe/core';
 
 // Renderer에서 사용할 API 노출
 contextBridge.exposeInMainWorld('codecafe', {
+  // Phase 1: Cafe Management
+  cafe: {
+    list: (): Promise<Cafe[]> => ipcRenderer.invoke('cafe:list'),
+    get: (id: string): Promise<Cafe | null> => ipcRenderer.invoke('cafe:get', id),
+    create: (params: CreateCafeParams): Promise<Cafe> => ipcRenderer.invoke('cafe:create', params),
+    update: (id: string, params: UpdateCafeParams): Promise<Cafe> =>
+      ipcRenderer.invoke('cafe:update', id, params),
+    delete: (id: string): Promise<void> => ipcRenderer.invoke('cafe:delete', id),
+    setLastAccessed: (id: string): Promise<void> => ipcRenderer.invoke('cafe:setLastAccessed', id),
+    getLastAccessed: (): Promise<Cafe | null> => ipcRenderer.invoke('cafe:getLastAccessed'),
+  },
   // 바리스타 관리
   createBarista: (provider: string) => ipcRenderer.invoke('createBarista', provider),
   getAllBaristas: () => ipcRenderer.invoke('getAllBaristas'),

@@ -8,6 +8,7 @@ import { WorktreeManager } from '@codecafe/git-worktree';
 import { promises as fs, existsSync } from 'fs';
 import * as YAML from 'yaml';
 import dotenv from 'dotenv';
+import { registerCafeHandlers } from './ipc/cafe.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -103,6 +104,10 @@ async function initOrchestrator() {
 // IPC Handlers
 function setupIpcHandlers() {
   const orchDir = resolveOrchDir();
+
+  // Phase 1: Cafe Registry handlers
+  registerCafeHandlers();
+
   // 바리스타 생성
   ipcMain.handle('createBarista', async (_, provider: string) => {
     if (!orchestrator) throw new Error('Orchestrator not initialized');

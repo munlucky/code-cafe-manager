@@ -59,6 +59,9 @@ export interface Order {
     branch: string;
     baseBranch: string;
   };
+  // @deprecated Legacy fields for backward compatibility (Recipe → Workflow)
+  recipeId?: string;
+  recipeName?: string;
 }
 
 /**
