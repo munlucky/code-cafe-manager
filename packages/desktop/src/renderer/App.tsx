@@ -6,7 +6,6 @@ import {
   NewOrder,
   OrderDetail,
   Worktrees,
-  Recipes,
 } from './components/views';
 
 const VIEW_MAP = {
@@ -14,7 +13,6 @@ const VIEW_MAP = {
   'new-order': NewOrder,
   orders: OrderDetail,
   worktrees: Worktrees,
-  recipes: Recipes,
 };
 
 export function App() {

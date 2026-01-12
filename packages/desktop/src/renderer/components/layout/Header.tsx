@@ -5,7 +5,6 @@ const VIEW_TITLES: Record<string, string> = {
   'new-order': 'New Order',
   orders: 'Orders',
   worktrees: 'Worktrees',
-  recipes: 'Recipe Studio',
 };
 
 export function Header() {

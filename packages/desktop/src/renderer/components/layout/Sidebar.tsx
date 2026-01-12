@@ -7,7 +7,6 @@ const NAV_ITEMS: Array<{ view: ViewName; label: string }> = [
   { view: 'new-order', label: 'New Order' },
   { view: 'orders', label: 'Orders' },
   { view: 'worktrees', label: 'Worktrees' },
-  { view: 'recipes', label: 'Recipe Studio' },
 ];
 
 export function Sidebar() {

@@ -22,13 +22,6 @@ contextBridge.exposeInMainWorld('codecafe', {
   openWorktreeFolder: (worktreePath: string) =>
     ipcRenderer.invoke('openWorktreeFolder', worktreePath),
 
-  listRecipes: () => ipcRenderer.invoke('listRecipes'),
-  getRecipe: (recipeName: string) => ipcRenderer.invoke('getRecipe', recipeName),
-  saveRecipe: (recipeName: string, recipeData: any) =>
-    ipcRenderer.invoke('saveRecipe', recipeName, recipeData),
-  validateRecipe: (recipeData: any) => ipcRenderer.invoke('validateRecipe', recipeData),
-  deleteRecipe: (recipeName: string) => ipcRenderer.invoke('deleteRecipe', recipeName),
-
   listWorkflows: () => ipcRenderer.invoke('workflow:list'),
   getWorkflow: (workflowId: string) => ipcRenderer.invoke('workflow:get', workflowId),
   runWorkflow: (workflowId: string, options?: { mode?: string; interactive?: boolean }) =>

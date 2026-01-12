@@ -3,4 +3,4 @@
  * YAML/JSON schema and validation for CodeCafe
  */
 
-export * from './recipe-schema.js';
+// Schema exports can be added here when needed
