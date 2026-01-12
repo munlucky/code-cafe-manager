@@ -20,3 +20,4 @@ packages/orchestrator/src/**/*.d.ts
 packages/orchestrator/src/**/*.map
 .orch/
 tmpclaude-*
+.gemini/
