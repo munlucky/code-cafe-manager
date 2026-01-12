@@ -3,7 +3,6 @@ export type ProviderType = 'claude-code' | 'codex' | 'gemini' | 'grok';
 export type BaristaStatus = 'IDLE' | 'RUNNING' | 'ERROR' | 'STOPPED';
 export type OrderStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 export type WorkspaceMode = 'in-place' | 'worktree' | 'temp';
-export type StepType = 'ai.interactive' | 'ai.prompt' | 'shell' | 'parallel';
 
 export interface Barista {
   id: string;
@@ -16,8 +15,8 @@ export interface Barista {
 
 export interface Order {
   id: string;
-  recipeId: string;
-  recipeName: string;
+  workflowId: string;
+  workflowName: string;
   baristaId: string | null;
   status: OrderStatus;
   counter: string;
@@ -32,41 +31,6 @@ export interface Order {
     branch: string;
     baseBranch: string;
   };
-}
-
-export interface Recipe {
-  name: string;
-  version: string;
-  defaults: {
-    provider: ProviderType;
-    workspace: {
-      mode: WorkspaceMode;
-      baseBranch?: string;
-      clean?: boolean;
-    };
-  };
-  inputs: {
-    counter: string;
-  };
-  vars: Record<string, string>;
-  steps: RecipeStep[];
-}
-
-export interface RecipeStep {
-  id: string;
-  type: StepType;
-  provider?: ProviderType;
-  depends_on?: string[];
-  timeout_sec?: number;
-  retry?: number;
-  agent_ref?: {
-    type: 'github' | 'local' | 'url';
-    url?: string;
-    path?: string;
-  };
-  prompt?: string;
-  command?: string;
-  steps?: RecipeStep[];
 }
 
 export interface WorktreeInfo {

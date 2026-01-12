@@ -64,13 +64,13 @@ export class Orchestrator extends EventEmitter {
    * 주문 생성
    */
   createOrder(
-    recipeId: string,
-    recipeName: string,
+    workflowId: string,
+    workflowName: string,
     counter: string,
     provider: ProviderType,
     vars: Record<string, string> = {}
   ): Order {
-    const order = this.orderManager.createOrder(recipeId, recipeName, counter, provider, vars);
+    const order = this.orderManager.createOrder(workflowId, workflowName, counter, provider, vars);
     const idleBarista = this.baristaManager.findIdleBarista(provider);
     if (!idleBarista) {
       try {

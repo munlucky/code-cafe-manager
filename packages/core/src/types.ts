@@ -25,16 +25,6 @@ export type ProviderType = 'claude-code' | 'codex' | 'gemini' | 'grok';
 // Workspace 모드
 export type WorkspaceMode = 'in-place' | 'worktree' | 'temp';
 
-// Step 타입
-export type StepType =
-  | 'ai.interactive'
-  | 'ai.prompt'
-  | 'shell'
-  | 'parallel'
-  | 'conditional'
-  | 'context.collect'
-  | 'data.passthrough';
-
 /**
  * Barista (실행 유닛)
  */
@@ -48,12 +38,12 @@ export interface Barista {
 }
 
 /**
- * Order (주문 = 레시피 실행 인스턴스)
+ * Order (주문 = 워크플로우 실행 인스턴스)
  */
 export interface Order {
   id: string;
-  recipeId: string;
-  recipeName: string;
+  workflowId: string;
+  workflowName: string;
   baristaId: string | null;
   status: OrderStatus;
   counter: string; // 실행 대상 프로젝트 경로 (worktree 모드 시 worktree 경로)
@@ -69,75 +59,6 @@ export interface Order {
     branch: string;
     baseBranch: string;
   };
-}
-
-/**
- * Recipe (워크플로우 정의)
- * @deprecated Recipe system is deprecated. Use Workflow system from @code-cafe/orchestrator instead.
- */
-export interface Recipe {
-  name: string;
-  version: string;
-  defaults: RecipeDefaults;
-  inputs: RecipeInputs;
-  vars: Record<string, string>;
-  steps: RecipeStep[];
-}
-
-export interface RecipeDefaults {
-  provider: ProviderType;
-  workspace: WorkspaceConfig;
-}
-
-export interface RecipeInputs {
-  counter: string;
-}
-
-export interface WorkspaceConfig {
-  mode: WorkspaceMode;
-  baseBranch?: string;
-  clean?: boolean;
-}
-
-/**
- * Recipe Step
- * @deprecated Recipe system is deprecated. Use Workflow system from @code-cafe/orchestrator instead.
- */
-export interface RecipeStep {
-  id: string;
-  type: StepType;
-  provider?: ProviderType;
-  depends_on?: string[];
-  timeout_sec?: number;
-  retry?: number;
-
-  // Data flow
-  inputs?: Record<string, any>;
-  outputs?: string[];
-
-  // ai.interactive / ai.prompt 전용
-  agent_ref?: AgentReference;
-  prompt?: string;
-
-  // shell 전용
-  command?: string;
-
-  // parallel 전용
-  steps?: RecipeStep[];
-
-  // conditional 전용
-  condition?: string;
-  when_true?: RecipeStep[];
-  when_false?: RecipeStep[];
-
-  // context.collect 전용
-  collect?: string[];
-}
-
-export interface AgentReference {
-  type: 'github' | 'local' | 'url';
-  url?: string;
-  path?: string;
 }
 
 /**

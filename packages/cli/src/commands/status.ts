@@ -74,7 +74,7 @@ export function registerStatusCommand(program: Command): void {
                 : order.status === 'RUNNING'
                 ? chalk.blue
                 : chalk.gray;
-            console.log(`  ${statusColor(order.status)} ${order.id} - ${order.recipeName}`);
+            console.log(`  ${statusColor(order.status)} ${order.id} - ${order.workflowName}`);
           }
         }
 

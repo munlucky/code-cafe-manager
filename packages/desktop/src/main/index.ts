@@ -5,7 +5,6 @@ import { Orchestrator } from '@codecafe/core';
 import { registerElectronHandlers } from '@codecafe/orchestrator';
 import { homedir } from 'os';
 import { WorktreeManager } from '@codecafe/git-worktree';
-import { safeValidateRecipe } from '@codecafe/schema';
 import { promises as fs, existsSync } from 'fs';
 import * as YAML from 'yaml';
 import dotenv from 'dotenv';
@@ -115,8 +114,8 @@ function setupIpcHandlers() {
   ipcMain.handle('createOrder', async (_, params) => {
     if (!orchestrator) throw new Error('Orchestrator not initialized');
     const order = orchestrator.createOrder(
-      params.recipeId,
-      params.recipeName,
+      params.workflowId,
+      params.workflowName,
       params.counter,
       params.provider,
       params.vars
@@ -209,151 +208,6 @@ function setupIpcHandlers() {
     }
   });
 
-  // Recipe Studio (M2)
-  const recipesDir = join(homedir(), '.codecafe', 'recipes');
-  const DEFAULT_RECIPE_NAME = 'pm-agent.yaml';
-  const LEGACY_RECIPE_NAME = 'pm-agent.yml';
-  const DEFAULT_RECIPE_FALLBACK = `name: "pm-agent"
-version: "0.1.0"
-defaults:
-  provider: "claude-code"
-  workspace:
-    mode: "worktree"
-inputs:
-  counter: "."
-vars:
-  issue: ""
-steps:
-  - id: pm_agent_session
-    type: "ai.interactive"
-    provider: "claude-code"
-    agent_ref:
-      type: "github"
-      url: "https://github.com/munlucky/claude-settings/blob/main/.claude/agents/pm-agent.md"
-    prompt: |
-      {{ issue }}
-    timeout_sec: 7200
-`;
-
-  const ensureDefaultRecipe = async () => {
-    try {
-      await fs.mkdir(recipesDir, { recursive: true });
-      const defaultPath = join(recipesDir, DEFAULT_RECIPE_NAME);
-
-      try {
-        await fs.access(defaultPath);
-        return;
-      } catch {
-        // Continue if default does not exist.
-      }
-
-      const legacyPath = join(recipesDir, LEGACY_RECIPE_NAME);
-      try {
-        await fs.rename(legacyPath, defaultPath);
-        return;
-      } catch {
-        // Continue if legacy recipe does not exist or rename fails.
-      }
-
-      let content = DEFAULT_RECIPE_FALLBACK;
-      try {
-        const sourcePath = join(app.getAppPath(), 'recipes', 'house-blend', 'pm-agent.yaml');
-        content = await fs.readFile(sourcePath, 'utf-8');
-      } catch {
-        // Fall back to built-in template.
-      }
-
-      try {
-        const parsed = YAML.parse(content) as any;
-        const normalized = {
-          ...parsed,
-          name: 'pm-agent',
-          defaults: {
-            provider: parsed?.defaults?.provider || 'claude-code',
-            workspace: {
-              ...(parsed?.defaults?.workspace || {}),
-              mode: 'worktree',
-            },
-          },
-          inputs: {
-            counter: parsed?.inputs?.counter || '.',
-          },
-          vars: parsed?.vars || { issue: '' },
-          steps: parsed?.steps || [],
-        };
-        content = YAML.stringify(normalized);
-      } catch {
-        // Keep fallback content if normalization fails.
-      }
-
-      await fs.writeFile(defaultPath, content, 'utf-8');
-    } catch (error) {
-      console.error('Failed to ensure default recipe:', error);
-    }
-  };
-
-  ipcMain.handle('listRecipes', async () => {
-    try {
-      await ensureDefaultRecipe();
-      await fs.mkdir(recipesDir, { recursive: true });
-      const files = await fs.readdir(recipesDir);
-      const yamlFiles = files.filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'));
-      const filtered =
-        yamlFiles.includes(DEFAULT_RECIPE_NAME) &&
-        yamlFiles.includes(LEGACY_RECIPE_NAME)
-          ? yamlFiles.filter((name) => name !== LEGACY_RECIPE_NAME)
-          : yamlFiles;
-      return { success: true, data: filtered };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle('getRecipe', async (_, recipeName: string) => {
-    try {
-      await ensureDefaultRecipe();
-      const recipePath = join(recipesDir, recipeName);
-      const content = await fs.readFile(recipePath, 'utf-8');
-      const data = YAML.parse(content);
-      return { success: true, data };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle('saveRecipe', async (_, recipeName: string, recipeData: any) => {
-    try {
-      await fs.mkdir(recipesDir, { recursive: true });
-      const recipePath = join(recipesDir, recipeName);
-      const yamlContent = YAML.stringify(recipeData);
-      await fs.writeFile(recipePath, yamlContent, 'utf-8');
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle('deleteRecipe', async (_, recipeName: string) => {
-    try {
-      if (recipeName === DEFAULT_RECIPE_NAME || recipeName === LEGACY_RECIPE_NAME) {
-        return { success: false, error: 'Default recipe cannot be deleted.' };
-      }
-      const recipePath = join(recipesDir, recipeName);
-      await fs.unlink(recipePath);
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle('validateRecipe', async (_, recipeData: any) => {
-    const result = safeValidateRecipe(recipeData);
-    if (result.success) {
-      return { success: true, data: result.data };
-    } else {
-      return { success: false, errors: result.errors };
-    }
-  });
 
   registerElectronHandlers(ipcMain, orchDir);
 }

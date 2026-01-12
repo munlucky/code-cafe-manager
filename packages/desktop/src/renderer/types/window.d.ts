@@ -1,7 +1,6 @@
 import type {
   Barista,
   Order,
-  Recipe,
   ProviderType,
   WorktreeInfo,
   Receipt,
@@ -15,8 +14,8 @@ export interface IpcResult<T = any> {
 }
 
 export interface CreateOrderParams {
-  recipeId: string;
-  recipeName: string;
+  workflowId: string;
+  workflowName: string;
   counter: string;
   provider: ProviderType;
   vars: Record<string, any>;
@@ -102,16 +101,6 @@ declare global {
         force?: boolean
       ) => Promise<IpcResult<void>>;
       openWorktreeFolder: (worktreePath: string) => Promise<void>;
-
-      // Recipe
-      listRecipes: () => Promise<IpcResult<string[]>>;
-      getRecipe: (recipeName: string) => Promise<IpcResult<Recipe>>;
-      saveRecipe: (
-        recipeName: string,
-        recipeData: Recipe
-      ) => Promise<IpcResult<void>>;
-      validateRecipe: (recipeData: Recipe) => Promise<IpcResult<void>>;
-      deleteRecipe: (recipeName: string) => Promise<IpcResult<void>>;
 
       // Orchestrator
       listWorkflows: () => Promise<WorkflowInfo[]>;

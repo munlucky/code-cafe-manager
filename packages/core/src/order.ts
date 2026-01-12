@@ -13,16 +13,16 @@ export class OrderManager extends EventEmitter {
    * 새 주문 생성
    */
   createOrder(
-    recipeId: string,
-    recipeName: string,
+    workflowId: string,
+    workflowName: string,
     counter: string,
     provider: ProviderType,
     vars: Record<string, string> = {}
   ): Order {
     const order: Order = {
       id: this.generateId(),
-      recipeId,
-      recipeName,
+      workflowId,
+      workflowName,
       baristaId: null,
       status: OrderStatus.PENDING,
       counter,
