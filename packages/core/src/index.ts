@@ -13,3 +13,7 @@ export * from './orchestrator.js';
 // Phase 1: Cafe types and schemas
 export * from './types/cafe.js';
 export * from './schema/cafe.js';
+
+// Phase 2: Terminal and Role types
+export * from './types/terminal.js';
+export * from './types/role.js';

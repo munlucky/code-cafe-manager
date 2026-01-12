@@ -9,6 +9,18 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./types": {
+      "import": "./dist/types.js",
+      "types": "./dist/types.d.ts"
+    },
+    "./types/terminal": {
+      "import": "./dist/types/terminal.js",
+      "types": "./dist/types/terminal.d.ts"
+    },
+    "./types/role": {
+      "import": "./dist/types/role.js",
+      "types": "./dist/types/role.d.ts"
     }
   },
   "scripts": {
