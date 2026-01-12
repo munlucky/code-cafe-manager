@@ -19,3 +19,4 @@ packages/orchestrator/src/**/*.js
 packages/orchestrator/src/**/*.d.ts
 packages/orchestrator/src/**/*.map
 .orch/
+tmpclaude-*
