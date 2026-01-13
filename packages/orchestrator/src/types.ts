@@ -63,15 +63,37 @@ export interface Condition {
 }
 
 /**
- * Role definition
+ * Role Variable (Phase 2)
+ */
+export interface RoleVariable {
+  name: string
+  type: 'string' | 'number' | 'boolean'
+  required: boolean
+  default?: string | number | boolean
+  description?: string
+}
+
+/**
+ * Role definition (supports both Phase 1 and Phase 2 formats)
  */
 export interface Role {
   id: string
   name: string
-  output_schema: string
-  inputs: string[]
+
+  // Phase 1 fields
+  output_schema?: string
+  inputs?: string[]
   guards?: string[]
+
+  // Common field (template in Phase 1, systemPrompt in Phase 2)
   template: string
+
+  // Phase 2 fields
+  skills?: string[]
+  recommendedProvider?: ProviderType
+  variables?: RoleVariable[]
+  isDefault?: boolean
+  source?: string
 }
 
 /**

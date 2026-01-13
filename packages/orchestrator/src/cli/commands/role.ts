@@ -27,8 +27,17 @@ export async function listRoles(orchDir?: string): Promise<void> {
     if (role) {
       console.log(chalk.green(`  ${role.id}`));
       console.log(chalk.gray(`    Name: ${role.name}`));
-      console.log(chalk.gray(`    Schema: ${role.output_schema}`));
-      console.log(chalk.gray(`    Inputs: ${role.inputs.length} file(s)`));
+
+      // Display Phase 1 or Phase 2 fields
+      if (role.skills) {
+        // Phase 2 format
+        console.log(chalk.gray(`    Provider: ${role.recommendedProvider || 'N/A'}`));
+        console.log(chalk.gray(`    Skills: ${role.skills.length} skill(s)`));
+      } else {
+        // Phase 1 format
+        console.log(chalk.gray(`    Schema: ${role.output_schema}`));
+        console.log(chalk.gray(`    Inputs: ${role.inputs?.length || 0} file(s)`));
+      }
       console.log();
     }
   }
@@ -129,17 +138,36 @@ export async function showRole(roleId: string, orchDir?: string): Promise<void> 
 
   console.log(chalk.blue(`\nRole: ${role.name}`));
   console.log(chalk.gray(`ID: ${role.id}`));
-  console.log(chalk.gray(`Output Schema: ${role.output_schema}`));
-  console.log(chalk.gray(`\nInputs:`));
-  role.inputs.forEach((input) => {
-    console.log(chalk.gray(`  - ${input}`));
-  });
 
-  if (role.guards && role.guards.length > 0) {
-    console.log(chalk.gray(`\nGuards:`));
-    role.guards.forEach((guard) => {
-      console.log(chalk.gray(`  - ${guard}`));
+  if (role.skills) {
+    // Phase 2 format
+    console.log(chalk.gray(`Recommended Provider: ${role.recommendedProvider || 'N/A'}`));
+    console.log(chalk.gray(`\nSkills:`));
+    role.skills.forEach((skill) => {
+      console.log(chalk.gray(`  - ${skill}`));
     });
+
+    if (role.variables && role.variables.length > 0) {
+      console.log(chalk.gray(`\nVariables:`));
+      role.variables.forEach((v) => {
+        const req = v.required ? 'required' : 'optional';
+        console.log(chalk.gray(`  - ${v.name} (${v.type}, ${req})`));
+      });
+    }
+  } else {
+    // Phase 1 format
+    console.log(chalk.gray(`Output Schema: ${role.output_schema}`));
+    console.log(chalk.gray(`\nInputs:`));
+    role.inputs?.forEach((input) => {
+      console.log(chalk.gray(`  - ${input}`));
+    });
+
+    if (role.guards && role.guards.length > 0) {
+      console.log(chalk.gray(`\nGuards:`));
+      role.guards.forEach((guard) => {
+        console.log(chalk.gray(`  - ${guard}`));
+      });
+    }
   }
 
   console.log(chalk.gray(`\nTemplate:`));

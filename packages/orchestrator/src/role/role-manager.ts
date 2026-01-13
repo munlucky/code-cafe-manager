@@ -84,14 +84,32 @@ export class RoleManager {
           const fileContent = fs.readFileSync(rolePath, 'utf-8');
           const { data, content } = matter(fileContent);
 
-          return {
-            id: data.id || roleId,
-            name: data.name || roleId,
-            output_schema: data.output_schema || '',
-            inputs: data.inputs || [],
-            guards: data.guards || [],
-            template: content.trim(),
-          };
+          // Detect Phase 2 format (has recommended_provider or skills)
+          const isPhase2 = 'recommended_provider' in data || 'skills' in data;
+
+          if (isPhase2) {
+            // Parse Phase 2 format
+            return {
+              id: data.id || roleId,
+              name: data.name || roleId,
+              template: content.trim(),
+              skills: data.skills || [],
+              recommendedProvider: data.recommended_provider,
+              variables: data.variables || [],
+              isDefault: true, // Roles from packages/roles are default
+              source: rolePath,
+            };
+          } else {
+            // Parse Phase 1 format (backward compatibility)
+            return {
+              id: data.id || roleId,
+              name: data.name || roleId,
+              output_schema: data.output_schema || '',
+              inputs: data.inputs || [],
+              guards: data.guards || [],
+              template: content.trim(),
+            };
+          }
         } catch (error) {
           console.error(`Failed to load role ${roleId} from ${rolePath}:`, error);
           // Continue to next path
@@ -103,7 +121,7 @@ export class RoleManager {
   }
 
   /**
-   * Save a role
+   * Save a role (supports both Phase 1 and Phase 2 formats)
    */
   saveRole(role: Role): void {
     // Validate role ID to prevent path traversal
@@ -117,16 +135,33 @@ export class RoleManager {
 
     const rolePath = path.join(this.rolesDir, `${role.id}.md`);
 
+    // Detect Phase 2 format
+    const isPhase2 = role.skills !== undefined || role.recommendedProvider !== undefined;
+
     // Construct frontmatter
     const frontmatter: any = {
       id: role.id,
       name: role.name,
-      output_schema: role.output_schema,
-      inputs: role.inputs,
     };
 
-    if (role.guards && role.guards.length > 0) {
-      frontmatter.guards = role.guards;
+    if (isPhase2) {
+      // Phase 2 format
+      if (role.recommendedProvider) {
+        frontmatter.recommended_provider = role.recommendedProvider;
+      }
+      if (role.skills) {
+        frontmatter.skills = role.skills;
+      }
+      if (role.variables && role.variables.length > 0) {
+        frontmatter.variables = role.variables;
+      }
+    } else {
+      // Phase 1 format
+      frontmatter.output_schema = role.output_schema;
+      frontmatter.inputs = role.inputs;
+      if (role.guards && role.guards.length > 0) {
+        frontmatter.guards = role.guards;
+      }
     }
 
     // Use gray-matter to stringify
