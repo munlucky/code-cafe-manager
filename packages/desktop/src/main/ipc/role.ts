@@ -4,31 +4,41 @@
  */
 
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
-// import { z } from 'zod';
-// import { RoleRegistry } from '@codecafe/orchestrator/role';
-// import { Role } from '@codecafe/core/types/role';
+import { z } from 'zod';
+import type { Role } from '@codecafe/core';
+import { RoleSchema, RoleVariableSchema, ProviderTypeSchema } from '@codecafe/core';
 
-// Temporary types for compilation
-type z = any;
-const z = { object: () => ({ parse: (data: any) => data }) } as any;
-class RoleRegistry {
-  static getAll(): any[] { return []; }
-  static get(id: string): any { return null; }
-  static register(role: any): void {}
-  static update(id: string, role: any): void {}
-  static delete(id: string): void {}
-  static reload(): void {}
+// TODO: Integrate with actual RoleManager when Phase 2 types are aligned
+// For now, use in-memory stub with real Zod validation
+class RoleRegistryStub {
+  private roles: Map<string, Role> = new Map();
+
+  getAll(): Role[] {
+    return Array.from(this.roles.values());
+  }
+
+  get(id: string): Role | null {
+    return this.roles.get(id) || null;
+  }
+
+  register(role: Role): void {
+    this.roles.set(role.id, role);
+  }
+
+  update(id: string, role: Role): void {
+    this.roles.set(id, role);
+  }
+
+  delete(id: string): void {
+    this.roles.delete(id);
+  }
+
+  reload(): void {
+    // TODO: Load from RoleManager when integrated
+  }
 }
-interface Role {
-  id: string;
-  name: string;
-  systemPrompt: string;
-  skills: string[];
-  recommendedProvider: string;
-  variables: any[];
-  isDefault: boolean;
-  source: string;
-}
+
+const RoleRegistry = new RoleRegistryStub();
 
 // Zod schemas for request/response validation
 const RoleIdSchema = z.string().min(1);
@@ -38,26 +48,16 @@ const RoleCreateSchema = z.object({
   name: z.string().min(1),
   systemPrompt: z.string().min(1),
   skills: z.array(z.string()),
-  recommendedProvider: z.string(),
-  variables: z.array(z.object({
-    name: z.string(),
-    type: z.enum(['string', 'number', 'boolean']),
-    required: z.boolean(),
-    default: z.union([z.string(), z.number(), z.boolean()]).optional(),
-  })).optional(),
+  recommendedProvider: ProviderTypeSchema,
+  variables: z.array(RoleVariableSchema).optional(),
 });
 
 const RoleUpdateSchema = z.object({
   name: z.string().min(1).optional(),
   systemPrompt: z.string().min(1).optional(),
   skills: z.array(z.string()).optional(),
-  recommendedProvider: z.string().optional(),
-  variables: z.array(z.object({
-    name: z.string(),
-    type: z.enum(['string', 'number', 'boolean']),
-    required: z.boolean(),
-    default: z.union([z.string(), z.number(), z.boolean()]).optional(),
-  })).optional(),
+  recommendedProvider: ProviderTypeSchema.optional(),
+  variables: z.array(RoleVariableSchema).optional(),
 });
 
 // Error codes enum

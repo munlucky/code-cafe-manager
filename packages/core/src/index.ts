@@ -17,3 +17,7 @@ export * from './schema/cafe.js';
 // Phase 2: Terminal and Role types
 export * from './types/terminal.js';
 export * from './types/role.js';
+
+// Phase 2: Terminal and Role schemas
+export * from './schema/terminal.js';
+export * from './schema/role.js';

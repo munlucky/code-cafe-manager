@@ -2,11 +2,14 @@
  * IPC API for Terminal Pool
  * Gap 3 해결: Complete IPC/UI API contracts
  * P1-6: Terminal Pool 상태 조회 및 Metrics API
+ * P2-8: Zod validation 추가
  */
 
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
+import { z } from 'zod';
 import { TerminalPool } from '@codecafe/orchestrator';
 import { TerminalPoolConfig, PoolStatus, PoolMetrics, ProviderType } from '@codecafe/core';
+import { TerminalPoolConfigSchema } from '@codecafe/core';
 
 export enum TerminalErrorCode {
   NOT_INITIALIZED = 'TERMINAL_NOT_INITIALIZED',
@@ -58,7 +61,8 @@ export function registerTerminalHandlers() {
   // terminal:init - Initialize terminal pool
   ipcMain.handle('terminal:init', async (event: IpcMainInvokeEvent, config: unknown): Promise<IpcResponse<void>> => {
     try {
-      const validConfig = config as TerminalPoolConfig;
+      // Validate config with Zod
+      const validConfig = TerminalPoolConfigSchema.parse(config);
 
       if (pool) {
         await pool.dispose();
@@ -67,7 +71,14 @@ export function registerTerminalHandlers() {
       pool = new TerminalPool(validConfig);
 
       return createSuccessResponse();
-    } catch (error) {
+    } catch (error: unknown) {
+      if (error instanceof z.ZodError) {
+        return createErrorResponse(
+          TerminalErrorCode.VALIDATION_FAILED,
+          'Invalid terminal pool configuration',
+          error.errors
+        );
+      }
       return createErrorResponse(
         TerminalErrorCode.UNKNOWN,
         'Failed to initialize terminal pool',
