@@ -1,44 +1,99 @@
 /**
  * IPC API for Role System
  * Gap 3 해결: Complete IPC/UI API contracts with Zod validation
+ * Phase 2: Integrated with orchestrator RoleManager
  */
 
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import { z } from 'zod';
-import type { Role } from '@codecafe/core';
+import * as path from 'path';
+import type { Role as CoreRole } from '@codecafe/core';
 import { RoleSchema, RoleVariableSchema, ProviderTypeSchema } from '@codecafe/core';
+import { RoleManager } from '@codecafe/orchestrator';
+import type { Role as OrchestratorRole } from '@codecafe/orchestrator';
 
-// TODO: Integrate with actual RoleManager when Phase 2 types are aligned
-// For now, use in-memory stub with real Zod validation
-class RoleRegistryStub {
-  private roles: Map<string, Role> = new Map();
+/**
+ * Convert orchestrator Role (Phase 1/2 compatible) to core Role (Phase 2 only)
+ */
+function convertToCoreRole(orchRole: OrchestratorRole): CoreRole {
+  return {
+    id: orchRole.id,
+    name: orchRole.name,
+    systemPrompt: orchRole.template, // template → systemPrompt
+    skills: orchRole.skills || [],
+    recommendedProvider: orchRole.recommendedProvider || 'claude-code',
+    variables: orchRole.variables || [],
+    isDefault: orchRole.isDefault || false,
+    source: orchRole.source || '',
+  };
+}
 
-  getAll(): Role[] {
-    return Array.from(this.roles.values());
+/**
+ * Role Registry using orchestrator RoleManager
+ */
+class RoleRegistryImpl {
+  private roleManager: RoleManager;
+
+  constructor() {
+    // Initialize RoleManager with role paths
+    const rolePaths = [
+      path.join(process.cwd(), '.orch', 'roles'), // User-defined roles
+      path.join(process.cwd(), 'packages', 'roles'), // Built-in roles
+    ];
+    this.roleManager = new RoleManager(undefined, rolePaths);
   }
 
-  get(id: string): Role | null {
-    return this.roles.get(id) || null;
+  getAll(): CoreRole[] {
+    const roleIds = this.roleManager.listRoles();
+    const roles: CoreRole[] = [];
+
+    for (const roleId of roleIds) {
+      const orchRole = this.roleManager.loadRole(roleId);
+      if (orchRole) {
+        roles.push(convertToCoreRole(orchRole));
+      }
+    }
+
+    return roles;
   }
 
-  register(role: Role): void {
-    this.roles.set(role.id, role);
+  get(id: string): CoreRole | null {
+    const orchRole = this.roleManager.loadRole(id);
+    if (!orchRole) {
+      return null;
+    }
+    return convertToCoreRole(orchRole);
   }
 
-  update(id: string, role: Role): void {
-    this.roles.set(id, role);
+  register(role: CoreRole): void {
+    // Convert core Role to orchestrator Role
+    const orchRole: OrchestratorRole = {
+      id: role.id,
+      name: role.name,
+      template: role.systemPrompt,
+      skills: role.skills,
+      recommendedProvider: role.recommendedProvider as any, // Type assertion for ProviderType compatibility
+      variables: role.variables,
+      isDefault: role.isDefault,
+      source: role.source,
+    };
+    this.roleManager.saveRole(orchRole);
+  }
+
+  update(id: string, role: CoreRole): void {
+    this.register(role); // saveRole overwrites
   }
 
   delete(id: string): void {
-    this.roles.delete(id);
+    this.roleManager.deleteRole(id);
   }
 
   reload(): void {
-    // TODO: Load from RoleManager when integrated
+    // RoleManager loads from disk each time, no need to reload
   }
 }
 
-const RoleRegistry = new RoleRegistryStub();
+const roleRegistry = new RoleRegistryImpl();
 
 // Zod schemas for request/response validation
 const RoleIdSchema = z.string().min(1);
@@ -109,9 +164,9 @@ function createSuccessResponse<T>(data: T): SuccessResponse<T> {
  */
 export function registerRoleIpcHandlers(): void {
   // Get all roles (alias for list)
-  ipcMain.handle('role:list', async (): Promise<IpcResponse<Role[]>> => {
+  ipcMain.handle('role:list', async (): Promise<IpcResponse<CoreRole[]>> => {
     try {
-      const roles = RoleRegistry.getAll();
+      const roles = roleRegistry.getAll();
       return createSuccessResponse(roles);
     } catch (error) {
       return createErrorResponse(
@@ -123,9 +178,9 @@ export function registerRoleIpcHandlers(): void {
   });
 
   // Get all roles (backward compatibility)
-  ipcMain.handle('role:getAll', async (): Promise<IpcResponse<Role[]>> => {
+  ipcMain.handle('role:getAll', async (): Promise<IpcResponse<CoreRole[]>> => {
     try {
-      const roles = RoleRegistry.getAll();
+      const roles = roleRegistry.getAll();
       return createSuccessResponse(roles);
     } catch (error) {
       return createErrorResponse(
@@ -140,10 +195,10 @@ export function registerRoleIpcHandlers(): void {
   ipcMain.handle('role:get', async (
     event: IpcMainInvokeEvent,
     roleId: string
-  ): Promise<IpcResponse<Role>> => {
+  ): Promise<IpcResponse<CoreRole>> => {
     try {
       const validatedId = RoleIdSchema.parse(roleId);
-      const role = RoleRegistry.get(validatedId);
+      const role = roleRegistry.get(validatedId);
       if (!role) {
         return createErrorResponse(
           RoleErrorCode.NOT_FOUND,
@@ -171,26 +226,26 @@ export function registerRoleIpcHandlers(): void {
   ipcMain.handle('role:create', async (
     event: IpcMainInvokeEvent,
     roleData: unknown
-  ): Promise<IpcResponse<Role>> => {
+  ): Promise<IpcResponse<CoreRole>> => {
     try {
       const validatedData = RoleCreateSchema.parse(roleData);
 
       // Check if role already exists
-      if (RoleRegistry.get(validatedData.id)) {
+      if (roleRegistry.get(validatedData.id)) {
         return createErrorResponse(
           RoleErrorCode.ALREADY_EXISTS,
           `Role already exists: ${validatedData.id}`
         );
       }
 
-      const role: Role = {
+      const role: CoreRole = {
         ...validatedData,
         isDefault: false,
         source: 'user-defined',
         variables: validatedData.variables || [],
       };
 
-      RoleRegistry.register(role);
+      roleRegistry.register(role);
       return createSuccessResponse(role);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -213,12 +268,12 @@ export function registerRoleIpcHandlers(): void {
     event: IpcMainInvokeEvent,
     roleId: string,
     updates: unknown
-  ): Promise<IpcResponse<Role>> => {
+  ): Promise<IpcResponse<CoreRole>> => {
     try {
       const validatedId = RoleIdSchema.parse(roleId);
       const validatedUpdates = RoleUpdateSchema.parse(updates);
 
-      const existingRole = RoleRegistry.get(validatedId);
+      const existingRole = roleRegistry.get(validatedId);
       if (!existingRole) {
         return createErrorResponse(
           RoleErrorCode.NOT_FOUND,
@@ -227,13 +282,13 @@ export function registerRoleIpcHandlers(): void {
       }
 
       // Update role
-      const updatedRole: Role = {
+      const updatedRole: CoreRole = {
         ...existingRole,
         ...validatedUpdates,
         variables: validatedUpdates.variables || existingRole.variables,
       };
 
-      RoleRegistry.update(validatedId, updatedRole);
+      roleRegistry.update(validatedId, updatedRole);
       return createSuccessResponse(updatedRole);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -259,7 +314,7 @@ export function registerRoleIpcHandlers(): void {
     try {
       const validatedId = RoleIdSchema.parse(roleId);
 
-      const existingRole = RoleRegistry.get(validatedId);
+      const existingRole = roleRegistry.get(validatedId);
       if (!existingRole) {
         return createErrorResponse(
           RoleErrorCode.NOT_FOUND,
@@ -275,7 +330,7 @@ export function registerRoleIpcHandlers(): void {
         );
       }
 
-      RoleRegistry.delete(validatedId);
+      roleRegistry.delete(validatedId);
       return createSuccessResponse(undefined);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -294,9 +349,9 @@ export function registerRoleIpcHandlers(): void {
   });
 
   // Get default roles (alias for list-default)
-  ipcMain.handle('role:list-default', async (): Promise<IpcResponse<Role[]>> => {
+  ipcMain.handle('role:list-default', async (): Promise<IpcResponse<CoreRole[]>> => {
     try {
-      const defaultRoles = RoleRegistry.getAll().filter((role: any) => role.isDefault);
+      const defaultRoles = roleRegistry.getAll().filter((role: any) => role.isDefault);
       return createSuccessResponse(defaultRoles);
     } catch (error) {
       return createErrorResponse(
@@ -308,9 +363,9 @@ export function registerRoleIpcHandlers(): void {
   });
 
   // Get default roles (backward compatibility)
-  ipcMain.handle('role:getDefaults', async (): Promise<IpcResponse<Role[]>> => {
+  ipcMain.handle('role:getDefaults', async (): Promise<IpcResponse<CoreRole[]>> => {
     try {
-      const defaultRoles = RoleRegistry.getAll().filter((role: any) => role.isDefault);
+      const defaultRoles = roleRegistry.getAll().filter((role: any) => role.isDefault);
       return createSuccessResponse(defaultRoles);
     } catch (error) {
       return createErrorResponse(
@@ -322,9 +377,9 @@ export function registerRoleIpcHandlers(): void {
   });
 
   // Get user-defined roles (list-user)
-  ipcMain.handle('role:list-user', async (): Promise<IpcResponse<Role[]>> => {
+  ipcMain.handle('role:list-user', async (): Promise<IpcResponse<CoreRole[]>> => {
     try {
-      const userRoles = RoleRegistry.getAll().filter((role: any) => !role.isDefault);
+      const userRoles = roleRegistry.getAll().filter((role: any) => !role.isDefault);
       return createSuccessResponse(userRoles);
     } catch (error) {
       return createErrorResponse(
@@ -336,10 +391,10 @@ export function registerRoleIpcHandlers(): void {
   });
 
   // Reload roles from disk
-  ipcMain.handle('role:reload', async (): Promise<IpcResponse<Role[]>> => {
+  ipcMain.handle('role:reload', async (): Promise<IpcResponse<CoreRole[]>> => {
     try {
-      RoleRegistry.reload();
-      const roles = RoleRegistry.getAll();
+      roleRegistry.reload();
+      const roles = roleRegistry.getAll();
       return createSuccessResponse(roles);
     } catch (error) {
       return createErrorResponse(

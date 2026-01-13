@@ -9,7 +9,7 @@ export type StageType = 'plan' | 'code' | 'test' | 'check'
 export type NodeType = 'run' | 'foreach' | 'reduce' | 'branch' | 'export'
 
 // Provider types
-export type ProviderType = 'claude-code' | 'codex' | 'gemini'
+export type ProviderType = 'claude-code' | 'codex' | 'gemini' | 'grok'
 
 // Execution mode
 export type ExecutionMode = 'assisted' | 'headless' | 'auto'
