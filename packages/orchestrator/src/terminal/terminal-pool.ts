@@ -31,6 +31,12 @@ export class TerminalPool {
   constructor(config: TerminalPoolConfig) {
     this.config = config;
     this.initializeSemaphores();
+
+    // Initialize provider adapters (registers real adapters)
+    // In test environment, MockProviderAdapter will be used via Factory.create()
+    if (process.env.NODE_ENV !== 'test') {
+      ProviderAdapterFactory.initialize();
+    }
   }
 
   /**

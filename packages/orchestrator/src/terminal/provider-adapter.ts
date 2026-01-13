@@ -6,6 +6,8 @@
 // import { IPty } from 'node-pty';
 type IPty = any;
 import { ProviderType } from '@codecafe/core';
+import { ClaudeCodeAdapter } from './adapters/claude-code-adapter.js';
+import { CodexAdapter } from './adapters/codex-adapter.js';
 
 export interface IProviderAdapter {
   /**
@@ -156,6 +158,7 @@ export class MockProviderAdapter implements IProviderAdapter {
  */
 export class ProviderAdapterFactory {
   private static adapters: Map<ProviderType, IProviderAdapter> = new Map();
+  private static initialized = false;
 
   static register(providerType: ProviderType, adapter: IProviderAdapter): void {
     this.adapters.set(providerType, adapter);
@@ -171,5 +174,42 @@ export class ProviderAdapterFactory {
 
   static has(providerType: ProviderType): boolean {
     return this.adapters.has(providerType);
+  }
+
+  /**
+   * Create adapter with optional mock mode
+   * @param providerType - Provider type
+   * @param useMock - Use mock adapter (default: true in test environment)
+   * @returns Provider adapter instance
+   */
+  static create(providerType: ProviderType, useMock?: boolean): IProviderAdapter {
+    const shouldUseMock = useMock ?? (process.env.NODE_ENV === 'test');
+
+    if (shouldUseMock) {
+      return new MockProviderAdapter(providerType);
+    }
+
+    // Return real adapter (must be initialized first)
+    return this.get(providerType);
+  }
+
+  /**
+   * Initialize factory with real adapters
+   * Automatically registers ClaudeCodeAdapter and CodexAdapter
+   */
+  static initialize(): void {
+    if (this.initialized) {
+      return;
+    }
+
+    // Register real adapters
+    try {
+      this.register('claude-code', new ClaudeCodeAdapter());
+      this.register('codex', new CodexAdapter());
+      this.initialized = true;
+    } catch (error) {
+      console.error('Failed to initialize adapters:', error);
+      throw error;
+    }
   }
 }
