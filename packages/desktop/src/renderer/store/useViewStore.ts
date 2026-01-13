@@ -4,7 +4,8 @@ export type ViewName =
   | 'dashboard'
   | 'new-order'
   | 'orders'
-  | 'worktrees';
+  | 'worktrees'
+  | 'roles';
 
 interface ViewState {
   currentView: ViewName;

@@ -10,12 +10,14 @@ import {
 } from './components/views';
 import { GlobalLobby } from './components/views/GlobalLobby';
 import { CafeDashboard } from './components/views/CafeDashboard';
+import { RoleManager } from './components/role/RoleManager';
 
 const VIEW_MAP = {
   dashboard: Dashboard,
   'new-order': NewOrder,
   orders: OrderDetail,
   worktrees: Worktrees,
+  roles: RoleManager,
 };
 
 export function App() {

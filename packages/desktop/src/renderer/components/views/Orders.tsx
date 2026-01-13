@@ -50,7 +50,7 @@ export function Orders() {
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
-                  <strong className="text-bone text-lg">{order.recipeName}</strong>
+                  <strong className="text-bone text-lg">{order.workflowName}</strong>
                   <StatusBadge status={order.status} />
                 </div>
                 <div className="text-sm text-gray-500 space-y-1">

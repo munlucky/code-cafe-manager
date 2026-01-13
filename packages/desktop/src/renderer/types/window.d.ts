@@ -6,12 +6,46 @@ import type {
   Receipt,
 } from './models';
 import type { Cafe, CreateCafeParams, UpdateCafeParams } from '@codecafe/core';
+// import type { Role, TerminalPoolConfig, PoolStatus } from '@codecafe/core/types';
+
+// Temporary types for compilation
+interface Role {
+  id: string;
+  name: string;
+  systemPrompt: string;
+  skills: string[];
+  recommendedProvider: string;
+  variables: any[];
+  isDefault: boolean;
+  source: string;
+}
+interface TerminalPoolConfig {
+  maxTerminals: number;
+  idleTimeout: number;
+}
+interface PoolStatus {
+  totalTerminals: number;
+  activeTerminals: number;
+  idleTerminals: number;
+  maxTerminals: number;
+}
 
 export interface IpcResult<T = any> {
   success: boolean;
   data?: T;
   error?: string;
   errors?: Array<{ path: string[]; message: string }>;
+}
+
+// Phase 2: IpcResponse for Role/Terminal APIs
+export interface IpcResponse<T = void> {
+  success: boolean;
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+    details?: any;
+  };
 }
 
 export interface CreateOrderParams {
@@ -139,6 +173,26 @@ declare global {
       onOrderEvent: (callback: (event: any) => void) => void;
       onOrderAssigned: (callback: (data: any) => void) => void;
       onOrderCompleted: (callback: (data: any) => void) => void;
+    };
+
+    // Phase 2: Role and Terminal APIs (separate namespace)
+    api: {
+      role: {
+        list: () => Promise<IpcResponse<Role[]>>;
+        get: (id: string) => Promise<IpcResponse<Role>>;
+        listDefault: () => Promise<IpcResponse<Role[]>>;
+        listUser: () => Promise<IpcResponse<Role[]>>;
+        reload: () => Promise<IpcResponse<void>>;
+      };
+
+      terminal: {
+        init: (config: TerminalPoolConfig) => Promise<IpcResponse<void>>;
+        getStatus: () => Promise<IpcResponse<PoolStatus>>;
+        subscribe: (terminalId: string) => Promise<IpcResponse<void>>;
+        unsubscribe: (terminalId: string) => Promise<IpcResponse<void>>;
+        shutdown: () => Promise<IpcResponse<void>>;
+        onData: (terminalId: string, callback: (data: string) => void) => () => void;
+      };
     };
   }
 }

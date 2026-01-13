@@ -96,7 +96,7 @@ export function Dashboard() {
                 className="flex items-center justify-between p-3 bg-background rounded border border-border"
               >
                 <div>
-                  <strong className="text-bone">{order.recipeName}</strong>
+                  <strong className="text-bone">{order.workflowName}</strong>
                   <div className="text-xs text-gray-500 mt-1">
                     Provider: {order.provider}
                   </div>

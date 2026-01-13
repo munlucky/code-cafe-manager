@@ -306,8 +306,8 @@ export function OrderDetail() {
     setIsRestarting(true);
     try {
       await createOrder({
-        recipeId: selectedOrder.recipeId,
-        recipeName: selectedOrder.recipeName,
+        workflowId: selectedOrder.workflowId,
+        workflowName: selectedOrder.workflowName,
         counter: selectedOrder.counter,
         provider: selectedOrder.provider,
         vars: selectedOrder.vars || {},
@@ -418,7 +418,7 @@ export function OrderDetail() {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-sm font-semibold text-bone">
-                        {order.recipeName}
+                        {order.workflowName}
                       </div>
                       <StatusBadge status={order.status} />
                     </div>
@@ -444,7 +444,7 @@ export function OrderDetail() {
                       Order Detail
                     </div>
                     <h3 className="text-2xl font-bold text-bone">
-                      {selectedOrder.recipeName}
+                      {selectedOrder.workflowName}
                     </h3>
                     <div className="text-xs text-gray-500 mt-1">
                       ID: {selectedOrder.id}

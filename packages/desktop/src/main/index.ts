@@ -9,6 +9,8 @@ import { promises as fs, existsSync } from 'fs';
 import * as YAML from 'yaml';
 import dotenv from 'dotenv';
 import { registerCafeHandlers } from './ipc/cafe.js';
+import { registerRoleIpcHandlers } from './ipc/role.js';
+import { registerTerminalHandlers } from './ipc/terminal.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -107,6 +109,10 @@ function setupIpcHandlers() {
 
   // Phase 1: Cafe Registry handlers
   registerCafeHandlers();
+
+  // Phase 2: Role and Terminal handlers
+  registerRoleIpcHandlers();
+  registerTerminalHandlers();
 
   // 바리스타 생성
   ipcMain.handle('createBarista', async (_, provider: string) => {

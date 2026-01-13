@@ -1,5 +1,28 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { Cafe, CreateCafeParams, UpdateCafeParams } from '@codecafe/core';
+// import type { Role, TerminalPoolConfig, PoolStatus } from '@codecafe/core/types';
+
+// Temporary types for compilation
+interface Role {
+  id: string;
+  name: string;
+  systemPrompt: string;
+  skills: string[];
+  recommendedProvider: string;
+  variables: any[];
+  isDefault: boolean;
+  source: string;
+}
+interface TerminalPoolConfig {
+  maxTerminals: number;
+  idleTimeout: number;
+}
+interface PoolStatus {
+  totalTerminals: number;
+  activeTerminals: number;
+  idleTerminals: number;
+  maxTerminals: number;
+}
 
 // Renderer에서 사용할 API 노출
 contextBridge.exposeInMainWorld('codecafe', {
@@ -75,5 +98,31 @@ contextBridge.exposeInMainWorld('codecafe', {
   onOrderCompleted: (callback: (data: any) => void) => {
     ipcRenderer.removeAllListeners('order:completed');
     ipcRenderer.on('order:completed', (_, data) => callback(data));
+  },
+});
+
+// Phase 2: Role and Terminal APIs (separate namespace)
+contextBridge.exposeInMainWorld('api', {
+  role: {
+    list: (): Promise<any> => ipcRenderer.invoke('role:list'),
+    get: (id: string): Promise<any> => ipcRenderer.invoke('role:get', id),
+    listDefault: (): Promise<any> => ipcRenderer.invoke('role:list-default'),
+    listUser: (): Promise<any> => ipcRenderer.invoke('role:list-user'),
+    reload: (): Promise<any> => ipcRenderer.invoke('role:reload'),
+  },
+
+  terminal: {
+    init: (config: TerminalPoolConfig): Promise<any> => ipcRenderer.invoke('terminal:init', config),
+    getStatus: (): Promise<any> => ipcRenderer.invoke('terminal:pool-status'),
+    subscribe: (terminalId: string): Promise<any> => ipcRenderer.invoke('terminal:subscribe', terminalId),
+    unsubscribe: (terminalId: string): Promise<any> => ipcRenderer.invoke('terminal:unsubscribe', terminalId),
+    shutdown: (): Promise<any> => ipcRenderer.invoke('terminal:shutdown'),
+    onData: (terminalId: string, callback: (data: string) => void): (() => void) => {
+      const channel = `terminal:data:${terminalId}`;
+      const listener = (event: any, data: string) => callback(data);
+      ipcRenderer.on(channel, listener);
+      // Return unsubscribe function
+      return () => ipcRenderer.removeListener(channel, listener);
+    },
   },
 });

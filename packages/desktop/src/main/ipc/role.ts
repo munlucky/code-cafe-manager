@@ -108,7 +108,21 @@ function createSuccessResponse<T>(data: T): SuccessResponse<T> {
  * Register all role-related IPC handlers
  */
 export function registerRoleIpcHandlers(): void {
-  // Get all roles
+  // Get all roles (alias for list)
+  ipcMain.handle('role:list', async (): Promise<IpcResponse<Role[]>> => {
+    try {
+      const roles = RoleRegistry.getAll();
+      return createSuccessResponse(roles);
+    } catch (error) {
+      return createErrorResponse(
+        RoleErrorCode.UNKNOWN,
+        'Failed to get roles',
+        String(error)
+      );
+    }
+  });
+
+  // Get all roles (backward compatibility)
   ipcMain.handle('role:getAll', async (): Promise<IpcResponse<Role[]>> => {
     try {
       const roles = RoleRegistry.getAll();
@@ -279,7 +293,21 @@ export function registerRoleIpcHandlers(): void {
     }
   });
 
-  // Get default roles
+  // Get default roles (alias for list-default)
+  ipcMain.handle('role:list-default', async (): Promise<IpcResponse<Role[]>> => {
+    try {
+      const defaultRoles = RoleRegistry.getAll().filter((role: any) => role.isDefault);
+      return createSuccessResponse(defaultRoles);
+    } catch (error) {
+      return createErrorResponse(
+        RoleErrorCode.UNKNOWN,
+        'Failed to get default roles',
+        String(error)
+      );
+    }
+  });
+
+  // Get default roles (backward compatibility)
   ipcMain.handle('role:getDefaults', async (): Promise<IpcResponse<Role[]>> => {
     try {
       const defaultRoles = RoleRegistry.getAll().filter((role: any) => role.isDefault);
@@ -293,10 +321,24 @@ export function registerRoleIpcHandlers(): void {
     }
   });
 
+  // Get user-defined roles (list-user)
+  ipcMain.handle('role:list-user', async (): Promise<IpcResponse<Role[]>> => {
+    try {
+      const userRoles = RoleRegistry.getAll().filter((role: any) => !role.isDefault);
+      return createSuccessResponse(userRoles);
+    } catch (error) {
+      return createErrorResponse(
+        RoleErrorCode.UNKNOWN,
+        'Failed to get user roles',
+        String(error)
+      );
+    }
+  });
+
   // Reload roles from disk
   ipcMain.handle('role:reload', async (): Promise<IpcResponse<Role[]>> => {
     try {
-      // RoleRegistry.reload();
+      RoleRegistry.reload();
       const roles = RoleRegistry.getAll();
       return createSuccessResponse(roles);
     } catch (error) {

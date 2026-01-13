@@ -43,10 +43,12 @@ const BADGE_VARIANTS = {
   success: 'bg-green-500/10 text-green-300 border border-green-500/30',
   error: 'bg-red-500/10 text-red-300 border border-red-500/30',
   warning: 'bg-yellow-500/10 text-yellow-300 border border-yellow-500/30',
+  secondary: 'bg-blue-500/10 text-blue-300 border border-blue-500/30',
+  outline: 'bg-transparent text-gray-300 border border-gray-500/50',
 };
 
 interface BadgeProps {
-  variant?: 'default' | 'success' | 'error' | 'warning';
+  variant?: 'default' | 'success' | 'error' | 'warning' | 'secondary' | 'outline';
   className?: string;
   children: React.ReactNode;
 }
