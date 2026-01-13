@@ -8,6 +8,7 @@ type IPty = any;
 import { ProviderType } from '@codecafe/core';
 import { ClaudeCodeAdapter } from './adapters/claude-code-adapter.js';
 import { CodexAdapter } from './adapters/codex-adapter.js';
+import { AdapterNotFoundError } from './errors.js';
 
 export interface IProviderAdapter {
   /**
@@ -167,7 +168,7 @@ export class ProviderAdapterFactory {
   static get(providerType: ProviderType): IProviderAdapter {
     const adapter = this.adapters.get(providerType);
     if (!adapter) {
-      throw new Error(`No adapter registered for provider: ${providerType}`);
+      throw new AdapterNotFoundError(providerType);
     }
     return adapter;
   }

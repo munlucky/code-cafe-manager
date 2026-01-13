@@ -1,33 +1,12 @@
 /**
  * IPC API for Terminal Pool
- * Gap 3 해결: Complete IPC/UI API contracts with Zod validation
+ * Gap 3 해결: Complete IPC/UI API contracts
+ * P1-6: Terminal Pool 상태 조회 및 Metrics API
  */
 
-import { ipcMain, IpcMainInvokeEvent, WebContents } from 'electron';
-// import { z } from 'zod';
-// import { TerminalPool } from '@codecafe/orchestrator/terminal';
-// import { TerminalPoolConfigSchema } from '@codecafe/core/schema';
-// import { TerminalPoolConfig, PoolStatus } from '@codecafe/core/types';
-
-// Temporary types for compilation
-type z = any;
-const z = { object: () => ({ parse: (data: any) => data }) } as any;
-class TerminalPool {
-  constructor(config: any) {}
-  async shutdown(): Promise<void> {}
-  getStatus(): any { return {}; }
-  getTerminal(id: string): any { return null; }
-}
-interface TerminalPoolConfig {
-  maxTerminals: number;
-  idleTimeout: number;
-}
-interface PoolStatus {
-  totalTerminals: number;
-  activeTerminals: number;
-  idleTerminals: number;
-  maxTerminals: number;
-}
+import { ipcMain, IpcMainInvokeEvent } from 'electron';
+import { TerminalPool } from '@codecafe/orchestrator';
+import { TerminalPoolConfig, PoolStatus, PoolMetrics, ProviderType } from '@codecafe/core';
 
 export enum TerminalErrorCode {
   NOT_INITIALIZED = 'TERMINAL_NOT_INITIALIZED',
@@ -54,7 +33,6 @@ interface SuccessResponse<T = void> {
 type IpcResponse<T = void> = SuccessResponse<T> | ErrorResponse;
 
 let pool: TerminalPool | null = null;
-const subscribedTerminals = new Set<string>();
 
 // Helper function to create error response
 function createErrorResponse(
@@ -73,6 +51,9 @@ function createSuccessResponse<T>(data?: T): SuccessResponse<T> {
   return { success: true, data };
 }
 
+/**
+ * Register Terminal IPC handlers
+ */
 export function registerTerminalHandlers() {
   // terminal:init - Initialize terminal pool
   ipcMain.handle('terminal:init', async (event: IpcMainInvokeEvent, config: unknown): Promise<IpcResponse<void>> => {
@@ -80,30 +61,22 @@ export function registerTerminalHandlers() {
       const validConfig = config as TerminalPoolConfig;
 
       if (pool) {
-        await pool.shutdown();
+        await pool.dispose();
       }
 
       pool = new TerminalPool(validConfig);
-      subscribedTerminals.clear();
 
       return createSuccessResponse();
     } catch (error) {
-      // if (error instanceof z.ZodError) {
-      //   return createErrorResponse(
-      //     TerminalErrorCode.VALIDATION_FAILED,
-      //     'Invalid terminal pool configuration',
-      //     error.errors
-      //   );
-      // }
       return createErrorResponse(
         TerminalErrorCode.UNKNOWN,
         'Failed to initialize terminal pool',
-        String(error)
+        error instanceof Error ? error.message : String(error)
       );
     }
   });
 
-  // terminal:pool-status - Get pool status
+  // terminal:pool-status - Get pool status (per-provider status)
   ipcMain.handle('terminal:pool-status', async (): Promise<IpcResponse<PoolStatus>> => {
     try {
       if (!pool) {
@@ -119,13 +92,13 @@ export function registerTerminalHandlers() {
       return createErrorResponse(
         TerminalErrorCode.UNKNOWN,
         'Failed to get pool status',
-        String(error)
+        error instanceof Error ? error.message : String(error)
       );
     }
   });
 
-  // terminal:subscribe - Subscribe to terminal data stream
-  ipcMain.handle('terminal:subscribe', async (event: IpcMainInvokeEvent, terminalId: string): Promise<IpcResponse<void>> => {
+  // terminal:pool-metrics - Get pool metrics
+  ipcMain.handle('terminal:pool-metrics', async (): Promise<IpcResponse<PoolMetrics>> => {
     try {
       if (!pool) {
         return createErrorResponse(
@@ -134,60 +107,13 @@ export function registerTerminalHandlers() {
         );
       }
 
-      const terminal = pool.getTerminal(terminalId);
-      if (!terminal) {
-        return createErrorResponse(
-          TerminalErrorCode.NOT_FOUND,
-          `Terminal not found: ${terminalId}`
-        );
-      }
-
-      // Subscribe to terminal data
-      const webContents = event.sender;
-      const channel = `terminal:data:${terminalId}`;
-
-      terminal.onData((data: string) => {
-        webContents.send(channel, data);
-      });
-
-      subscribedTerminals.add(terminalId);
-      return createSuccessResponse();
+      const metrics = pool.getMetrics();
+      return createSuccessResponse(metrics);
     } catch (error) {
       return createErrorResponse(
         TerminalErrorCode.UNKNOWN,
-        'Failed to subscribe to terminal',
-        String(error)
-      );
-    }
-  });
-
-  // terminal:unsubscribe - Unsubscribe from terminal data stream
-  ipcMain.handle('terminal:unsubscribe', async (event: IpcMainInvokeEvent, terminalId: string): Promise<IpcResponse<void>> => {
-    try {
-      if (!pool) {
-        return createErrorResponse(
-          TerminalErrorCode.NOT_INITIALIZED,
-          'Terminal pool not initialized'
-        );
-      }
-
-      const terminal = pool.getTerminal(terminalId);
-      if (!terminal) {
-        return createErrorResponse(
-          TerminalErrorCode.NOT_FOUND,
-          `Terminal not found: ${terminalId}`
-        );
-      }
-
-      // Remove data listener (implementation depends on TerminalPool API)
-      // For now, just remove from subscribed set
-      subscribedTerminals.delete(terminalId);
-      return createSuccessResponse();
-    } catch (error) {
-      return createErrorResponse(
-        TerminalErrorCode.UNKNOWN,
-        'Failed to unsubscribe from terminal',
-        String(error)
+        'Failed to get pool metrics',
+        error instanceof Error ? error.message : String(error)
       );
     }
   });
@@ -202,17 +128,23 @@ export function registerTerminalHandlers() {
         );
       }
 
-      await pool.shutdown();
+      await pool.dispose();
       pool = null;
-      subscribedTerminals.clear();
 
       return createSuccessResponse();
     } catch (error) {
       return createErrorResponse(
         TerminalErrorCode.UNKNOWN,
         'Failed to shutdown terminal pool',
-        String(error)
+        error instanceof Error ? error.message : String(error)
       );
     }
   });
+}
+
+/**
+ * Get singleton Terminal Pool instance (for internal use)
+ */
+export function getTerminalPool(): TerminalPool | null {
+  return pool;
 }

@@ -6,6 +6,7 @@
 import * as pty from 'node-pty';
 import { ProviderType } from '@codecafe/core';
 import { IProviderAdapter } from '../provider-adapter';
+import { ProviderSpawnError } from '../errors';
 
 // Use any to avoid type issues with node-pty event emitter methods
 type IPty = any;
@@ -41,7 +42,10 @@ export class CodexAdapter implements IProviderAdapter {
 
       return ptyProcess;
     } catch (error) {
-      throw new Error(`Failed to spawn codex CLI: ${error instanceof Error ? error.message : String(error)}`);
+      throw new ProviderSpawnError(
+        'codex',
+        error instanceof Error ? error : new Error(String(error))
+      );
     }
   }
 

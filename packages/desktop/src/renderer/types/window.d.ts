@@ -6,7 +6,7 @@ import type {
   Receipt,
 } from './models';
 import type { Cafe, CreateCafeParams, UpdateCafeParams } from '@codecafe/core';
-// import type { Role, TerminalPoolConfig, PoolStatus } from '@codecafe/core/types';
+import type { TerminalPoolConfig, PoolStatus, PoolMetrics } from '@codecafe/core';
 
 // Temporary types for compilation
 interface Role {
@@ -18,16 +18,6 @@ interface Role {
   variables: any[];
   isDefault: boolean;
   source: string;
-}
-interface TerminalPoolConfig {
-  maxTerminals: number;
-  idleTimeout: number;
-}
-interface PoolStatus {
-  totalTerminals: number;
-  activeTerminals: number;
-  idleTerminals: number;
-  maxTerminals: number;
 }
 
 export interface IpcResult<T = any> {
@@ -188,6 +178,7 @@ declare global {
       terminal: {
         init: (config: TerminalPoolConfig) => Promise<IpcResponse<void>>;
         getStatus: () => Promise<IpcResponse<PoolStatus>>;
+        getMetrics: () => Promise<IpcResponse<PoolMetrics>>;
         subscribe: (terminalId: string) => Promise<IpcResponse<void>>;
         unsubscribe: (terminalId: string) => Promise<IpcResponse<void>>;
         shutdown: () => Promise<IpcResponse<void>>;

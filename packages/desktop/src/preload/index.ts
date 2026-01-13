@@ -114,6 +114,7 @@ contextBridge.exposeInMainWorld('api', {
   terminal: {
     init: (config: TerminalPoolConfig): Promise<any> => ipcRenderer.invoke('terminal:init', config),
     getStatus: (): Promise<any> => ipcRenderer.invoke('terminal:pool-status'),
+    getMetrics: (): Promise<any> => ipcRenderer.invoke('terminal:pool-metrics'),
     subscribe: (terminalId: string): Promise<any> => ipcRenderer.invoke('terminal:subscribe', terminalId),
     unsubscribe: (terminalId: string): Promise<any> => ipcRenderer.invoke('terminal:unsubscribe', terminalId),
     shutdown: (): Promise<any> => ipcRenderer.invoke('terminal:shutdown'),

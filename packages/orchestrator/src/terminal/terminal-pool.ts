@@ -14,6 +14,12 @@ import {
 } from '@codecafe/core';
 import { PoolSemaphore, TerminalLeaseTimeoutError } from './pool-semaphore';
 import { IProviderAdapter, ProviderAdapterFactory } from './provider-adapter';
+import {
+  ProviderNotFoundError,
+  SemaphoreNotFoundError,
+  LeaseNotFoundError,
+  TerminalNotFoundError,
+} from './errors';
 
 export interface TerminalLease {
   terminal: Terminal;
@@ -69,13 +75,13 @@ export class TerminalPool {
   ): Promise<TerminalLease> {
     const providerConfig = this.config.perProvider[provider];
     if (!providerConfig) {
-      throw new Error(`No configuration for provider: ${provider}`);
+      throw new ProviderNotFoundError(provider);
     }
 
     const timeout = timeoutMs || providerConfig.timeout;
     const semaphore = this.semaphores.get(provider);
     if (!semaphore) {
-      throw new Error(`No semaphore for provider: ${provider}`);
+      throw new SemaphoreNotFoundError(provider);
     }
 
     try {
@@ -130,12 +136,12 @@ export class TerminalPool {
   async releaseLease(leaseId: string): Promise<void> {
     const leaseToken = this.activeLeases.get(leaseId);
     if (!leaseToken) {
-      throw new Error(`Lease not found: ${leaseId}`);
+      throw new LeaseNotFoundError(leaseId);
     }
 
     const terminal = this.terminals.get(leaseToken.terminalId);
     if (!terminal) {
-      throw new Error(`Terminal not found: ${leaseToken.terminalId}`);
+      throw new TerminalNotFoundError(leaseToken.terminalId);
     }
 
     // Update lease token

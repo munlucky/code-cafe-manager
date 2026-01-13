@@ -12,6 +12,9 @@ export { setAssignment, getAssignment, listRoles } from './cli/commands/assign';
 export { RoleManager } from './role/role-manager';
 export { TemplateEngine, templateEngine } from './role/template';
 
+// Export terminal management (Phase 2)
+export * from './terminal';
+
 // Export schema validation
 export * from './schema/validator';
 
