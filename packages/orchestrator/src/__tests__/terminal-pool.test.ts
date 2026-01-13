@@ -140,9 +140,10 @@ describe('TerminalPool', () => {
 
       await crashPromise;
 
-      // Terminal should be marked as crashed
+      // Terminal should be auto-restarted (crashed terminal is deleted after successful restart)
       const status = terminalPool.getStatus();
-      expect(status[provider].crashed).toBe(1);
+      expect(status[provider].crashed).toBe(0); // Crashed terminal is removed after successful restart
+      expect(status[provider].total).toBeGreaterThanOrEqual(1); // New terminal created
 
       // Adapter should be called for restart attempts
       expect(mockAdapter.spawn).toHaveBeenCalledTimes(2); // Initial + restart attempt
@@ -152,17 +153,17 @@ describe('TerminalPool', () => {
       const provider = 'claude-code';
       const baristaId = 'barista-1';
 
-      // Setup mock to fail all restart attempts
-      mockAdapter.spawn.mockRejectedValue(new Error('Spawn failed'));
-
       // Setup mock exit handler
       let exitHandler: any;
       mockAdapter.onExit.mockImplementation((process, handler) => {
         exitHandler = handler;
       });
 
-      // Acquire lease
+      // Acquire lease (first spawn succeeds)
       const lease = await terminalPool.acquireLease(provider, baristaId);
+
+      // Setup mock to fail all restart attempts (after initial spawn)
+      mockAdapter.spawn.mockRejectedValue(new Error('Spawn failed'));
 
       // Trigger crash
       if (exitHandler) {

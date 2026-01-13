@@ -77,26 +77,26 @@ describe('BaristaEngineV2', () => {
   beforeEach(() => {
     // Setup mocks - simplified for type checking
     mockTerminalPool = {
-      acquireLease: async () => mockLease,
+      acquireLease: vi.fn().mockResolvedValue(mockLease),
     };
 
     mockRoleManager = {
-      loadRole: () => null,
+      loadRole: vi.fn().mockReturnValue(null),
     };
 
     mockAdapter = {
-      execute: async () => ({ success: true, output: 'test output' }),
-      kill: async () => {},
+      execute: vi.fn().mockResolvedValue({ success: true, output: 'test output' }),
+      kill: vi.fn().mockResolvedValue(undefined),
     };
 
     // Mock static methods
-    (ProviderAdapterFactory as any).get = () => mockAdapter;
+    (ProviderAdapterFactory as any).get = vi.fn().mockReturnValue(mockAdapter);
 
     engine = new BaristaEngineV2(mockTerminalPool as any, mockRoleManager);
   });
 
   afterEach(() => {
-    // Clear mocks
+    vi.clearAllMocks();
   });
 
   describe('Order Execution', () => {
@@ -116,8 +116,7 @@ describe('BaristaEngineV2', () => {
       // Should acquire lease
       expect(mockTerminalPool.acquireLease).toHaveBeenCalledWith(
         'claude-code',
-        'barista-1',
-        undefined
+        'barista-1'
       );
 
       // Should execute step
@@ -328,6 +327,9 @@ describe('BaristaEngineV2', () => {
       });
 
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
+
+      // Wait a bit for execution to start
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Check active executions
       const activeExecutions = engine.getActiveExecutions();

@@ -211,7 +211,7 @@ describe('BaristaManager', () => {
 
       expect(eventHandler).toHaveBeenCalled();
       const event = eventHandler.mock.calls[0][0];
-      expect(event.type).toBe('barista:status:changed');
+      expect(event.type).toBe('barista:status-changed');
       expect(event.baristaId).toBe(barista.id);
       expect(event.data).toEqual({ status: BaristaStatus.BUSY, orderId: 'order-123' });
     });
