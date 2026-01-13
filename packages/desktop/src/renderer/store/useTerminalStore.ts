@@ -15,8 +15,7 @@ interface TerminalStoreState {
   initialized: boolean;
 
   // Actions
-  loadStatus: () => Promise<void>;
-  loadMetrics: () => Promise<void>;
+  load: () => Promise<void>;
   initPool: (config: any) => Promise<void>;
   shutdown: () => Promise<void>;
   clearError: () => void;
@@ -31,42 +30,39 @@ export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
   initialized: false,
 
   // Actions
-  loadStatus: async () => {
+  load: async () => {
     set({ loading: true, error: null });
     try {
-      const response = await window.api.terminal.getStatus();
-      if (response.success && response.data) {
-        set({ status: response.data, loading: false });
-      } else {
-        set({
-          error: response.error?.message || 'Failed to load terminal status',
-          loading: false
-        });
-      }
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Unknown error',
-        loading: false
-      });
-    }
-  },
+      const [statusResponse, metricsResponse] = await Promise.all([
+        window.api.terminal.getStatus(),
+        window.api.terminal.getMetrics(),
+      ]);
 
-  loadMetrics: async () => {
-    set({ loading: true, error: null });
-    try {
-      const response = await window.api.terminal.getMetrics();
-      if (response.success && response.data) {
-        set({ metrics: response.data, loading: false });
+      const newState: Partial<TerminalStoreState> = { loading: false };
+      let errorMessage: string | null = null;
+
+      if (statusResponse.success && statusResponse.data) {
+        newState.status = statusResponse.data;
       } else {
-        set({
-          error: response.error?.message || 'Failed to load terminal metrics',
-          loading: false
-        });
+        errorMessage = statusResponse.error?.message || 'Failed to load terminal status';
       }
+
+      if (metricsResponse.success && metricsResponse.data) {
+        newState.metrics = metricsResponse.data;
+      } else {
+        const metricsError = metricsResponse.error?.message || 'Failed to load terminal metrics';
+        errorMessage = errorMessage ? `${errorMessage}, ${metricsError}` : metricsError;
+      }
+
+      if (errorMessage) {
+        newState.error = errorMessage;
+      }
+
+      set(newState);
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
-        loading: false
+        loading: false,
       });
     }
   },
@@ -78,7 +74,7 @@ export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
       if (response.success) {
         set({ initialized: true, loading: false });
         // Load initial status
-        await get().loadStatus();
+        await get().load();
       } else {
         set({
           error: response.error?.message || 'Failed to initialize terminal pool',
