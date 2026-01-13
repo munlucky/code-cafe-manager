@@ -13,29 +13,29 @@ import { RoleManager } from '@codecafe/orchestrator';
 import type { Role as OrchestratorRole } from '@codecafe/orchestrator';
 
 /**
- * Convert orchestrator Role (Phase 1/2 compatible) to core Role (Phase 2 only)
+ * Converts an orchestrator Role (Phase 1/2 compatible) to a core Role (Phase 2 only).
+ * This acts as an adapter between the orchestrator's flexible role definition and the stricter core type.
  */
 function convertToCoreRole(orchRole: OrchestratorRole): CoreRole {
   return {
     id: orchRole.id,
     name: orchRole.name,
-    systemPrompt: orchRole.template, // template → systemPrompt
-    skills: orchRole.skills || [],
-    recommendedProvider: orchRole.recommendedProvider || 'claude-code',
-    variables: orchRole.variables || [],
-    isDefault: orchRole.isDefault || false,
-    source: orchRole.source || '',
+    systemPrompt: orchRole.template, // 'template' is the legacy name for 'systemPrompt'
+    skills: orchRole.skills ?? [],
+    recommendedProvider: orchRole.recommendedProvider ?? 'claude-code',
+    variables: orchRole.variables ?? [],
+    isDefault: orchRole.isDefault ?? false,
+    source: orchRole.source ?? '',
   };
 }
 
 /**
- * Role Registry using orchestrator RoleManager
+ * Manages role operations by interfacing with the orchestrator's RoleManager.
  */
-class RoleRegistryImpl {
+class RoleRegistry {
   private roleManager: RoleManager;
 
   constructor() {
-    // Initialize RoleManager with role paths
     const rolePaths = [
       path.join(process.cwd(), '.orch', 'roles'), // User-defined roles
       path.join(process.cwd(), 'packages', 'roles'), // Built-in roles
@@ -43,36 +43,35 @@ class RoleRegistryImpl {
     this.roleManager = new RoleManager(undefined, rolePaths);
   }
 
+  /**
+   * Retrieves all available roles.
+   */
   getAll(): CoreRole[] {
-    const roleIds = this.roleManager.listRoles();
-    const roles: CoreRole[] = [];
-
-    for (const roleId of roleIds) {
-      const orchRole = this.roleManager.loadRole(roleId);
-      if (orchRole) {
-        roles.push(convertToCoreRole(orchRole));
-      }
-    }
-
-    return roles;
+    return this.roleManager
+      .listRoles()
+      .map((roleId) => this.roleManager.loadRole(roleId))
+      .filter((orchRole): orchRole is OrchestratorRole => !!orchRole)
+      .map(convertToCoreRole);
   }
 
+  /**
+   * Retrieves a single role by its ID.
+   */
   get(id: string): CoreRole | null {
     const orchRole = this.roleManager.loadRole(id);
-    if (!orchRole) {
-      return null;
-    }
-    return convertToCoreRole(orchRole);
+    return orchRole ? convertToCoreRole(orchRole) : null;
   }
 
-  register(role: CoreRole): void {
-    // Convert core Role to orchestrator Role
+  /**
+   * Registers a new role or updates an existing one.
+   */
+  save(role: CoreRole): void {
     const orchRole: OrchestratorRole = {
       id: role.id,
       name: role.name,
       template: role.systemPrompt,
       skills: role.skills,
-      recommendedProvider: role.recommendedProvider as any, // Type assertion for ProviderType compatibility
+      recommendedProvider: role.recommendedProvider as any, // Type assertion for compatibility
       variables: role.variables,
       isDefault: role.isDefault,
       source: role.source,
@@ -80,20 +79,15 @@ class RoleRegistryImpl {
     this.roleManager.saveRole(orchRole);
   }
 
-  update(id: string, role: CoreRole): void {
-    this.register(role); // saveRole overwrites
-  }
-
+  /**
+   * Deletes a role by its ID.
+   */
   delete(id: string): void {
     this.roleManager.deleteRole(id);
   }
-
-  reload(): void {
-    // RoleManager loads from disk each time, no need to reload
-  }
 }
 
-const roleRegistry = new RoleRegistryImpl();
+const roleRegistry = new RoleRegistry();
 
 // Zod schemas for request/response validation
 const RoleIdSchema = z.string().min(1);
@@ -115,16 +109,14 @@ const RoleUpdateSchema = z.object({
   variables: z.array(RoleVariableSchema).optional(),
 });
 
-// Error codes enum
+// Error handling
 export enum RoleErrorCode {
   NOT_FOUND = 'ROLE_NOT_FOUND',
   VALIDATION_FAILED = 'ROLE_VALIDATION_FAILED',
   ALREADY_EXISTS = 'ROLE_ALREADY_EXISTS',
-  PARSE_ERROR = 'ROLE_PARSE_ERROR',
   UNKNOWN = 'ROLE_UNKNOWN_ERROR',
 }
 
-// Error response type
 interface ErrorResponse {
   success: false;
   error: {
@@ -134,274 +126,175 @@ interface ErrorResponse {
   };
 }
 
-// Success response types
-interface SuccessResponse<T = void> {
+interface SuccessResponse<T> {
   success: true;
   data: T;
 }
 
-type IpcResponse<T = void> = SuccessResponse<T> | ErrorResponse;
+type IpcResponse<T> = SuccessResponse<T> | ErrorResponse;
 
-// Helper function to create error response
-function createErrorResponse(
-  code: RoleErrorCode,
-  message: string,
-  details?: any
-): ErrorResponse {
-  return {
-    success: false,
-    error: { code, message, details },
-  };
+function createErrorResponse(code: RoleErrorCode, message: string, details?: any): ErrorResponse {
+  return { success: false, error: { code, message, details } };
 }
 
-// Helper function to create success response
 function createSuccessResponse<T>(data: T): SuccessResponse<T> {
   return { success: true, data };
 }
 
 /**
- * Register all role-related IPC handlers
+ * Registers all role-related IPC handlers.
  */
 export function registerRoleIpcHandlers(): void {
-  // Get all roles (alias for list)
-  ipcMain.handle('role:list', async (): Promise<IpcResponse<CoreRole[]>> => {
+  const listRolesHandler = async (): Promise<IpcResponse<CoreRole[]>> => {
     try {
-      const roles = roleRegistry.getAll();
-      return createSuccessResponse(roles);
+      return createSuccessResponse(roleRegistry.getAll());
     } catch (error) {
-      return createErrorResponse(
-        RoleErrorCode.UNKNOWN,
-        'Failed to get roles',
-        String(error)
-      );
+      return createErrorResponse(RoleErrorCode.UNKNOWN, 'Failed to list roles', String(error));
     }
-  });
+  };
+  ipcMain.handle('role:list', listRolesHandler);
+  ipcMain.handle('role:getAll', listRolesHandler); // For backward compatibility
 
-  // Get all roles (backward compatibility)
-  ipcMain.handle('role:getAll', async (): Promise<IpcResponse<CoreRole[]>> => {
+  ipcMain.handle(
+    'role:get',
+    async (event: IpcMainInvokeEvent, roleId: string): Promise<IpcResponse<CoreRole>> => {
+      try {
+        const validatedId = RoleIdSchema.parse(roleId);
+        const role = roleRegistry.get(validatedId);
+        if (!role) {
+          return createErrorResponse(RoleErrorCode.NOT_FOUND, `Role not found: ${validatedId}`);
+        }
+        return createSuccessResponse(role);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return createErrorResponse(RoleErrorCode.VALIDATION_FAILED, 'Invalid role ID', error.errors);
+        }
+        return createErrorResponse(RoleErrorCode.UNKNOWN, 'Failed to get role', String(error));
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'role:create',
+    async (event: IpcMainInvokeEvent, roleData: unknown): Promise<IpcResponse<CoreRole>> => {
+      try {
+        const validatedData = RoleCreateSchema.parse(roleData);
+
+        if (roleRegistry.get(validatedData.id)) {
+          return createErrorResponse(
+            RoleErrorCode.ALREADY_EXISTS,
+            `Role already exists: ${validatedData.id}`,
+          );
+        }
+
+        const role: CoreRole = {
+          ...validatedData,
+          isDefault: false,
+          source: 'user-defined',
+          variables: validatedData.variables ?? [],
+        };
+
+        roleRegistry.save(role);
+        return createSuccessResponse(role);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return createErrorResponse(
+            RoleErrorCode.VALIDATION_FAILED,
+            'Invalid role data',
+            error.errors,
+          );
+        }
+        return createErrorResponse(RoleErrorCode.UNKNOWN, 'Failed to create role', String(error));
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'role:update',
+    async (
+      event: IpcMainInvokeEvent,
+      roleId: string,
+      updates: unknown,
+    ): Promise<IpcResponse<CoreRole>> => {
+      try {
+        const validatedId = RoleIdSchema.parse(roleId);
+        const validatedUpdates = RoleUpdateSchema.parse(updates);
+
+        const existingRole = roleRegistry.get(validatedId);
+        if (!existingRole) {
+          return createErrorResponse(RoleErrorCode.NOT_FOUND, `Role not found: ${validatedId}`);
+        }
+
+        const updatedRole: CoreRole = {
+          ...existingRole,
+          ...validatedUpdates,
+          variables: validatedUpdates.variables ?? existingRole.variables,
+        };
+
+        roleRegistry.save(updatedRole);
+        return createSuccessResponse(updatedRole);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return createErrorResponse(
+            RoleErrorCode.VALIDATION_FAILED,
+            'Invalid update data',
+            error.errors,
+          );
+        }
+        return createErrorResponse(RoleErrorCode.UNKNOWN, 'Failed to update role', String(error));
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'role:delete',
+    async (event: IpcMainInvokeEvent, roleId: string): Promise<IpcResponse<void>> => {
+      try {
+        const validatedId = RoleIdSchema.parse(roleId);
+        const existingRole = roleRegistry.get(validatedId);
+
+        if (!existingRole) {
+          return createErrorResponse(RoleErrorCode.NOT_FOUND, `Role not found: ${validatedId}`);
+        }
+        if (existingRole.isDefault) {
+          return createErrorResponse(
+            RoleErrorCode.VALIDATION_FAILED,
+            'Cannot delete a default role',
+          );
+        }
+
+        roleRegistry.delete(validatedId);
+        return createSuccessResponse(undefined);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return createErrorResponse(RoleErrorCode.VALIDATION_FAILED, 'Invalid role ID', error.errors);
+        }
+        return createErrorResponse(RoleErrorCode.UNKNOWN, 'Failed to delete role', String(error));
+      }
+    },
+  );
+
+  const listDefaultRolesHandler = async (): Promise<IpcResponse<CoreRole[]>> => {
     try {
-      const roles = roleRegistry.getAll();
-      return createSuccessResponse(roles);
-    } catch (error) {
-      return createErrorResponse(
-        RoleErrorCode.UNKNOWN,
-        'Failed to get roles',
-        String(error)
-      );
-    }
-  });
-
-  // Get role by ID
-  ipcMain.handle('role:get', async (
-    event: IpcMainInvokeEvent,
-    roleId: string
-  ): Promise<IpcResponse<CoreRole>> => {
-    try {
-      const validatedId = RoleIdSchema.parse(roleId);
-      const role = roleRegistry.get(validatedId);
-      if (!role) {
-        return createErrorResponse(
-          RoleErrorCode.NOT_FOUND,
-          `Role not found: ${validatedId}`
-        );
-      }
-      return createSuccessResponse(role);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return createErrorResponse(
-          RoleErrorCode.VALIDATION_FAILED,
-          'Invalid role ID',
-          (error as any).errors
-        );
-      }
-      return createErrorResponse(
-        RoleErrorCode.UNKNOWN,
-        'Failed to get role',
-        String(error)
-      );
-    }
-  });
-
-  // Create new role
-  ipcMain.handle('role:create', async (
-    event: IpcMainInvokeEvent,
-    roleData: unknown
-  ): Promise<IpcResponse<CoreRole>> => {
-    try {
-      const validatedData = RoleCreateSchema.parse(roleData);
-
-      // Check if role already exists
-      if (roleRegistry.get(validatedData.id)) {
-        return createErrorResponse(
-          RoleErrorCode.ALREADY_EXISTS,
-          `Role already exists: ${validatedData.id}`
-        );
-      }
-
-      const role: CoreRole = {
-        ...validatedData,
-        isDefault: false,
-        source: 'user-defined',
-        variables: validatedData.variables || [],
-      };
-
-      roleRegistry.register(role);
-      return createSuccessResponse(role);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return createErrorResponse(
-          RoleErrorCode.VALIDATION_FAILED,
-          'Invalid role data',
-          (error as any).errors
-        );
-      }
-      return createErrorResponse(
-        RoleErrorCode.UNKNOWN,
-        'Failed to create role',
-        String(error)
-      );
-    }
-  });
-
-  // Update existing role
-  ipcMain.handle('role:update', async (
-    event: IpcMainInvokeEvent,
-    roleId: string,
-    updates: unknown
-  ): Promise<IpcResponse<CoreRole>> => {
-    try {
-      const validatedId = RoleIdSchema.parse(roleId);
-      const validatedUpdates = RoleUpdateSchema.parse(updates);
-
-      const existingRole = roleRegistry.get(validatedId);
-      if (!existingRole) {
-        return createErrorResponse(
-          RoleErrorCode.NOT_FOUND,
-          `Role not found: ${validatedId}`
-        );
-      }
-
-      // Update role
-      const updatedRole: CoreRole = {
-        ...existingRole,
-        ...validatedUpdates,
-        variables: validatedUpdates.variables || existingRole.variables,
-      };
-
-      roleRegistry.update(validatedId, updatedRole);
-      return createSuccessResponse(updatedRole);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return createErrorResponse(
-          RoleErrorCode.VALIDATION_FAILED,
-          'Invalid role data',
-          (error as any).errors
-        );
-      }
-      return createErrorResponse(
-        RoleErrorCode.UNKNOWN,
-        'Failed to update role',
-        error
-      );
-    }
-  });
-
-  // Delete role
-  ipcMain.handle('role:delete', async (
-    event: IpcMainInvokeEvent,
-    roleId: string
-  ): Promise<IpcResponse<void>> => {
-    try {
-      const validatedId = RoleIdSchema.parse(roleId);
-
-      const existingRole = roleRegistry.get(validatedId);
-      if (!existingRole) {
-        return createErrorResponse(
-          RoleErrorCode.NOT_FOUND,
-          `Role not found: ${validatedId}`
-        );
-      }
-
-      // Don't allow deletion of default roles
-      if (existingRole.isDefault) {
-        return createErrorResponse(
-          RoleErrorCode.VALIDATION_FAILED,
-          'Cannot delete default role'
-        );
-      }
-
-      roleRegistry.delete(validatedId);
-      return createSuccessResponse(undefined);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return createErrorResponse(
-          RoleErrorCode.VALIDATION_FAILED,
-          'Invalid role ID',
-          (error as any).errors
-        );
-      }
-      return createErrorResponse(
-        RoleErrorCode.UNKNOWN,
-        'Failed to delete role',
-        String(error)
-      );
-    }
-  });
-
-  // Get default roles (alias for list-default)
-  ipcMain.handle('role:list-default', async (): Promise<IpcResponse<CoreRole[]>> => {
-    try {
-      const defaultRoles = roleRegistry.getAll().filter((role: any) => role.isDefault);
+      const defaultRoles = roleRegistry.getAll().filter((role: CoreRole) => role.isDefault);
       return createSuccessResponse(defaultRoles);
     } catch (error) {
       return createErrorResponse(
         RoleErrorCode.UNKNOWN,
         'Failed to get default roles',
-        String(error)
+        String(error),
       );
     }
-  });
+  };
+  ipcMain.handle('role:list-default', listDefaultRolesHandler);
+  ipcMain.handle('role:getDefaults', listDefaultRolesHandler); // For backward compatibility
 
-  // Get default roles (backward compatibility)
-  ipcMain.handle('role:getDefaults', async (): Promise<IpcResponse<CoreRole[]>> => {
-    try {
-      const defaultRoles = roleRegistry.getAll().filter((role: any) => role.isDefault);
-      return createSuccessResponse(defaultRoles);
-    } catch (error) {
-      return createErrorResponse(
-        RoleErrorCode.UNKNOWN,
-        'Failed to get default roles',
-        String(error)
-      );
-    }
-  });
-
-  // Get user-defined roles (list-user)
   ipcMain.handle('role:list-user', async (): Promise<IpcResponse<CoreRole[]>> => {
     try {
-      const userRoles = roleRegistry.getAll().filter((role: any) => !role.isDefault);
+      const userRoles = roleRegistry.getAll().filter((role: CoreRole) => !role.isDefault);
       return createSuccessResponse(userRoles);
     } catch (error) {
-      return createErrorResponse(
-        RoleErrorCode.UNKNOWN,
-        'Failed to get user roles',
-        String(error)
-      );
-    }
-  });
-
-  // Reload roles from disk
-  ipcMain.handle('role:reload', async (): Promise<IpcResponse<CoreRole[]>> => {
-    try {
-      roleRegistry.reload();
-      const roles = roleRegistry.getAll();
-      return createSuccessResponse(roles);
-    } catch (error) {
-      return createErrorResponse(
-        RoleErrorCode.UNKNOWN,
-        'Failed to reload roles',
-        String(error)
-      );
+      return createErrorResponse(RoleErrorCode.UNKNOWN, 'Failed to get user roles', String(error));
     }
   });
 }

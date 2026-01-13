@@ -1,68 +1,86 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import chalk from 'chalk';
 import { RoleManager } from '../../role/role-manager';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import type { Role } from '../../types';
 
 const execAsync = promisify(exec);
 
 /**
- * List all roles
+ * Helper to ensure a role exists, exiting if it does not.
  */
-export async function listRoles(orchDir?: string): Promise<void> {
-  const manager = new RoleManager(orchDir);
-  const roles = manager.listRoles();
-
-  if (roles.length === 0) {
-    console.log(chalk.yellow('No roles found.'));
-    console.log(chalk.gray('Use "codecafe orch role add <role>" to create a new role.'));
-    return;
-  }
-
-  console.log(chalk.blue(`Found ${roles.length} role(s):\n`));
-
-  for (const roleId of roles) {
-    const role = manager.loadRole(roleId);
-    if (role) {
-      console.log(chalk.green(`  ${role.id}`));
-      console.log(chalk.gray(`    Name: ${role.name}`));
-
-      // Display Phase 1 or Phase 2 fields
-      if (role.skills) {
-        // Phase 2 format
-        console.log(chalk.gray(`    Provider: ${role.recommendedProvider || 'N/A'}`));
-        console.log(chalk.gray(`    Skills: ${role.skills.length} skill(s)`));
-      } else {
-        // Phase 1 format
-        console.log(chalk.gray(`    Schema: ${role.output_schema}`));
-        console.log(chalk.gray(`    Inputs: ${role.inputs?.length || 0} file(s)`));
-      }
-      console.log();
-    }
+function ensureRoleExists(manager: RoleManager, roleId: string): void {
+  if (!manager.roleExists(roleId)) {
+    console.error(chalk.red(`Error: Role "${roleId}" not found.`));
+    console.log(chalk.gray('Use "codecafe orch role list" to see available roles.'));
+    process.exit(1);
   }
 }
 
 /**
- * Add a new role
+ * Helper to ensure a role does not already exist, exiting if it does.
  */
-export async function addRole(
-  roleId: string,
-  options: { from?: string; orchDir?: string }
-): Promise<void> {
-  const manager = new RoleManager(options.orchDir);
-
+function ensureRoleDoesNotExist(manager: RoleManager, roleId: string): void {
   if (manager.roleExists(roleId)) {
     console.error(chalk.red(`Error: Role "${roleId}" already exists.`));
     console.log(chalk.gray(`Use "codecafe orch role edit ${roleId}" to modify it.`));
     process.exit(1);
   }
+}
+
+/**
+ * Prints a compact summary of a role.
+ */
+function printRoleSummary(role: Role): void {
+  console.log(chalk.green(`  ${role.id}`));
+  console.log(chalk.gray(`    Name: ${role.name}`));
+  if (role.skills) {
+    // Phase 2 format
+    console.log(chalk.gray(`    Provider: ${role.recommendedProvider || 'N/A'}`));
+    console.log(chalk.gray(`    Skills: ${role.skills.length} skill(s)`));
+  } else {
+    // Phase 1 format
+    console.log(chalk.gray(`    Schema: ${role.output_schema}`));
+    console.log(chalk.gray(`    Inputs: ${role.inputs?.length || 0} file(s)`));
+  }
+  console.log();
+}
+
+/**
+ * Lists all available roles.
+ */
+export async function listRoles(orchDir?: string): Promise<void> {
+  const manager = new RoleManager(orchDir);
+  const roleIds = manager.listRoles();
+
+  if (roleIds.length === 0) {
+    console.log(chalk.yellow('No roles found.'));
+    console.log(chalk.gray('Use "codecafe orch role add <role>" to create one.'));
+    return;
+  }
+
+  console.log(chalk.blue(`Found ${roleIds.length} role(s):\n`));
+  roleIds
+    .map((roleId) => manager.loadRole(roleId))
+    .filter((role): role is Role => !!role)
+    .forEach(printRoleSummary);
+}
+
+/**
+ * Adds a new role from a template.
+ */
+export async function addRole(
+  roleId: string,
+  options: { from?: string; orchDir?: string },
+): Promise<void> {
+  const manager = new RoleManager(options.orchDir);
+  ensureRoleDoesNotExist(manager, roleId);
 
   try {
     manager.createFromTemplate(roleId, options.from);
     console.log(chalk.green(`✓ Created role: ${roleId}`));
     console.log(chalk.gray(`  Location: ${manager.getRolePath(roleId)}`));
-    console.log(chalk.gray(`\nEdit the role file to customize it.`));
+    console.log(chalk.gray('\nEdit the new role file to customize it.'));
   } catch (error) {
     console.error(chalk.red('Error creating role:'), error);
     process.exit(1);
@@ -70,16 +88,11 @@ export async function addRole(
 }
 
 /**
- * Edit a role
+ * Opens a role's file in the default editor.
  */
 export async function editRole(roleId: string, orchDir?: string): Promise<void> {
   const manager = new RoleManager(orchDir);
-
-  if (!manager.roleExists(roleId)) {
-    console.error(chalk.red(`Error: Role "${roleId}" not found.`));
-    console.log(chalk.gray('Use "codecafe orch role list" to see available roles.'));
-    process.exit(1);
-  }
+  ensureRoleExists(manager, roleId);
 
   const rolePath = manager.getRolePath(roleId);
   const editor = process.env.EDITOR || 'vi';
@@ -87,7 +100,6 @@ export async function editRole(roleId: string, orchDir?: string): Promise<void> 
   console.log(chalk.blue(`Opening ${roleId} in ${editor}...`));
 
   try {
-    // Open in editor
     await execAsync(`${editor} "${rolePath}"`);
     console.log(chalk.green(`✓ Role ${roleId} saved.`));
   } catch (error) {
@@ -97,38 +109,28 @@ export async function editRole(roleId: string, orchDir?: string): Promise<void> 
 }
 
 /**
- * Remove a role
+ * Removes a role.
  */
 export async function removeRole(roleId: string, orchDir?: string): Promise<void> {
   const manager = new RoleManager(orchDir);
+  ensureRoleExists(manager, roleId);
 
-  if (!manager.roleExists(roleId)) {
-    console.error(chalk.red(`Error: Role "${roleId}" not found.`));
-    process.exit(1);
-  }
+  // TODO: Add interactive confirmation
+  console.log(chalk.yellow(`Deleting role "${roleId}"...`));
 
-  // Confirm deletion
-  console.log(chalk.yellow(`Are you sure you want to delete role "${roleId}"? (y/N)`));
-
-  // For now, we'll just delete without confirmation in CLI
-  // In a real implementation, we'd use a prompt library like inquirer
-
-  const deleted = manager.deleteRole(roleId);
-
-  if (deleted) {
+  if (manager.deleteRole(roleId)) {
     console.log(chalk.green(`✓ Deleted role: ${roleId}`));
   } else {
-    console.error(chalk.red('Failed to delete role.'));
+    console.error(chalk.red('Failed to delete role. It may not exist in the user roles directory.'));
     process.exit(1);
   }
 }
 
 /**
- * Show role details
+ * Shows detailed information about a role.
  */
 export async function showRole(roleId: string, orchDir?: string): Promise<void> {
   const manager = new RoleManager(orchDir);
-
   const role = manager.loadRole(roleId);
 
   if (!role) {
@@ -142,13 +144,11 @@ export async function showRole(roleId: string, orchDir?: string): Promise<void> 
   if (role.skills) {
     // Phase 2 format
     console.log(chalk.gray(`Recommended Provider: ${role.recommendedProvider || 'N/A'}`));
-    console.log(chalk.gray(`\nSkills:`));
-    role.skills.forEach((skill) => {
-      console.log(chalk.gray(`  - ${skill}`));
-    });
+    console.log(chalk.gray('\nSkills:'));
+    role.skills.forEach((skill) => console.log(chalk.gray(`  - ${skill}`)));
 
-    if (role.variables && role.variables.length > 0) {
-      console.log(chalk.gray(`\nVariables:`));
+    if (role.variables?.length) {
+      console.log(chalk.gray('\nVariables:'));
       role.variables.forEach((v) => {
         const req = v.required ? 'required' : 'optional';
         console.log(chalk.gray(`  - ${v.name} (${v.type}, ${req})`));
@@ -157,20 +157,16 @@ export async function showRole(roleId: string, orchDir?: string): Promise<void> 
   } else {
     // Phase 1 format
     console.log(chalk.gray(`Output Schema: ${role.output_schema}`));
-    console.log(chalk.gray(`\nInputs:`));
-    role.inputs?.forEach((input) => {
-      console.log(chalk.gray(`  - ${input}`));
-    });
+    console.log(chalk.gray('\nInputs:'));
+    role.inputs?.forEach((input) => console.log(chalk.gray(`  - ${input}`)));
 
-    if (role.guards && role.guards.length > 0) {
-      console.log(chalk.gray(`\nGuards:`));
-      role.guards.forEach((guard) => {
-        console.log(chalk.gray(`  - ${guard}`));
-      });
+    if (role.guards?.length) {
+      console.log(chalk.gray('\nGuards:'));
+      role.guards.forEach((guard) => console.log(chalk.gray(`  - ${guard}`)));
     }
   }
 
-  console.log(chalk.gray(`\nTemplate:`));
+  console.log(chalk.gray('\nTemplate:'));
   console.log(chalk.gray('─'.repeat(50)));
   console.log(role.template);
   console.log(chalk.gray('─'.repeat(50)));

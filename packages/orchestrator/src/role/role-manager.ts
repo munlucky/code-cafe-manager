@@ -4,74 +4,53 @@ import matter from 'gray-matter';
 import { Role } from '../types';
 
 /**
- * Role Manager - CRUD operations for role templates
- * Supports multi-path role loading with priority: .orch/roles > packages/roles > node_modules
+ * Manages CRUD operations for role templates, supporting multi-path loading.
  */
 export class RoleManager {
-  private rolesDir: string; // Kept for backward compatibility (for saveRole, deleteRole)
-  private rolePaths: string[]; // Multi-path support
+  private rolesDir: string; // User-specific roles directory
+  private rolePaths: string[]; // All searchable role directories
 
   constructor(orchDir?: string, rolePaths?: string[]) {
-    // Backward compatibility: orchDir defaults to .orch
     this.rolesDir = path.join(orchDir || path.join(process.cwd(), '.orch'), 'roles');
 
-    // Multi-path support with priority
     this.rolePaths = rolePaths || [
-      path.join(process.cwd(), '.orch', 'roles'), // User-defined roles (highest priority)
+      this.rolesDir, // User-defined roles (highest priority)
       path.join(process.cwd(), 'packages', 'roles'), // Project built-in roles
       path.join(process.cwd(), 'node_modules', '@codecafe', 'roles'), // Package roles (fallback)
     ];
   }
 
   /**
-   * List all available roles from all paths
-   * Returns unique role IDs (de-duplicated across paths)
+   * Lists all unique, available role IDs from all configured paths.
    */
   listRoles(): string[] {
-    const roleIds = new Set<string>();
-
-    for (const rolesDir of this.rolePaths) {
-      if (fs.existsSync(rolesDir)) {
-        try {
-          fs.readdirSync(rolesDir)
-            .filter((file) => file.endsWith('.md'))
-            .forEach((file) => roleIds.add(path.basename(file, '.md')));
-        } catch (error) {
-          // Ignore directories that can't be read
-          console.warn(`Failed to read roles directory: ${rolesDir}`, error);
-        }
+    const allRoleFiles = this.rolePaths.flatMap((dir) => {
+      if (!fs.existsSync(dir)) return [];
+      try {
+        return fs
+          .readdirSync(dir)
+          .filter((file) => file.endsWith('.md'))
+          .map((file) => path.basename(file, '.md'));
+      } catch (error) {
+        console.warn(`Failed to read roles directory: ${dir}`, error);
+        return [];
       }
-    }
-
-    return Array.from(roleIds).sort();
+    });
+    return [...new Set(allRoleFiles)].sort();
   }
 
   /**
-   * Validate role ID to prevent path traversal attacks
-   * @param roleId - Role ID to validate
-   * @returns true if valid, false otherwise
-   */
-  private validateRoleId(roleId: string): boolean {
-    // Only allow alphanumeric, underscore, hyphen
-    const validPattern = /^[a-zA-Z0-9_-]+$/;
-    return validPattern.test(roleId);
-  }
-
-  /**
-   * Load a role by ID
-   * Searches all paths in priority order, returns first match
+   * Loads a role by its ID, searching all paths in priority order.
    */
   loadRole(roleId: string): Role | null {
-    // Validate role ID to prevent path traversal
     if (!this.validateRoleId(roleId)) {
-      console.error(`Invalid role ID: ${roleId} (must be alphanumeric, underscore, or hyphen only)`);
+      console.error(`Invalid role ID provided: ${roleId}`);
       return null;
     }
 
     for (const rolesDir of this.rolePaths) {
       const rolePath = path.join(rolesDir, `${roleId}.md`);
 
-      // Additional safety: verify resolved path is within rolesDir
       const resolvedPath = path.resolve(rolePath);
       const resolvedDir = path.resolve(rolesDir);
       if (!resolvedPath.startsWith(resolvedDir + path.sep) && resolvedPath !== path.join(resolvedDir, `${roleId}.md`)) {
@@ -81,107 +60,55 @@ export class RoleManager {
 
       if (fs.existsSync(rolePath)) {
         try {
-          const fileContent = fs.readFileSync(rolePath, 'utf-8');
-          const { data, content } = matter(fileContent);
-
-          // Detect Phase 2 format (has recommended_provider or skills)
-          const isPhase2 = 'recommended_provider' in data || 'skills' in data;
-
-          if (isPhase2) {
-            // Parse Phase 2 format
-            return {
-              id: data.id || roleId,
-              name: data.name || roleId,
-              template: content.trim(),
-              skills: data.skills || [],
-              recommendedProvider: data.recommended_provider,
-              variables: data.variables || [],
-              isDefault: true, // Roles from packages/roles are default
-              source: rolePath,
-            };
-          } else {
-            // Parse Phase 1 format (backward compatibility)
-            return {
-              id: data.id || roleId,
-              name: data.name || roleId,
-              output_schema: data.output_schema || '',
-              inputs: data.inputs || [],
-              guards: data.guards || [],
-              template: content.trim(),
-            };
-          }
+          return this._parseRoleFile(rolePath, roleId);
         } catch (error) {
           console.error(`Failed to load role ${roleId} from ${rolePath}:`, error);
-          // Continue to next path
         }
       }
     }
-
-    return null; // Not found in any path
+    return null;
   }
 
   /**
-   * Save a role (supports both Phase 1 and Phase 2 formats)
+   * Saves a role to the user-specific roles directory.
    */
   saveRole(role: Role): void {
-    // Validate role ID to prevent path traversal
     if (!this.validateRoleId(role.id)) {
-      throw new Error(`Invalid role ID: ${role.id} (must be alphanumeric, underscore, or hyphen only)`);
+      throw new Error(`Invalid role ID: ${role.id}`);
     }
 
     if (!fs.existsSync(this.rolesDir)) {
       fs.mkdirSync(this.rolesDir, { recursive: true });
     }
 
-    const rolePath = path.join(this.rolesDir, `${role.id}.md`);
-
-    // Detect Phase 2 format
     const isPhase2 = role.skills !== undefined || role.recommendedProvider !== undefined;
-
-    // Construct frontmatter
-    const frontmatter: any = {
-      id: role.id,
-      name: role.name,
-    };
+    const frontmatter: Record<string, any> = { id: role.id, name: role.name };
 
     if (isPhase2) {
-      // Phase 2 format
-      if (role.recommendedProvider) {
-        frontmatter.recommended_provider = role.recommendedProvider;
-      }
-      if (role.skills) {
-        frontmatter.skills = role.skills;
-      }
-      if (role.variables && role.variables.length > 0) {
-        frontmatter.variables = role.variables;
-      }
+      if (role.recommendedProvider) frontmatter.recommended_provider = role.recommendedProvider;
+      if (role.skills) frontmatter.skills = role.skills;
+      if (role.variables?.length) frontmatter.variables = role.variables;
     } else {
-      // Phase 1 format
       frontmatter.output_schema = role.output_schema;
       frontmatter.inputs = role.inputs;
-      if (role.guards && role.guards.length > 0) {
-        frontmatter.guards = role.guards;
-      }
+      if (role.guards?.length) frontmatter.guards = role.guards;
     }
 
-    // Use gray-matter to stringify
     const fileContent = matter.stringify(role.template, frontmatter);
-
+    const rolePath = path.join(this.rolesDir, `${role.id}.md`);
     fs.writeFileSync(rolePath, fileContent, 'utf-8');
   }
 
   /**
-   * Delete a role
+   * Deletes a role from the user-specific roles directory.
    */
   deleteRole(roleId: string): boolean {
-    // Validate role ID to prevent path traversal
     if (!this.validateRoleId(roleId)) {
-      console.error(`Invalid role ID: ${roleId} (must be alphanumeric, underscore, or hyphen only)`);
+      console.error(`Invalid role ID provided: ${roleId}`);
       return false;
     }
 
     const rolePath = path.join(this.rolesDir, `${roleId}.md`);
-
     if (!fs.existsSync(rolePath)) {
       return false;
     }
@@ -191,25 +118,18 @@ export class RoleManager {
   }
 
   /**
-   * Check if a role exists in any path
+   * Checks if a role exists in any of the configured paths.
    */
   roleExists(roleId: string): boolean {
-    // Validate role ID to prevent path traversal
-    if (!this.validateRoleId(roleId)) {
-      return false;
-    }
+    if (!this.validateRoleId(roleId)) return false;
 
-    for (const rolesDir of this.rolePaths) {
-      const rolePath = path.join(rolesDir, `${roleId}.md`);
-      if (fs.existsSync(rolePath)) {
-        return true;
-      }
-    }
-    return false;
+    return this.rolePaths.some((dir) =>
+      fs.existsSync(path.join(dir, `${roleId}.md`)),
+    );
   }
 
   /**
-   * Create a role from template
+   * Creates a new role from a template file or a default template.
    */
   createFromTemplate(roleId: string, templatePath?: string): void {
     if (this.roleExists(roleId)) {
@@ -217,38 +137,18 @@ export class RoleManager {
     }
 
     let template: Role;
-
     if (templatePath && fs.existsSync(templatePath)) {
-      // Load from custom template
-      const fileContent = fs.readFileSync(templatePath, 'utf-8');
-      const { data, content } = matter(fileContent);
-
-      template = {
-        id: roleId,
-        name: data.name || roleId,
-        output_schema: data.output_schema || '',
-        inputs: data.inputs || [],
-        guards: data.guards || [],
-        template: content.trim(),
-      };
+      template = this._parseRoleFile(templatePath, roleId);
+      template.id = roleId; // Ensure the ID is the new role's ID
+      template.name = roleId;
     } else {
-      // Create default template
       template = {
         id: roleId,
         name: roleId,
         output_schema: `schemas/${roleId}.schema.json`,
         inputs: ['.orch/context/requirements.md'],
         guards: ['Output must be valid JSON', 'Must follow schema'],
-        template: `You are a specialized agent with the role: ${roleId}.
-
-Read the following files:
-{{#each inputs}}
-- {{this}}
-{{/each}}
-
-Perform your task according to your role.
-
-Output must be valid JSON matching the schema.`,
+        template: `You are a specialized agent with the role: ${roleId}.\n\nRead the following files:\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\nPerform your task according to your role.\n\nOutput must be valid JSON matching the schema.`,
       };
     }
 
@@ -256,9 +156,49 @@ Output must be valid JSON matching the schema.`,
   }
 
   /**
-   * Get role file path
+   * Returns the path for a role in the user-specific directory.
    */
   getRolePath(roleId: string): string {
     return path.join(this.rolesDir, `${roleId}.md`);
+  }
+
+  /**
+   * Validates a role ID to prevent path traversal.
+   * @returns true if the role ID is valid.
+   */
+  private validateRoleId(roleId: string): boolean {
+    return /^[a-zA-Z0-9_-]+$/.test(roleId);
+  }
+
+  /**
+   * Reads a role file and parses it into a Role object.
+   */
+  private _parseRoleFile(filePath: string, roleId: string): Role {
+    const fileContent = fs.readFileSync(filePath, 'utf-8');
+    const { data, content } = matter(fileContent);
+
+    const isPhase2 = 'recommended_provider' in data || 'skills' in data;
+
+    if (isPhase2) {
+      return {
+        id: data.id || roleId,
+        name: data.name || roleId,
+        template: content.trim(),
+        skills: data.skills || [],
+        recommendedProvider: data.recommended_provider,
+        variables: data.variables || [],
+        isDefault: true,
+        source: filePath,
+      };
+    } else {
+      return {
+        id: data.id || roleId,
+        name: data.name || roleId,
+        output_schema: data.output_schema || '',
+        inputs: data.inputs || [],
+        guards: data.guards || [],
+        template: content.trim(),
+      };
+    }
   }
 }
