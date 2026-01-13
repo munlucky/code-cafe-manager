@@ -4,6 +4,7 @@ import { useOrders } from '../../hooks/useOrders';
 import { Card } from '../ui/Card';
 import { StatusBadge } from '../ui/Badge';
 import { EmptyState } from '../ui/EmptyState';
+import { TerminalPoolStatus } from '../terminal/TerminalPoolStatus';
 import { cn } from '../../utils/cn';
 import { formatRelativeTime, truncate } from '../../utils/formatters';
 import type { RunProgress } from '../../types/window';
@@ -58,7 +59,7 @@ export function Dashboard() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <Card>
         <h3 className="text-xl font-bold mb-4 text-coffee">Baristas</h3>
         {baristas.length === 0 ? (
@@ -83,6 +84,8 @@ export function Dashboard() {
           </div>
         )}
       </Card>
+
+      <TerminalPoolStatus />
 
       <Card>
         <h3 className="text-xl font-bold mb-4 text-coffee">Recent Orders</h3>
@@ -121,7 +124,7 @@ export function Dashboard() {
         )}
       </Card>
 
-      <Card className="lg:col-span-2">
+      <Card className="lg:col-span-3">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-bold text-coffee">Workflow Runs</h3>
           {runsLoading && <span className="text-xs text-gray-500">Refreshing...</span>}
