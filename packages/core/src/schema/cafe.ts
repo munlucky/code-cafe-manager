@@ -4,19 +4,20 @@
  */
 
 import { z } from 'zod';
+import type {
+  Cafe,
+  CafeRegistry,
+  CafeSettings,
+  CreateCafeParams,
+  UpdateCafeParams,
+} from '../types/cafe.js';
 
-/**
- * Cafe Settings Schema
- */
-export const CafeSettingsSchema = z.object({
+export const CafeSettingsSchema: z.ZodType<CafeSettings> = z.object({
   baseBranch: z.string().min(1),
   worktreeRoot: z.string().min(1),
 });
 
-/**
- * Cafe Schema
- */
-export const CafeSchema = z.object({
+export const CafeSchema: z.ZodType<Cafe> = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
   path: z.string().min(1),
@@ -27,28 +28,19 @@ export const CafeSchema = z.object({
   settings: CafeSettingsSchema,
 });
 
-/**
- * Cafe Registry Schema
- */
-export const CafeRegistrySchema = z.object({
+export const CafeRegistrySchema: z.ZodType<CafeRegistry> = z.object({
   version: z.literal('1.0'),
   cafes: z.array(CafeSchema),
   lastAccessed: z.string().uuid().optional(),
 });
 
-/**
- * Create Cafe Params Schema
- */
-export const CreateCafeParamsSchema = z.object({
+export const CreateCafeParamsSchema: z.ZodType<CreateCafeParams> = z.object({
   path: z.string().min(1),
   baseBranch: z.string().min(1).optional(),
   worktreeRoot: z.string().min(1).optional(),
 });
 
-/**
- * Update Cafe Params Schema
- */
-export const UpdateCafeParamsSchema = z.object({
+export const UpdateCafeParamsSchema: z.ZodType<UpdateCafeParams> = z.object({
   name: z.string().min(1).optional(),
   currentBranch: z.string().min(1).optional(),
   isDirty: z.boolean().optional(),

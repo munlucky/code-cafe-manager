@@ -3,6 +3,15 @@ import * as path from 'path';
 import matter from 'gray-matter';
 import { Role } from '../types';
 
+const createDefaultRoleTemplate = (roleId: string): Role => ({
+  id: roleId,
+  name: roleId,
+  output_schema: `schemas/${roleId}.schema.json`,
+  inputs: ['.orch/context/requirements.md'],
+  guards: ['Output must be valid JSON', 'Must follow schema'],
+  template: `You are a specialized agent with the role: ${roleId}.\n\nRead the following files:\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\nPerform your task according to your role.\n\nOutput must be valid JSON matching the schema.`,
+});
+
 /**
  * Manages CRUD operations for role templates, supporting multi-path loading.
  */
@@ -24,19 +33,8 @@ export class RoleManager {
    * Lists all unique, available role IDs from all configured paths.
    */
   listRoles(): string[] {
-    const allRoleFiles = this.rolePaths.flatMap((dir) => {
-      if (!fs.existsSync(dir)) return [];
-      try {
-        return fs
-          .readdirSync(dir)
-          .filter((file) => file.endsWith('.md'))
-          .map((file) => path.basename(file, '.md'));
-      } catch (error) {
-        console.warn(`Failed to read roles directory: ${dir}`, error);
-        return [];
-      }
-    });
-    return [...new Set(allRoleFiles)].sort();
+    const allRoleIds = this.rolePaths.flatMap((dir) => this._getRoleIdsFromDir(dir));
+    return [...new Set(allRoleIds)].sort();
   }
 
   /**
@@ -53,8 +51,8 @@ export class RoleManager {
 
       const resolvedPath = path.resolve(rolePath);
       const resolvedDir = path.resolve(rolesDir);
-      if (!resolvedPath.startsWith(resolvedDir + path.sep) && resolvedPath !== path.join(resolvedDir, `${roleId}.md`)) {
-        console.error(`Path traversal attempt detected: ${roleId}`);
+      if (!resolvedPath.startsWith(resolvedDir + path.sep)) {
+        console.error(`Path traversal attempt detected for role "${roleId}".`);
         continue;
       }
 
@@ -81,18 +79,10 @@ export class RoleManager {
       fs.mkdirSync(this.rolesDir, { recursive: true });
     }
 
-    const isPhase2 = role.skills !== undefined || role.recommendedProvider !== undefined;
-    const frontmatter: Record<string, any> = { id: role.id, name: role.name };
-
-    if (isPhase2) {
-      if (role.recommendedProvider) frontmatter.recommended_provider = role.recommendedProvider;
-      if (role.skills) frontmatter.skills = role.skills;
-      if (role.variables?.length) frontmatter.variables = role.variables;
-    } else {
-      frontmatter.output_schema = role.output_schema;
-      frontmatter.inputs = role.inputs;
-      if (role.guards?.length) frontmatter.guards = role.guards;
-    }
+    const isV2 = role.skills !== undefined || role.recommendedProvider !== undefined;
+    const frontmatter = isV2
+      ? this._createV2Frontmatter(role)
+      : this._createV1Frontmatter(role);
 
     const fileContent = matter.stringify(role.template, frontmatter);
     const rolePath = path.join(this.rolesDir, `${role.id}.md`);
@@ -142,14 +132,7 @@ export class RoleManager {
       template.id = roleId; // Ensure the ID is the new role's ID
       template.name = roleId;
     } else {
-      template = {
-        id: roleId,
-        name: roleId,
-        output_schema: `schemas/${roleId}.schema.json`,
-        inputs: ['.orch/context/requirements.md'],
-        guards: ['Output must be valid JSON', 'Must follow schema'],
-        template: `You are a specialized agent with the role: ${roleId}.\n\nRead the following files:\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\nPerform your task according to your role.\n\nOutput must be valid JSON matching the schema.`,
-      };
+      template = createDefaultRoleTemplate(roleId);
     }
 
     this.saveRole(template);
@@ -177,28 +160,83 @@ export class RoleManager {
     const fileContent = fs.readFileSync(filePath, 'utf-8');
     const { data, content } = matter(fileContent);
 
-    const isPhase2 = 'recommended_provider' in data || 'skills' in data;
+    const isV2 = 'recommended_provider' in data || 'skills' in data;
+    return isV2
+      ? this._parseV2Role(data, content, roleId, filePath)
+      : this._parseV1Role(data, content, roleId);
+  }
 
-    if (isPhase2) {
-      return {
-        id: data.id || roleId,
-        name: data.name || roleId,
-        template: content.trim(),
-        skills: data.skills || [],
-        recommendedProvider: data.recommended_provider,
-        variables: data.variables || [],
-        isDefault: true,
-        source: filePath,
-      };
-    } else {
-      return {
-        id: data.id || roleId,
-        name: data.name || roleId,
-        output_schema: data.output_schema || '',
-        inputs: data.inputs || [],
-        guards: data.guards || [],
-        template: content.trim(),
-      };
+  private _createV1Frontmatter(role: Role): Record<string, any> {
+    const frontmatter: Record<string, any> = {
+      id: role.id,
+      name: role.name,
+      output_schema: role.output_schema,
+      inputs: role.inputs,
+    };
+    if (role.guards?.length) {
+      frontmatter.guards = role.guards;
+    }
+    return frontmatter;
+  }
+
+  private _createV2Frontmatter(role: Role): Record<string, any> {
+    const frontmatter: Record<string, any> = {
+      id: role.id,
+      name: role.name,
+    };
+    if (role.recommendedProvider) {
+      frontmatter.recommended_provider = role.recommendedProvider;
+    }
+    if (role.skills) {
+      frontmatter.skills = role.skills;
+    }
+    if (role.variables?.length) {
+      frontmatter.variables = role.variables;
+    }
+    return frontmatter;
+  }
+
+  private _parseV1Role(data: matter.GrayMatterFile['data'], content: string, roleId: string): Role {
+    return {
+      id: data.id || roleId,
+      name: data.name || roleId,
+      output_schema: data.output_schema || '',
+      inputs: data.inputs || [],
+      guards: data.guards || [],
+      template: content.trim(),
+    };
+  }
+
+  private _parseV2Role(
+    data: matter.GrayMatterFile['data'],
+    content: string,
+    roleId: string,
+    source: string,
+  ): Role {
+    return {
+      id: data.id || roleId,
+      name: data.name || roleId,
+      template: content.trim(),
+      skills: data.skills || [],
+      recommendedProvider: data.recommended_provider,
+      variables: data.variables || [],
+      isDefault: true,
+      source,
+    };
+  }
+
+  private _getRoleIdsFromDir(dir: string): string[] {
+    if (!fs.existsSync(dir)) {
+      return [];
+    }
+    try {
+      return fs
+        .readdirSync(dir)
+        .filter((file) => file.endsWith('.md'))
+        .map((file) => path.basename(file, '.md'));
+    } catch (error) {
+      console.warn(`Failed to read roles directory: ${dir}`, error);
+      return [];
     }
   }
 }

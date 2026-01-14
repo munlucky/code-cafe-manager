@@ -5,29 +5,9 @@ import type {
   WorktreeInfo,
   Receipt,
 } from './models';
-import type { Cafe, CreateCafeParams, UpdateCafeParams } from '@codecafe/core';
+import type { Cafe, CreateCafeParams, UpdateCafeParams, Role } from '@codecafe/core';
 import type { TerminalPoolConfig, PoolStatus, PoolMetrics } from '@codecafe/core';
 
-// Temporary types for compilation
-interface Role {
-  id: string;
-  name: string;
-  systemPrompt: string;
-  skills: string[];
-  recommendedProvider: string;
-  variables: any[];
-  isDefault: boolean;
-  source: string;
-}
-
-export interface IpcResult<T = any> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  errors?: Array<{ path: string[]; message: string }>;
-}
-
-// Phase 2: IpcResponse for Role/Terminal APIs
 export interface IpcResponse<T = void> {
   success: boolean;
   data?: T;
@@ -36,6 +16,7 @@ export interface IpcResponse<T = void> {
     message: string;
     details?: any;
   };
+  errors?: Array<{ path: string[]; message: string }>;
 }
 
 export interface CreateOrderParams {
@@ -102,63 +83,63 @@ declare global {
     codecafe: {
       // Phase 1: Cafe Management
       cafe: {
-        list: () => Promise<Cafe[]>;
-        get: (id: string) => Promise<Cafe | null>;
-        create: (params: CreateCafeParams) => Promise<Cafe>;
-        update: (id: string, params: UpdateCafeParams) => Promise<Cafe>;
-        delete: (id: string) => Promise<void>;
-        setLastAccessed: (id: string) => Promise<void>;
-        getLastAccessed: () => Promise<Cafe | null>;
+        list: () => Promise<IpcResponse<Cafe[]>>;
+        get: (id: string) => Promise<IpcResponse<Cafe | null>>;
+        create: (params: CreateCafeParams) => Promise<IpcResponse<Cafe>>;
+        update: (id: string, params: UpdateCafeParams) => Promise<IpcResponse<Cafe>>;
+        delete: (id: string) => Promise<IpcResponse<void>>;
+        setLastAccessed: (id: string) => Promise<IpcResponse<void>>;
+        getLastAccessed: () => Promise<IpcResponse<Cafe | null>>;
       };
 
       // Barista 관리
-      createBarista: (provider: ProviderType) => Promise<Barista>;
-      getAllBaristas: () => Promise<Barista[]>;
+      createBarista: (provider: ProviderType) => Promise<IpcResponse<Barista>>;
+      getAllBaristas: () => Promise<IpcResponse<Barista[]>>;
 
       // Order 관리
-      createOrder: (params: CreateOrderParams) => Promise<Order>;
-      getAllOrders: () => Promise<Order[]>;
-      getOrder: (orderId: string) => Promise<Order>;
-      getOrderLog: (orderId: string) => Promise<string>;
-      cancelOrder: (orderId: string) => Promise<void>;
+      createOrder: (params: CreateOrderParams) => Promise<IpcResponse<Order>>;
+      getAllOrders: () => Promise<IpcResponse<Order[]>>;
+      getOrder: (orderId: string) => Promise<IpcResponse<Order>>;
+      getOrderLog: (orderId: string) => Promise<IpcResponse<string>>;
+      cancelOrder: (orderId: string) => Promise<IpcResponse<void>>;
 
       // Receipt
-      getReceipts: () => Promise<Receipt[]>;
+      getReceipts: () => Promise<IpcResponse<Receipt[]>>;
 
       // Provider
-      getAvailableProviders: () => Promise<ProviderInfo[]>;
+      getAvailableProviders: () => Promise<IpcResponse<ProviderInfo[]>>;
 
-      // Worktree
-      listWorktrees: (repoPath: string) => Promise<IpcResult<WorktreeInfo[]>>;
+      // Worktree - Using standardized IpcResponse
+      listWorktrees: (repoPath: string) => Promise<IpcResponse<WorktreeInfo[]>>;
       exportPatch: (
         worktreePath: string,
         baseBranch: string,
         outputPath?: string
-      ) => Promise<IpcResult<string>>;
+      ) => Promise<IpcResponse<string>>;
       removeWorktree: (
         worktreePath: string,
         force?: boolean
-      ) => Promise<IpcResult<void>>;
-      openWorktreeFolder: (worktreePath: string) => Promise<void>;
+      ) => Promise<IpcResponse<void>>;
+      openWorktreeFolder: (worktreePath: string) => Promise<IpcResponse<void>>;
 
-      // Orchestrator
-      listWorkflows: () => Promise<WorkflowInfo[]>;
-      getWorkflow: (workflowId: string) => Promise<WorkflowInfo | null>;
+      // Orchestrator - Using standardized IpcResponse
+      listWorkflows: () => Promise<IpcResponse<WorkflowInfo[]>>;
+      getWorkflow: (workflowId: string) => Promise<IpcResponse<WorkflowInfo | null>>;
       runWorkflow: (
         workflowId: string,
         options?: { mode?: string; interactive?: boolean }
-      ) => Promise<string>;
-      listRuns: () => Promise<RunProgress[]>;
-      getRunStatus: (runId: string) => Promise<RunProgress | null>;
-      resumeRun: (runId: string) => Promise<void>;
-      getRunLogs: (runId: string) => Promise<RunLogEntry[]>;
-      getAssignments: () => Promise<ProviderAssignmentInfo[]>;
-      setAssignment: (stage: string, provider: string, role: string) => Promise<void>;
-      listProfiles: (stage: string) => Promise<string[]>;
-      setProfile: (stage: string, profile: string) => Promise<void>;
-      listRoles: () => Promise<string[]>;
+      ) => Promise<IpcResponse<string>>;
+      listRuns: () => Promise<IpcResponse<RunProgress[]>>;
+      getRunStatus: (runId: string) => Promise<IpcResponse<RunProgress | null>>;
+      resumeRun: (runId: string) => Promise<IpcResponse<void>>;
+      getRunLogs: (runId: string) => Promise<IpcResponse<RunLogEntry[]>>;
+      getAssignments: () => Promise<IpcResponse<ProviderAssignmentInfo[]>>;
+      setAssignment: (stage: string, provider: string, role: string) => Promise<IpcResponse<void>>;
+      listProfiles: (stage: string) => Promise<IpcResponse<string[]>>;
+      setProfile: (stage: string, profile: string) => Promise<IpcResponse<void>>;
+      listRoles: () => Promise<IpcResponse<string[]>>;
 
-      // Event Listeners
+      // Event Listeners - No change for callbacks
       onBaristaEvent: (callback: (event: any) => void) => void;
       onOrderEvent: (callback: (event: any) => void) => void;
       onOrderAssigned: (callback: (data: any) => void) => void;

@@ -3,27 +3,24 @@
  * Gap 2 해결: Custom Semaphore with true pool size enforcement and cancellation
  */
 
-import { ProviderType } from '@codecafe/core';
-import { Terminal, LeaseToken } from '@codecafe/core';
+import { ProviderType, Terminal } from '@codecafe/core';
 
 export interface LeaseRequest {
-  id: string;
-  provider: ProviderType;
-  resolve: (terminal: Terminal) => void;
-  terminalSupplier: () => Promise<Terminal>;
-  reject: (error: Error) => void;
+  readonly id: string;
+  readonly provider: ProviderType;
+  readonly resolve: (terminal: Terminal) => void;
+  readonly reject: (error: Error) => void;
+  readonly terminalSupplier: () => Promise<Terminal>;
   timeoutId?: NodeJS.Timeout;
   aborted: boolean;
 }
 
 export class PoolSemaphore {
-  private activeLeases: Set<string> = new Set(); // terminal IDs
-  private queue: LeaseRequest[] = [];
-  private maxConcurrent: number;
+  private readonly activeLeases = new Set<string>(); // terminal IDs
+  private readonly queue: LeaseRequest[] = [];
+  private pendingCreations = 0;
 
-  constructor(maxConcurrent: number) {
-    this.maxConcurrent = maxConcurrent;
-  }
+  constructor(private readonly maxConcurrent: number) {}
 
   /**
    * Request a lease slot
@@ -40,16 +37,14 @@ export class PoolSemaphore {
         id: `req-${Date.now()}-${Math.random().toString(36).substring(7)}`,
         provider,
         resolve,
-        terminalSupplier,
         reject,
+        terminalSupplier,
         aborted: false,
       };
 
       // Set timeout
       request.timeoutId = setTimeout(() => {
-        request.aborted = true;
-        this.removeFromQueue(request.id);
-        reject(new TerminalLeaseTimeoutError(provider, timeoutMs));
+        this.handleTimeout(request, timeoutMs);
       }, timeoutMs);
 
       // Add to queue
@@ -62,8 +57,9 @@ export class PoolSemaphore {
    * Release a lease slot
    */
   release(terminalId: string): void {
-    this.activeLeases.delete(terminalId);
-    this.processQueue();
+    if (this.activeLeases.delete(terminalId)) {
+      this.processQueue();
+    }
   }
 
   /**
@@ -77,21 +73,26 @@ export class PoolSemaphore {
    * Get active lease count
    */
   getActiveLeaseCount(): number {
-    return this.activeLeases.size;
+    return this.activeLeases.size + this.pendingCreations;
   }
 
   /**
    * Cancel a pending request
    */
   cancelRequest(requestId: string): boolean {
-    const request = this.queue.find(req => req.id === requestId);
-    if (request && !request.aborted) {
-      request.aborted = true;
-      this.removeFromQueue(requestId);
-      request.reject(new Error('Request cancelled'));
-      return true;
+    const index = this.queue.findIndex(req => req.id === requestId);
+    if (index === -1) {
+      return false;
     }
-    return false;
+
+    const request = this.queue[index];
+    if (request.aborted) {
+      return false;
+    }
+
+    this.abortRequest(request, new Error('Request cancelled'));
+    this.queue.splice(index, 1);
+    return true;
   }
 
   /**
@@ -99,52 +100,86 @@ export class PoolSemaphore {
    */
   dispose(): void {
     // Clear all timeouts
-    this.queue.forEach(request => {
+    for (const request of this.queue) {
       if (request.timeoutId) {
         clearTimeout(request.timeoutId);
       }
       if (!request.aborted) {
         request.reject(new Error('Semaphore disposed'));
       }
-    });
-    this.queue = [];
+    }
+    this.queue.length = 0;
     this.activeLeases.clear();
+    this.pendingCreations = 0;
   }
 
-  private async processQueue(): Promise<void> {
-    // Remove aborted requests
-    this.queue = this.queue.filter(req => !req.aborted);
-
+  private processQueue(): void {
     // Process queue while we have capacity
-    while (this.queue.length > 0 && this.activeLeases.size < this.maxConcurrent) {
+    // Check both active leases and pending creations to enforce limit
+    while (
+      this.queue.length > 0 &&
+      this.activeLeases.size + this.pendingCreations < this.maxConcurrent
+    ) {
       const request = this.queue.shift();
       if (!request || request.aborted) continue;
 
-      try {
-        // Clear timeout since we're processing
-        if (request.timeoutId) {
-          clearTimeout(request.timeoutId);
-        }
-
-        // Get terminal from supplier
-        const terminal = await request.terminalSupplier();
-        this.activeLeases.add(terminal.id);
-        request.resolve(terminal);
-      } catch (error) {
-        request.reject(error as Error);
-      }
+      this.processRequest(request);
     }
   }
 
-  private removeFromQueue(requestId: string): void {
-    const index = this.queue.findIndex(req => req.id === requestId);
-    if (index !== -1) {
-      const request = this.queue[index];
-      if (request.timeoutId) {
-        clearTimeout(request.timeoutId);
+  private async processRequest(request: LeaseRequest): Promise<void> {
+    this.pendingCreations++;
+
+    // Clear timeout since we're processing
+    if (request.timeoutId) {
+      clearTimeout(request.timeoutId);
+      request.timeoutId = undefined;
+    }
+
+    try {
+      // Get terminal from supplier
+      const terminal = await request.terminalSupplier();
+
+      // If aborted during creation
+      if (request.aborted) {
+        this.pendingCreations--;
+        return;
       }
+
+      this.activeLeases.add(terminal.id);
+      this.pendingCreations--;
+      request.resolve(terminal);
+    } catch (error) {
+      this.pendingCreations--;
+      if (!request.aborted) {
+        request.reject(error as Error);
+      }
+      // Try to process next request since this one failed
+      this.processQueue();
+    }
+  }
+
+  private handleTimeout(request: LeaseRequest, timeoutMs: number): void {
+    if (request.aborted) return;
+
+    const index = this.queue.indexOf(request);
+    if (index !== -1) {
       this.queue.splice(index, 1);
     }
+
+    this.abortRequest(
+      request,
+      new TerminalLeaseTimeoutError(request.provider, timeoutMs)
+    );
+  }
+
+  private abortRequest(request: LeaseRequest, error: Error): void {
+    request.aborted = true;
+    if (request.timeoutId) {
+      clearTimeout(request.timeoutId);
+      request.timeoutId = undefined;
+    }
+    request.reject(error);
   }
 }
 

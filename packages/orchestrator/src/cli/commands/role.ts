@@ -29,6 +29,19 @@ function ensureRoleDoesNotExist(manager: RoleManager, roleId: string): void {
 }
 
 /**
+ * Helper to load a role, exiting if it is not found or invalid.
+ */
+function loadRoleOrExit(manager: RoleManager, roleId: string): Role {
+  const role = manager.loadRole(roleId);
+  if (!role) {
+    console.error(chalk.red(`Error: Role "${roleId}" not found or is invalid.`));
+    console.log(chalk.gray('Use "codecafe orch role list" to see available roles.'));
+    process.exit(1);
+  }
+  return role;
+}
+
+/**
  * Prints a compact summary of a role.
  */
 function printRoleSummary(role: Role): void {
@@ -121,8 +134,40 @@ export async function removeRole(roleId: string, orchDir?: string): Promise<void
   if (manager.deleteRole(roleId)) {
     console.log(chalk.green(`✓ Deleted role: ${roleId}`));
   } else {
-    console.error(chalk.red('Failed to delete role. It may not exist in the user roles directory.'));
+    console.error(chalk.red(`Failed to delete role "${roleId}".`));
+    console.error(chalk.gray('It may be a system role, or there was a file access error.'));
     process.exit(1);
+  }
+}
+
+/**
+ * Prints detailed information for a Phase 1 role.
+ */
+function printPhase1RoleDetails(role: Role): void {
+  console.log(chalk.gray(`Output Schema: ${role.output_schema}`));
+  console.log(chalk.gray('\nInputs:'));
+  role.inputs?.forEach((input) => console.log(chalk.gray(`  - ${input}`)));
+
+  if (role.guards?.length) {
+    console.log(chalk.gray('\nGuards:'));
+    role.guards.forEach((guard) => console.log(chalk.gray(`  - ${guard}`)));
+  }
+}
+
+/**
+ * Prints detailed information for a Phase 2 role.
+ */
+function printPhase2RoleDetails(role: Role): void {
+  console.log(chalk.gray(`Recommended Provider: ${role.recommendedProvider || 'N/A'}`));
+  console.log(chalk.gray('\nSkills:'));
+  role.skills?.forEach((skill) => console.log(chalk.gray(`  - ${skill}`)));
+
+  if (role.variables?.length) {
+    console.log(chalk.gray('\nVariables:'));
+    role.variables.forEach((v) => {
+      const req = v.required ? 'required' : 'optional';
+      console.log(chalk.gray(`  - ${v.name} (${v.type}, ${req})`));
+    });
   }
 }
 
@@ -131,39 +176,15 @@ export async function removeRole(roleId: string, orchDir?: string): Promise<void
  */
 export async function showRole(roleId: string, orchDir?: string): Promise<void> {
   const manager = new RoleManager(orchDir);
-  const role = manager.loadRole(roleId);
-
-  if (!role) {
-    console.error(chalk.red(`Error: Role "${roleId}" not found.`));
-    process.exit(1);
-  }
+  const role = loadRoleOrExit(manager, roleId);
 
   console.log(chalk.blue(`\nRole: ${role.name}`));
   console.log(chalk.gray(`ID: ${role.id}`));
 
   if (role.skills) {
-    // Phase 2 format
-    console.log(chalk.gray(`Recommended Provider: ${role.recommendedProvider || 'N/A'}`));
-    console.log(chalk.gray('\nSkills:'));
-    role.skills.forEach((skill) => console.log(chalk.gray(`  - ${skill}`)));
-
-    if (role.variables?.length) {
-      console.log(chalk.gray('\nVariables:'));
-      role.variables.forEach((v) => {
-        const req = v.required ? 'required' : 'optional';
-        console.log(chalk.gray(`  - ${v.name} (${v.type}, ${req})`));
-      });
-    }
+    printPhase2RoleDetails(role);
   } else {
-    // Phase 1 format
-    console.log(chalk.gray(`Output Schema: ${role.output_schema}`));
-    console.log(chalk.gray('\nInputs:'));
-    role.inputs?.forEach((input) => console.log(chalk.gray(`  - ${input}`)));
-
-    if (role.guards?.length) {
-      console.log(chalk.gray('\nGuards:'));
-      role.guards.forEach((guard) => console.log(chalk.gray(`  - ${guard}`)));
-    }
+    printPhase1RoleDetails(role);
   }
 
   console.log(chalk.gray('\nTemplate:'));

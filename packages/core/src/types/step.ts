@@ -7,7 +7,7 @@ export interface Step {
   id: string;
   task: string;
   parameters?: Record<string, any>;
-  role?: string; // Optional role ID for this step
+  roleId?: string; // Optional role ID for this step
   timeout?: number; // Step timeout in milliseconds
   retryCount?: number; // Number of retry attempts
   dependsOn?: string[]; // Step dependencies

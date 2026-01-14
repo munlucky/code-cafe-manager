@@ -8,8 +8,24 @@ import { ProviderType } from '@codecafe/core';
 import { IProviderAdapter } from '../provider-adapter';
 import { ProviderSpawnError } from '../errors';
 
-// Use any to avoid type issues with node-pty event emitter methods
-type IPty = any;
+// Define minimal interface for node-pty to improve type safety
+interface IPtyProcess {
+  pid: number;
+  write(data: string): void;
+  on(event: string, listener: (...args: any[]) => void): void;
+  once(event: string, listener: (...args: any[]) => void): void;
+  removeListener(event: string, listener: (...args: any[]) => void): void;
+  kill(signal?: string): void;
+}
+
+// Configuration constants
+const CONFIG = {
+  INIT_TIMEOUT: 5000,
+  ACK_TIMEOUT: 5000,
+  EXECUTE_TIMEOUT: 30000,
+  TERM_COLS: 120,
+  TERM_ROWS: 30,
+} as const;
 
 interface CodexMessage {
   type: 'prompt' | 'ack' | 'output' | 'done' | 'ready' | 'error';
@@ -25,7 +41,7 @@ export class CodexAdapter implements IProviderAdapter {
   /**
    * Spawn codex CLI process in interactive mode
    */
-  async spawn(): Promise<IPty> {
+  async spawn(): Promise<IPtyProcess> {
     try {
       const ptyProcess = pty.spawn('codex', ['--interactive'], {
         name: 'xterm-color',
@@ -33,12 +49,12 @@ export class CodexAdapter implements IProviderAdapter {
         env: {
           ...process.env,
         },
-        cols: 120,
-        rows: 30,
+        cols: CONFIG.TERM_COLS,
+        rows: CONFIG.TERM_ROWS,
       });
 
       // Wait for initialization
-      await this.waitForReady(ptyProcess, 5000);
+      await this.waitForReady(ptyProcess, CONFIG.INIT_TIMEOUT);
 
       return ptyProcess;
     } catch (error) {
@@ -52,163 +68,129 @@ export class CodexAdapter implements IProviderAdapter {
   /**
    * Send prompt as JSON message
    */
-  async sendPrompt(ptyProcess: IPty, prompt: string): Promise<boolean> {
+  async sendPrompt(ptyProcess: IPtyProcess, prompt: string): Promise<boolean> {
+    const messageId = this.generateId();
+    this.lastMessageId = messageId;
+
     return new Promise((resolve, reject) => {
-      let ackReceived = false;
-      const timeout = 5000;
-      const messageId = this.generateId();
-
-      // Store message ID for readOutput correlation
-      this.lastMessageId = messageId;
-
-      // Construct JSON message
-      const message: CodexMessage = {
-        type: 'prompt',
-        content: prompt,
-        id: messageId,
+      const cleanup = () => {
+        ptyProcess.removeListener('data', onData);
+        clearTimeout(timeoutHandle);
       };
 
-      let buffer = '';
       const onData = (data: string) => {
-        buffer += data;
-
-        // Try to parse complete lines
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-
-          try {
-            const parsed: CodexMessage = JSON.parse(line);
-            if (parsed.type === 'ack' && parsed.id === messageId) {
-              ackReceived = true;
-              ptyProcess.removeListener('data', onData);
-              clearTimeout(timeoutHandle);
-              resolve(true);
-              return;
-            }
-          } catch (parseError) {
-            // Ignore non-JSON lines (may be logging)
-            console.warn(`Codex: Failed to parse line: ${line.substring(0, 50)}...`);
+        this.processJsonLines(data, (parsed) => {
+          if (parsed.type === 'ack' && parsed.id === messageId) {
+            cleanup();
+            resolve(true);
+            return true;
           }
-        }
+          return false;
+        });
       };
+
+      const timeoutHandle = setTimeout(() => {
+        cleanup();
+        reject(new Error(`Codex prompt ACK timeout after ${CONFIG.ACK_TIMEOUT}ms`));
+      }, CONFIG.ACK_TIMEOUT);
 
       ptyProcess.on('data', onData);
 
       // Send JSON message
-      ptyProcess.write(JSON.stringify(message) + '\n');
-
-      // Timeout fallback
-      const timeoutHandle = setTimeout(() => {
-        ptyProcess.removeListener('data', onData);
-        if (!ackReceived) {
-          reject(new Error('Codex prompt ACK timeout after 5000ms'));
-        }
-      }, timeout);
+      this.writeJson(ptyProcess, {
+        type: 'prompt',
+        content: prompt,
+        id: messageId,
+      });
     });
   }
 
   /**
    * Read output with JSON framing
    */
-  async readOutput(ptyProcess: IPty, timeout: number): Promise<string> {
+  async readOutput(ptyProcess: IPtyProcess, timeout: number): Promise<string> {
+    const expectedMessageId = this.lastMessageId;
+
     return new Promise((resolve, reject) => {
       let output = '';
-      let buffer = '';
-      const expectedMessageId = this.lastMessageId; // Capture ID at start
 
-      const onData = (data: string) => {
-        buffer += data;
-
-        // Parse line by line
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-
-          try {
-            const parsed: CodexMessage = JSON.parse(line);
-
-            // Validate message correlation for output and done
-            if (parsed.type === 'output') {
-              // Only accumulate output matching our message ID (or no ID for backward compat)
-              if (!parsed.id || parsed.id === expectedMessageId) {
-                output += parsed.content || '';
-              } else {
-                console.warn(`Codex: Ignoring output with mismatched ID: ${parsed.id} (expected: ${expectedMessageId})`);
-              }
-            } else if (parsed.type === 'done') {
-              // Only resolve on done message matching our ID
-              if (parsed.id === expectedMessageId || !parsed.id) {
-                clearTimeout(timeoutHandle);
-                ptyProcess.removeListener('data', onData);
-                resolve(output);
-                return;
-              } else {
-                console.warn(`Codex: Ignoring done with mismatched ID: ${parsed.id} (expected: ${expectedMessageId})`);
-                // Continue waiting for correct done message
-              }
-            } else if (parsed.type === 'error') {
-              // Accept error messages for our ID or without ID
-              if (parsed.id === expectedMessageId || !parsed.id) {
-                clearTimeout(timeoutHandle);
-                ptyProcess.removeListener('data', onData);
-                reject(new Error(`Codex error: ${parsed.error || 'Unknown error'}`));
-                return;
-              } else {
-                console.warn(`Codex: Ignoring error with mismatched ID: ${parsed.id} (expected: ${expectedMessageId})`);
-              }
-            }
-          } catch (parseError) {
-            // Partial tolerance: log and continue
-            console.warn(`Codex: JSON parse error: ${line.substring(0, 50)}...`);
-          }
-        }
+      const cleanup = () => {
+        ptyProcess.removeListener('data', onData);
+        clearTimeout(timeoutHandle);
       };
 
-      ptyProcess.on('data', onData);
+      const onData = (data: string) => {
+        this.processJsonLines(data, (parsed) => {
+          // Verify message ID correlation if available
+          if (parsed.id && expectedMessageId && parsed.id !== expectedMessageId) {
+            return false;
+          }
 
-      // Overall timeout
+          switch (parsed.type) {
+            case 'output':
+              output += parsed.content || '';
+              return false;
+
+            case 'done':
+              cleanup();
+              resolve(output);
+              return true;
+
+            case 'error':
+              cleanup();
+              reject(new Error(`Codex error: ${parsed.error || 'Unknown error'}`));
+              return true;
+
+            default:
+              return false;
+          }
+        });
+      };
+
       const timeoutHandle = setTimeout(() => {
-        ptyProcess.removeListener('data', onData);
+        cleanup();
         reject(new Error(`Codex read timeout after ${timeout}ms`));
       }, timeout);
+
+      ptyProcess.on('data', onData);
     });
   }
 
   /**
    * Wait for process exit
    */
-  async waitForExit(ptyProcess: IPty, timeout: number): Promise<number> {
+  async waitForExit(ptyProcess: IPtyProcess, timeout: number): Promise<number> {
     return new Promise((resolve, reject) => {
-      const onExit = ({ exitCode }: { exitCode: number; signal?: number }) => {
+      const cleanup = () => {
+        ptyProcess.removeListener('exit', onExit);
         clearTimeout(timeoutHandle);
+      };
+
+      const onExit = ({ exitCode }: { exitCode: number }) => {
+        cleanup();
         resolve(exitCode);
       };
 
-      ptyProcess.once('exit', onExit);
-
       const timeoutHandle = setTimeout(() => {
-        ptyProcess.removeListener('exit', onExit);
+        cleanup();
         reject(new Error(`Codex exit wait timeout after ${timeout}ms`));
       }, timeout);
+
+      ptyProcess.once('exit', onExit);
     });
   }
 
   /**
    * Kill process
    */
-  async kill(ptyProcess: IPty): Promise<void> {
+  async kill(ptyProcess: IPtyProcess): Promise<void> {
     ptyProcess.kill();
   }
 
   /**
    * Check if process is alive
    */
-  isAlive(ptyProcess: IPty): boolean {
+  isAlive(ptyProcess: IPtyProcess): boolean {
     return ptyProcess.pid > 0;
   }
 
@@ -216,13 +198,13 @@ export class CodexAdapter implements IProviderAdapter {
    * Execute command with context
    */
   async execute(
-    ptyProcess: IPty,
+    ptyProcess: IPtyProcess,
     context: any
   ): Promise<{ success: boolean; output?: string; error?: string }> {
     try {
       const prompt = typeof context === 'string' ? context : JSON.stringify(context);
       await this.sendPrompt(ptyProcess, prompt);
-      const output = await this.readOutput(ptyProcess, 30000);
+      const output = await this.readOutput(ptyProcess, CONFIG.EXECUTE_TIMEOUT);
       return { success: true, output };
     } catch (error) {
       return {
@@ -235,7 +217,7 @@ export class CodexAdapter implements IProviderAdapter {
   /**
    * Setup exit handler
    */
-  onExit(ptyProcess: IPty, handler: (event: { exitCode: number }) => void): void {
+  onExit(ptyProcess: IPtyProcess, handler: (event: { exitCode: number }) => void): void {
     ptyProcess.on('exit', (exitCode: number) => {
       handler({ exitCode });
     });
@@ -244,16 +226,15 @@ export class CodexAdapter implements IProviderAdapter {
   /**
    * Wait for ready signal
    */
-  private async waitForReady(ptyProcess: IPty, timeout: number): Promise<void> {
+  private async waitForReady(ptyProcess: IPtyProcess, timeout: number): Promise<void> {
     return new Promise((resolve, reject) => {
-      let buffer = '';
+      const cleanup = () => {
+        ptyProcess.removeListener('data', onData);
+        clearTimeout(timeoutHandle);
+      };
 
       const onData = (data: string) => {
-        buffer += data;
-
-        // Parse line by line
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        const lines = data.split('\n');
 
         for (const line of lines) {
           if (!line.trim()) continue;
@@ -261,8 +242,7 @@ export class CodexAdapter implements IProviderAdapter {
           try {
             const parsed: CodexMessage = JSON.parse(line);
             if (parsed.type === 'ready') {
-              clearTimeout(timeoutHandle);
-              ptyProcess.removeListener('data', onData);
+              cleanup();
               resolve();
               return;
             }
@@ -272,12 +252,12 @@ export class CodexAdapter implements IProviderAdapter {
         }
       };
 
-      ptyProcess.on('data', onData);
-
       const timeoutHandle = setTimeout(() => {
-        ptyProcess.removeListener('data', onData);
+        cleanup();
         reject(new Error(`Codex initialization timeout after ${timeout}ms`));
       }, timeout);
+
+      ptyProcess.on('data', onData);
     });
   }
 

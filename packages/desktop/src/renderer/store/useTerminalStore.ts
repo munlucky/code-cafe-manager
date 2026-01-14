@@ -33,37 +33,37 @@ export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
   load: async () => {
     set({ loading: true, error: null });
     try {
-      const [statusResponse, metricsResponse] = await Promise.all([
+      const [statusRes, metricsRes] = await Promise.all([
         window.api.terminal.getStatus(),
         window.api.terminal.getMetrics(),
       ]);
 
-      const newState: Partial<TerminalStoreState> = { loading: false };
-      let errorMessage: string | null = null;
+      const errors: string[] = [];
+      const updates: Partial<TerminalStoreState> = {};
 
-      if (statusResponse.success && statusResponse.data) {
-        newState.status = statusResponse.data;
+      if (statusRes.success && statusRes.data) {
+        updates.status = statusRes.data;
       } else {
-        errorMessage = statusResponse.error?.message || 'Failed to load terminal status';
+        errors.push(statusRes.error?.message || 'Failed to load terminal status');
       }
 
-      if (metricsResponse.success && metricsResponse.data) {
-        newState.metrics = metricsResponse.data;
+      if (metricsRes.success && metricsRes.data) {
+        updates.metrics = metricsRes.data;
       } else {
-        const metricsError = metricsResponse.error?.message || 'Failed to load terminal metrics';
-        errorMessage = errorMessage ? `${errorMessage}, ${metricsError}` : metricsError;
+        errors.push(metricsRes.error?.message || 'Failed to load terminal metrics');
       }
 
-      if (errorMessage) {
-        newState.error = errorMessage;
+      if (errors.length > 0) {
+        updates.error = errors.join(', ');
       }
 
-      set(newState);
+      set(updates);
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
-        loading: false,
       });
+    } finally {
+      set({ loading: false });
     }
   },
 
@@ -71,21 +71,20 @@ export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const response = await window.api.terminal.init(config);
-      if (response.success) {
-        set({ initialized: true, loading: false });
-        // Load initial status
-        await get().load();
-      } else {
-        set({
-          error: response.error?.message || 'Failed to initialize terminal pool',
-          loading: false
-        });
+
+      if (!response.success) {
+        throw new Error(response.error?.message || 'Failed to initialize terminal pool');
       }
+
+      set({ initialized: true });
+      // Load initial status
+      await get().load();
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
-        loading: false
       });
+    } finally {
+      set({ loading: false });
     }
   },
 
@@ -93,24 +92,22 @@ export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const response = await window.api.terminal.shutdown();
-      if (response.success) {
-        set({
-          initialized: false,
-          status: null,
-          metrics: null,
-          loading: false
-        });
-      } else {
-        set({
-          error: response.error?.message || 'Failed to shutdown terminal pool',
-          loading: false
-        });
+
+      if (!response.success) {
+        throw new Error(response.error?.message || 'Failed to shutdown terminal pool');
       }
+
+      set({
+        initialized: false,
+        status: null,
+        metrics: null,
+      });
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
-        loading: false
       });
+    } finally {
+      set({ loading: false });
     }
   },
 

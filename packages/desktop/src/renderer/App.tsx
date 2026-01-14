@@ -12,7 +12,7 @@ import { GlobalLobby } from './components/views/GlobalLobby';
 import { CafeDashboard } from './components/views/CafeDashboard';
 import { RoleManager } from './components/role/RoleManager';
 
-const VIEW_MAP = {
+const VIEW_MAP: Record<string, React.ComponentType> = {
   dashboard: Dashboard,
   'new-order': NewOrder,
   orders: OrderDetail,
@@ -20,23 +20,28 @@ const VIEW_MAP = {
   roles: RoleManager,
 };
 
-export function App() {
+
+// Helper function to encapsulate view selection logic
+function selectViewComponent(view: string): React.ComponentType {
+  if (view === 'dashboard') {
+    return CafeDashboard;
+  }
+  return VIEW_MAP[view];
+}
+
+export function App(): JSX.Element {
   const currentView = useViewStore((s) => s.currentView);
   const currentCafeId = useCafeStore((s) => s.currentCafeId);
 
-  // IPC 이벤트 리스너 등록
   useIpcEffect();
 
   // Phase 1: Cafe context routing
   // If no cafe is selected, show Global Lobby
-  // If a cafe is selected, show Cafe Dashboard (or legacy views)
   if (!currentCafeId) {
     return <GlobalLobby />;
   }
 
-  // Cafe is selected - show Cafe Dashboard by default
-  // Later phases will add more sophisticated routing
-  const ViewComponent = currentView === 'dashboard' ? CafeDashboard : VIEW_MAP[currentView];
+const ViewComponent = selectViewComponent(currentView);
 
   return (
     <Layout>

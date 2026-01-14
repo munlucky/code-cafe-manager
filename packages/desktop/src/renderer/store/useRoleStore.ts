@@ -4,19 +4,7 @@
  */
 
 import { create } from 'zustand';
-// import type { Role } from '@codecafe/core/types/role';
-
-// Temporary type for compilation
-interface Role {
-  id: string;
-  name: string;
-  systemPrompt: string;
-  skills: string[];
-  recommendedProvider: string;
-  variables: any[];
-  isDefault: boolean;
-  source: string;
-}
+import type { Role } from '@codecafe/core/types/role';
 
 interface RoleStoreState {
   // State
@@ -44,18 +32,16 @@ export const useRoleStore = create<RoleStoreState>((set, get) => ({
     try {
       const response = await window.api.role.list();
       if (response.success && response.data) {
-        set({ roles: response.data, loading: false });
+        set({ roles: response.data });
       } else {
-        set({
-          error: response.error?.message || 'Failed to load roles',
-          loading: false
-        });
+        throw new Error(response.error?.message || 'Failed to load roles');
       }
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
-        loading: false
       });
+    } finally {
+      set({ loading: false });
     }
   },
 

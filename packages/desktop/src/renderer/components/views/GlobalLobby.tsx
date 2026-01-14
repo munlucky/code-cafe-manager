@@ -12,59 +12,48 @@ import { Plus, Coffee } from 'lucide-react';
 import type { Cafe } from '@codecafe/core';
 
 export function GlobalLobby() {
-  const { cafes, setCafes, addCafe, removeCafe, setCurrentCafe, setLoading, isLoading } =
-    useCafeStore();
+  const {
+    cafes,
+    loading,
+    error: storeError,
+    loadCafes,
+    createCafe,
+    deleteCafe,
+    selectCafe
+  } = useCafeStore();
+
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newCafePath, setNewCafePath] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  // Combine store error and local error for display
+  const displayError = storeError || localError;
 
   // Load cafes on mount
   useEffect(() => {
     loadCafes();
-  }, []);
-
-  const loadCafes = async () => {
-    try {
-      setLoading(true);
-      const loadedCafes = await window.codecafe.cafe.list();
-      setCafes(loadedCafes);
-    } catch (err: any) {
-      console.error('[Global Lobby] Failed to load cafes:', err);
-      setError(err.message || 'Failed to load cafes');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [loadCafes]);
 
   const handleCafeClick = async (cafe: Cafe) => {
-    try {
-      // Set as current cafe
-      setCurrentCafe(cafe.id);
-      await window.codecafe.cafe.setLastAccessed(cafe.id);
-
-      // Navigate to cafe dashboard (will be implemented when routing is added)
-      console.log('[Global Lobby] Navigating to cafe:', cafe.id);
-    } catch (err: any) {
-      console.error('[Global Lobby] Failed to access cafe:', err);
-      setError(err.message || 'Failed to access cafe');
-    }
+    // selectCafe handles persistence of "last accessed"
+    await selectCafe(cafe.id);
+    console.log('[Global Lobby] Navigating to cafe:', cafe.id);
   };
 
   const handleAddCafe = async () => {
     if (!newCafePath.trim()) {
-      setError('Please enter a valid path');
+      setLocalError('Please enter a valid path');
       return;
     }
 
     try {
-      setError(null);
-      const cafe = await window.codecafe.cafe.create({ path: newCafePath.trim() });
-      addCafe(cafe);
+      setLocalError(null);
+      await createCafe(newCafePath.trim());
       setShowAddDialog(false);
       setNewCafePath('');
     } catch (err: any) {
       console.error('[Global Lobby] Failed to add cafe:', err);
-      setError(err.message || 'Failed to add cafe');
+      // Store error is automatically set by the store, but we can log it here
     }
   };
 
@@ -74,15 +63,13 @@ export function GlobalLobby() {
     }
 
     try {
-      await window.codecafe.cafe.delete(cafe.id);
-      removeCafe(cafe.id);
+      await deleteCafe(cafe.id);
     } catch (err: any) {
       console.error('[Global Lobby] Failed to delete cafe:', err);
-      setError(err.message || 'Failed to delete cafe');
     }
   };
 
-  if (isLoading) {
+  if (loading && cafes.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-gray-400">Loading cafes...</div>
@@ -105,9 +92,9 @@ export function GlobalLobby() {
       </div>
 
       {/* Error Display */}
-      {error && (
+      {displayError && (
         <div className="mb-4 p-3 bg-red-900/20 border border-red-500/50 rounded text-red-300 text-sm">
-          {error}
+          {displayError}
         </div>
       )}
 
@@ -130,13 +117,13 @@ export function GlobalLobby() {
                 }
               }}
             />
-            <Button onClick={handleAddCafe}>Add</Button>
+            <Button onClick={handleAddCafe} disabled={loading}>Add</Button>
             <Button
               variant="secondary"
               onClick={() => {
                 setShowAddDialog(false);
                 setNewCafePath('');
-                setError(null);
+                setLocalError(null);
               }}
             >
               Cancel

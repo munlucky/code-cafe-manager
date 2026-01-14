@@ -24,106 +24,104 @@ interface PoolStatus {
   maxTerminals: number;
 }
 
-// Renderer에서 사용할 API 노출
+// Helper to create IPC invoke functions
+function createIpcInvoker<T>(channel: string) {
+  return (...args: any[]): Promise<T> => ipcRenderer.invoke(channel, ...args);
+}
+
+// Helper to manage IPC event listeners
+function setupIpcListener<T>(channel: string, callback: (event: T) => void): () => void {
+  const listener = (_: any, event: T) => callback(event);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+}
+
 contextBridge.exposeInMainWorld('codecafe', {
-  // Phase 1: Cafe Management
   cafe: {
-    list: (): Promise<Cafe[]> => ipcRenderer.invoke('cafe:list'),
-    get: (id: string): Promise<Cafe | null> => ipcRenderer.invoke('cafe:get', id),
-    create: (params: CreateCafeParams): Promise<Cafe> => ipcRenderer.invoke('cafe:create', params),
-    update: (id: string, params: UpdateCafeParams): Promise<Cafe> =>
-      ipcRenderer.invoke('cafe:update', id, params),
-    delete: (id: string): Promise<void> => ipcRenderer.invoke('cafe:delete', id),
-    setLastAccessed: (id: string): Promise<void> => ipcRenderer.invoke('cafe:setLastAccessed', id),
-    getLastAccessed: (): Promise<Cafe | null> => ipcRenderer.invoke('cafe:getLastAccessed'),
+    list: createIpcInvoker<Cafe[]>('cafe:list'),
+    get: createIpcInvoker<Cafe | null>('cafe:get'),
+    create: createIpcInvoker<Cafe>('cafe:create'),
+    update: createIpcInvoker<Cafe>('cafe:update'),
+    delete: createIpcInvoker<void>('cafe:delete'),
+    setLastAccessed: createIpcInvoker<void>('cafe:setLastAccessed'),
+    getLastAccessed: createIpcInvoker<Cafe | null>('cafe:getLastAccessed'),
   },
-  // 바리스타 관리
-  createBarista: (provider: string) => ipcRenderer.invoke('createBarista', provider),
-  getAllBaristas: () => ipcRenderer.invoke('getAllBaristas'),
 
-  // 주문 관리
-  createOrder: (params: any) => ipcRenderer.invoke('createOrder', params),
-  getAllOrders: () => ipcRenderer.invoke('getAllOrders'),
-  getOrder: (orderId: string) => ipcRenderer.invoke('getOrder', orderId),
-  getOrderLog: (orderId: string) => ipcRenderer.invoke('getOrderLog', orderId),
-  cancelOrder: (orderId: string) => ipcRenderer.invoke('cancelOrder', orderId),
-
-  // Receipt
-  getReceipts: () => ipcRenderer.invoke('getReceipts'),
-
-  // Provider 관리 (M2)
-  getAvailableProviders: () => ipcRenderer.invoke('getAvailableProviders'),
-
-  // Worktree 관리 (M2)
-  listWorktrees: (repoPath: string) => ipcRenderer.invoke('listWorktrees', repoPath),
-  exportPatch: (worktreePath: string, baseBranch: string, outputPath?: string) =>
-    ipcRenderer.invoke('exportPatch', worktreePath, baseBranch, outputPath),
-  removeWorktree: (worktreePath: string, force?: boolean) =>
-    ipcRenderer.invoke('removeWorktree', worktreePath, force),
-  openWorktreeFolder: (worktreePath: string) =>
-    ipcRenderer.invoke('openWorktreeFolder', worktreePath),
-
-  // Orchestrator UI (M2-4)
-  listWorkflows: () => ipcRenderer.invoke('workflow:list'),
-  getWorkflow: (workflowId: string) => ipcRenderer.invoke('workflow:get', workflowId),
-  runWorkflow: (workflowId: string, options?: { mode?: string; interactive?: boolean }) =>
-    ipcRenderer.invoke('workflow:run', workflowId, options),
-  listRuns: () => ipcRenderer.invoke('run:list'),
-  getRunStatus: (runId: string) => ipcRenderer.invoke('run:status', runId),
-  resumeRun: (runId: string) => ipcRenderer.invoke('run:resume', runId),
-  getRunLogs: (runId: string) => ipcRenderer.invoke('run:logs', runId),
-  getAssignments: () => ipcRenderer.invoke('config:assignments:get'),
-  setAssignment: (stage: string, provider: string, role: string) =>
-    ipcRenderer.invoke('config:assignments:set', stage, provider, role),
-  listProfiles: (stage: string) => ipcRenderer.invoke('config:profiles:list', stage),
-  setProfile: (stage: string, profile: string) =>
-    ipcRenderer.invoke('config:profiles:set', stage, profile),
-  listRoles: () => ipcRenderer.invoke('config:roles:list'),
-
-  // 이벤트 리스너
-  onBaristaEvent: (callback: (event: any) => void) => {
-    // 기존 리스너 제거 후 새로 등록
-    ipcRenderer.removeAllListeners('barista:event');
-    ipcRenderer.on('barista:event', (_, event) => callback(event));
+  barista: {
+    create: createIpcInvoker<any>('barista:create'),
+    getAll: createIpcInvoker<any>('barista:getAll'),
+    onEvent: (callback: (event: any) => void) => setupIpcListener('barista:event', callback),
   },
-  onOrderEvent: (callback: (event: any) => void) => {
-    // 기존 리스너 제거 후 새로 등록
-    ipcRenderer.removeAllListeners('order:event');
-    ipcRenderer.on('order:event', (_, event) => callback(event));
-  },
-  onOrderAssigned: (callback: (data: any) => void) => {
-    ipcRenderer.removeAllListeners('order:assigned');
-    ipcRenderer.on('order:assigned', (_, data) => callback(data));
-  },
-  onOrderCompleted: (callback: (data: any) => void) => {
-    ipcRenderer.removeAllListeners('order:completed');
-    ipcRenderer.on('order:completed', (_, data) => callback(data));
-  },
-});
 
-// Phase 2: Role and Terminal APIs (separate namespace)
-contextBridge.exposeInMainWorld('api', {
+  order: {
+    create: createIpcInvoker<any>('order:create'),
+    getAll: createIpcInvoker<any>('order:getAll'),
+    get: createIpcInvoker<any>('order:get'),
+    getLog: createIpcInvoker<any>('order:getLog'),
+    cancel: createIpcInvoker<any>('order:cancel'),
+    onEvent: (callback: (event: any) => void) => setupIpcListener('order:event', callback),
+    onAssigned: (callback: (data: any) => void) => setupIpcListener('order:assigned', callback),
+    onCompleted: (callback: (data: any) => void) => setupIpcListener('order:completed', callback),
+  },
+
+  receipt: {
+    getAll: createIpcInvoker<any>('receipt:getAll'),
+  },
+
+  provider: {
+    getAvailable: createIpcInvoker<any>('provider:getAvailable'),
+  },
+
+  worktree: {
+    list: createIpcInvoker<any>('worktree:list'),
+    exportPatch: createIpcInvoker<any>('worktree:exportPatch'),
+    remove: createIpcInvoker<any>('worktree:remove'),
+    openFolder: createIpcInvoker<any>('worktree:openFolder'),
+  },
+
+  workflow: {
+    list: createIpcInvoker<any>('workflow:list'),
+    get: createIpcInvoker<any>('workflow:get'),
+    run: createIpcInvoker<any>('workflow:run'),
+  },
+
+  run: {
+    list: createIpcInvoker<any>('run:list'),
+    getStatus: createIpcInvoker<any>('run:status'),
+    resume: createIpcInvoker<any>('run:resume'),
+    getLogs: createIpcInvoker<any>('run:logs'),
+  },
+
+  config: {
+    assignments: {
+      get: createIpcInvoker<any>('config:assignments:get'),
+      set: createIpcInvoker<any>('config:assignments:set'),
+    },
+    profiles: {
+      list: createIpcInvoker<any>('config:profiles:list'),
+      set: createIpcInvoker<any>('config:profiles:set'),
+    },
+    roles: {
+      list: createIpcInvoker<any>('config:roles:list'),
+    },
+  },
+
   role: {
-    list: (): Promise<any> => ipcRenderer.invoke('role:list'),
-    get: (id: string): Promise<any> => ipcRenderer.invoke('role:get', id),
-    listDefault: (): Promise<any> => ipcRenderer.invoke('role:list-default'),
-    listUser: (): Promise<any> => ipcRenderer.invoke('role:list-user'),
-    reload: (): Promise<any> => ipcRenderer.invoke('role:reload'),
+    list: createIpcInvoker<any>('role:list'),
+    get: createIpcInvoker<any>('role:get'),
+    listDefault: createIpcInvoker<any>('role:listDefault'),
+    listUser: createIpcInvoker<any>('role:listUser'),
+    reload: createIpcInvoker<any>('role:reload'),
   },
 
   terminal: {
-    init: (config: TerminalPoolConfig): Promise<any> => ipcRenderer.invoke('terminal:init', config),
-    getStatus: (): Promise<any> => ipcRenderer.invoke('terminal:pool-status'),
-    getMetrics: (): Promise<any> => ipcRenderer.invoke('terminal:pool-metrics'),
-    subscribe: (terminalId: string): Promise<any> => ipcRenderer.invoke('terminal:subscribe', terminalId),
-    unsubscribe: (terminalId: string): Promise<any> => ipcRenderer.invoke('terminal:unsubscribe', terminalId),
-    shutdown: (): Promise<any> => ipcRenderer.invoke('terminal:shutdown'),
-    onData: (terminalId: string, callback: (data: string) => void): (() => void) => {
-      const channel = `terminal:data:${terminalId}`;
-      const listener = (event: any, data: string) => callback(data);
-      ipcRenderer.on(channel, listener);
-      // Return unsubscribe function
-      return () => ipcRenderer.removeListener(channel, listener);
-    },
+    init: createIpcInvoker<any>('terminal:init'),
+    getStatus: createIpcInvoker<any>('terminal:poolStatus'),
+    getMetrics: createIpcInvoker<any>('terminal:poolMetrics'),
+    subscribe: createIpcInvoker<any>('terminal:subscribe'),
+    unsubscribe: createIpcInvoker<any>('terminal:unsubscribe'),
+    shutdown: createIpcInvoker<any>('terminal:shutdown'),
+    onData: (terminalId: string, callback: (data: string) => void) =>
+      setupIpcListener(`terminal:data:${terminalId}`, callback),
   },
 });

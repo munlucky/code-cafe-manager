@@ -10,7 +10,7 @@ import * as path from 'path';
 import type { Role as CoreRole } from '@codecafe/core';
 import { RoleSchema, RoleVariableSchema, ProviderTypeSchema } from '@codecafe/core';
 import { RoleManager } from '@codecafe/orchestrator';
-import type { Role as OrchestratorRole } from '@codecafe/orchestrator';
+import type { Role as OrchestratorRole, ProviderType } from '@codecafe/orchestrator';
 
 /**
  * Converts an orchestrator Role (Phase 1/2 compatible) to a core Role (Phase 2 only).
@@ -71,7 +71,7 @@ class RoleRegistry {
       name: role.name,
       template: role.systemPrompt,
       skills: role.skills,
-      recommendedProvider: role.recommendedProvider as any, // Type assertion for compatibility
+      recommendedProvider: role.recommendedProvider as ProviderType,
       variables: role.variables,
       isDefault: role.isDefault,
       source: role.source,
@@ -125,6 +125,17 @@ export enum RoleErrorCode {
   UNKNOWN = 'ROLE_UNKNOWN_ERROR',
 }
 
+class RoleError extends Error {
+  constructor(
+    public readonly code: RoleErrorCode,
+    message: string,
+    public readonly details?: any,
+  ) {
+    super(message);
+    this.name = 'RoleError';
+  }
+}
+
 interface ErrorResponse {
   success: false;
   error: {
@@ -160,6 +171,9 @@ async function handleIpc<T>(
     const result = await Promise.resolve(logic());
     return createSuccessResponse(result);
   } catch (error) {
+    if (error instanceof RoleError) {
+      return createErrorResponse(error.code, error.message, error.details);
+    }
     if (error instanceof z.ZodError) {
       return createErrorResponse(
         RoleErrorCode.VALIDATION_FAILED,
@@ -188,7 +202,7 @@ export function registerRoleIpcHandlers(): void {
       const validatedId = RoleIdSchema.parse(roleId);
       const role = roleRegistry.get(validatedId);
       if (!role) {
-        throw createErrorResponse(RoleErrorCode.NOT_FOUND, `Role not found: ${validatedId}`);
+        throw new RoleError(RoleErrorCode.NOT_FOUND, `Role not found: ${validatedId}`);
       }
       return role;
     }, { unknown: 'Failed to get role', zod: 'Invalid role ID' }),
@@ -198,7 +212,7 @@ export function registerRoleIpcHandlers(): void {
     handleIpc(() => {
       const validatedData = RoleCreateSchema.parse(roleData);
       if (roleRegistry.get(validatedData.id)) {
-        throw createErrorResponse(RoleErrorCode.ALREADY_EXISTS, `Role already exists: ${validatedData.id}`);
+        throw new RoleError(RoleErrorCode.ALREADY_EXISTS, `Role already exists: ${validatedData.id}`);
       }
       const role: CoreRole = {
         ...validatedData,
@@ -217,7 +231,7 @@ export function registerRoleIpcHandlers(): void {
       const validatedUpdates = RoleUpdateSchema.parse(updates);
       const existingRole = roleRegistry.get(validatedId);
       if (!existingRole) {
-        throw createErrorResponse(RoleErrorCode.NOT_FOUND, `Role not found: ${validatedId}`);
+        throw new RoleError(RoleErrorCode.NOT_FOUND, `Role not found: ${validatedId}`);
       }
       const updatedRole: CoreRole = {
         ...existingRole,
@@ -234,10 +248,10 @@ export function registerRoleIpcHandlers(): void {
       const validatedId = RoleIdSchema.parse(roleId);
       const existingRole = roleRegistry.get(validatedId);
       if (!existingRole) {
-        throw createErrorResponse(RoleErrorCode.NOT_FOUND, `Role not found: ${validatedId}`);
+        throw new RoleError(RoleErrorCode.NOT_FOUND, `Role not found: ${validatedId}`);
       }
       if (existingRole.isDefault) {
-        throw createErrorResponse(RoleErrorCode.VALIDATION_FAILED, 'Cannot delete a default role');
+        throw new RoleError(RoleErrorCode.VALIDATION_FAILED, 'Cannot delete a default role');
       }
       roleRegistry.delete(validatedId);
       return undefined;

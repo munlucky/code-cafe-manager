@@ -3,18 +3,27 @@
  * Order management for a specific Cafe
  */
 
-import { useEffect, useState } from 'react';
-import { useCafeStore } from '../../store/useCafeStore';
-import { Button } from '../ui/Button';
-import { Card } from '../ui/Card';
-import { Badge } from '../ui/Badge';
-import { EmptyState } from '../ui/EmptyState';
-import { Plus, ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { useEffect, useState, useMemo, type ReactElement } from 'react';
+import {
+  Plus,
+  ArrowLeft,
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  type LucideIcon,
+} from 'lucide-react';
 import { OrderStatus } from '@codecafe/core';
 import type { Order } from '@codecafe/core';
 
+import { useCafeStore } from '../../store/useCafeStore';
+import { Badge } from '../ui/Badge';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
+import { EmptyState } from '../ui/EmptyState';
+
 // Mock orders data (Phase 1)
-const mockOrdersData: Order[] = [
+const MOCK_ORDERS_DATA: Order[] = [
   {
     id: 'order-001',
     workflowId: 'feature-implementation',
@@ -118,9 +127,9 @@ const mockOrdersData: Order[] = [
   },
 ];
 
-const statusConfig: Record<
+const STATUS_CONFIG: Record<
   OrderStatus,
-  { label: string; variant: 'default' | 'success' | 'error' | 'warning'; icon: any }
+  { label: string; variant: 'default' | 'success' | 'error' | 'warning'; icon: LucideIcon }
 > = {
   [OrderStatus.PENDING]: { label: 'Pending', variant: 'default', icon: Clock },
   [OrderStatus.RUNNING]: { label: 'Running', variant: 'warning', icon: AlertCircle },
@@ -129,7 +138,148 @@ const statusConfig: Record<
   [OrderStatus.CANCELLED]: { label: 'Cancelled', variant: 'default', icon: XCircle },
 };
 
-export function CafeDashboard() {
+interface OrderCardProps {
+  order: Order;
+}
+
+function OrderCard({ order }: OrderCardProps): ReactElement {
+  const config = STATUS_CONFIG[order.status];
+  const Icon = config.icon;
+
+  return (
+    <Card className="p-4 hover:border-coffee transition-colors">
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex-1">
+          <h3 className="font-semibold text-bone mb-1">{order.workflowName}</h3>
+          <p className="text-sm text-gray-400">ID: {order.id}</p>
+        </div>
+        <Badge variant={config.variant} className="flex items-center gap-1">
+          <Icon className="w-3 h-3" />
+          {config.label}
+        </Badge>
+      </div>
+
+      {Object.keys(order.vars).length > 0 && (
+        <div className="mb-3 space-y-1">
+          {Object.entries(order.vars).map(([key, value]) => (
+            <div key={key} className="text-sm">
+              <span className="text-gray-400">{key}:</span>{' '}
+              <span className="text-bone">{String(value)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 mb-2 text-sm">
+        <span className="text-gray-400">Provider:</span>
+        <span className="text-bone">{order.provider}</span>
+      </div>
+
+      <div className="text-xs text-gray-500 space-y-1">
+        <div>Created: {new Date(order.createdAt).toLocaleString()}</div>
+        {order.startedAt && <div>Started: {new Date(order.startedAt).toLocaleString()}</div>}
+        {order.endedAt && <div>Ended: {new Date(order.endedAt).toLocaleString()}</div>}
+      </div>
+
+      {order.error && (
+        <div className="mt-3 p-2 bg-red-900/20 border border-red-500/50 rounded text-red-300 text-xs">
+          {order.error}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+interface OrderListProps {
+  orders: Order[];
+  onNewOrder: () => void;
+}
+
+function OrderList({ orders, onNewOrder }: OrderListProps): ReactElement {
+  if (orders.length === 0) {
+    return (
+      <EmptyState
+        icon={Clock}
+        title="No Orders Yet"
+        description="Create your first order to get started"
+        action={
+          <Button onClick={onNewOrder} className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            New Order
+          </Button>
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {orders.map((order) => (
+        <OrderCard key={order.id} order={order} />
+      ))}
+    </div>
+  );
+}
+
+interface OrderKanbanProps {
+  orders: Order[];
+}
+
+function OrderKanban({ orders }: OrderKanbanProps): ReactElement {
+  const columns = useMemo(() => {
+    const cols: Record<OrderStatus, Order[]> = {
+      [OrderStatus.PENDING]: [],
+      [OrderStatus.RUNNING]: [],
+      [OrderStatus.COMPLETED]: [],
+      [OrderStatus.FAILED]: [],
+      [OrderStatus.CANCELLED]: [],
+    };
+
+    orders.forEach((order) => {
+      if (cols[order.status]) {
+        cols[order.status].push(order);
+      }
+    });
+    return cols;
+  }, [orders]);
+
+  return (
+    <div className="grid grid-cols-5 gap-4 h-full">
+      {(Object.entries(columns) as [OrderStatus, Order[]][]).map(([status, ordersList]) => {
+        const config = STATUS_CONFIG[status];
+        return (
+          <div key={status} className="flex flex-col">
+            <div className="mb-3 pb-2 border-b border-border">
+              <h3 className="font-semibold text-bone">{config.label}</h3>
+              <p className="text-sm text-gray-400">{ordersList.length} orders</p>
+            </div>
+            <div className="space-y-3 overflow-auto">
+              {ordersList.map((order) => (
+                <OrderCard key={order.id} order={order} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+interface InfoItemProps {
+  label: string;
+  value: string | number;
+}
+
+function InfoItem({ label, value }: InfoItemProps): ReactElement {
+  return (
+    <div>
+      <span className="text-gray-400">{label}:</span>{' '}
+      <span className="text-bone font-medium">{value}</span>
+    </div>
+  );
+}
+
+export function CafeDashboard(): ReactElement {
   const { getCurrentCafe, setCurrentCafe } = useCafeStore();
   const currentCafe = getCurrentCafe();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -137,18 +287,13 @@ export function CafeDashboard() {
 
   useEffect(() => {
     // Phase 1: Load mock orders
-    // Phase 2: Will load real orders from orchestrator
-    setOrders(mockOrdersData);
+    setOrders(MOCK_ORDERS_DATA);
   }, [currentCafe]);
 
-  const handleBackToLobby = () => {
-    setCurrentCafe(null);
-  };
-
-  const handleNewOrder = () => {
-    console.log('[Cafe Dashboard] New Order clicked (placeholder)');
-    // Phase 2: Navigate to Order Creation Kiosk
-  };
+  const activeOrdersCount = useMemo(
+    () => orders.filter((o) => o.status === OrderStatus.RUNNING).length,
+    [orders]
+  );
 
   if (!currentCafe) {
     return (
@@ -158,121 +303,12 @@ export function CafeDashboard() {
     );
   }
 
-
-  const renderOrderCard = (order: Order) => {
-    const status = order.status;
-    const config = statusConfig[status];
-    const Icon = config.icon;
-
-    return (
-      <Card key={order.id} className="p-4 hover:border-coffee transition-colors">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex-1">
-            <h3 className="font-semibold text-bone mb-1">{order.workflowName}</h3>
-            <p className="text-sm text-gray-400">ID: {order.id}</p>
-          </div>
-          <Badge variant={config.variant} className="flex items-center gap-1">
-            <Icon className="w-3 h-3" />
-            {config.label}
-          </Badge>
-        </div>
-
-        {/* Variables */}
-        {Object.keys(order.vars).length > 0 && (
-          <div className="mb-3 space-y-1">
-            {Object.entries(order.vars).map(([key, value]) => (
-              <div key={key} className="text-sm">
-                <span className="text-gray-400">{key}:</span>{' '}
-                <span className="text-bone">{String(value)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Provider */}
-        <div className="flex items-center gap-2 mb-2 text-sm">
-          <span className="text-gray-400">Provider:</span>
-          <span className="text-bone">{order.provider}</span>
-        </div>
-
-        {/* Timestamps */}
-        <div className="text-xs text-gray-500 space-y-1">
-          <div>Created: {new Date(order.createdAt).toLocaleString()}</div>
-          {order.startedAt && (
-            <div>Started: {new Date(order.startedAt).toLocaleString()}</div>
-          )}
-          {order.endedAt && <div>Ended: {new Date(order.endedAt).toLocaleString()}</div>}
-        </div>
-
-        {/* Error */}
-        {order.error && (
-          <div className="mt-3 p-2 bg-red-900/20 border border-red-500/50 rounded text-red-300 text-xs">
-            {order.error}
-          </div>
-        )}
-      </Card>
-    );
+  const handleBackToLobby = (): void => {
+    setCurrentCafe(null);
   };
 
-  const renderListView = () => {
-    if (orders.length === 0) {
-      return (
-        <EmptyState
-          icon={Clock}
-          title="No Orders Yet"
-          description="Create your first order to get started"
-          action={
-            <Button onClick={handleNewOrder} className="flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              New Order
-            </Button>
-          }
-        />
-      );
-    }
-
-    return (
-      <div className="space-y-3">
-        {orders.map((order) => renderOrderCard(order))}
-      </div>
-    );
-  };
-
-  const renderKanbanView = () => {
-    const columns: Record<OrderStatus, Order[]> = {
-      [OrderStatus.PENDING]: [],
-      [OrderStatus.RUNNING]: [],
-      [OrderStatus.COMPLETED]: [],
-      [OrderStatus.FAILED]: [],
-      [OrderStatus.CANCELLED]: [],
-    };
-
-    orders.forEach((order) => {
-      const status = order.status;
-      if (columns[status]) {
-        columns[status].push(order);
-      }
-    });
-
-    return (
-      <div className="grid grid-cols-5 gap-4 h-full">
-        {Object.entries(columns).map(([status, ordersList]) => {
-          const config = statusConfig[status as OrderStatus];
-          return (
-            <div key={status} className="flex flex-col">
-              <div className="mb-3 pb-2 border-b border-border">
-                <h3 className="font-semibold text-bone">{config.label}</h3>
-                <p className="text-sm text-gray-400">{ordersList.length} orders</p>
-              </div>
-              <div className="space-y-3 overflow-auto">
-                {ordersList.map((order) => renderOrderCard(order))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
+  const handleNewOrder = (): void => {
+    console.log('[Cafe Dashboard] New Order clicked (placeholder)');
   };
 
   return (
@@ -280,7 +316,11 @@ export function CafeDashboard() {
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="secondary" onClick={handleBackToLobby} className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleBackToLobby}
+            className="flex items-center gap-2"
+          >
             <ArrowLeft className="w-4 h-4" />
             Back
           </Button>
@@ -292,26 +332,19 @@ export function CafeDashboard() {
         <div className="flex items-center gap-2">
           {/* View Mode Toggle */}
           <div className="flex border border-border rounded overflow-hidden">
-            <button
-              onClick={() => setViewMode('list')}
-              className={`px-3 py-1 text-sm transition-colors ${
-                viewMode === 'list'
-                  ? 'bg-coffee text-bone'
-                  : 'bg-background text-gray-400 hover:text-bone'
-              }`}
-            >
-              List
-            </button>
-            <button
-              onClick={() => setViewMode('kanban')}
-              className={`px-3 py-1 text-sm transition-colors ${
-                viewMode === 'kanban'
-                  ? 'bg-coffee text-bone'
-                  : 'bg-background text-gray-400 hover:text-bone'
-              }`}
-            >
-              Kanban
-            </button>
+            {(['list', 'kanban'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`px-3 py-1 text-sm capitalize transition-colors ${
+                  viewMode === mode
+                    ? 'bg-coffee text-bone'
+                    : 'bg-background text-gray-400 hover:text-bone'
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
           </div>
           <Button onClick={handleNewOrder} className="flex items-center gap-2">
             <Plus className="w-4 h-4" />
@@ -323,24 +356,19 @@ export function CafeDashboard() {
       {/* Cafe Info */}
       <div className="mb-4 p-3 bg-card border border-border rounded flex items-center justify-between">
         <div className="flex items-center gap-4 text-sm">
-          <div>
-            <span className="text-gray-400">Branch:</span>{' '}
-            <span className="text-bone font-medium">{currentCafe.currentBranch}</span>
-          </div>
-          <div>
-            <span className="text-gray-400">Active Orders:</span>{' '}
-            <span className="text-bone font-medium">{orders.filter((o) => o.status === OrderStatus.RUNNING).length}</span>
-          </div>
-          <div>
-            <span className="text-gray-400">Base Branch:</span>{' '}
-            <span className="text-bone font-medium">{currentCafe.settings.baseBranch}</span>
-          </div>
+          <InfoItem label="Branch" value={currentCafe.currentBranch} />
+          <InfoItem label="Active Orders" value={activeOrdersCount} />
+          <InfoItem label="Base Branch" value={currentCafe.settings.baseBranch} />
         </div>
       </div>
 
       {/* Orders */}
       <div className="flex-1 overflow-auto">
-        {viewMode === 'list' ? renderListView() : renderKanbanView()}
+        {viewMode === 'list' ? (
+          <OrderList orders={orders} onNewOrder={handleNewOrder} />
+        ) : (
+          <OrderKanban orders={orders} />
+        )}
       </div>
     </div>
   );

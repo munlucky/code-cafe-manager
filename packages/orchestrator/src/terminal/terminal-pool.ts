@@ -50,19 +50,20 @@ export class TerminalPool {
    */
   private initializeSemaphores(): void {
     for (const [provider, providerConfig] of Object.entries(this.config.perProvider)) {
-      const semaphore = new PoolSemaphore(providerConfig.size);
-      this.semaphores.set(provider as ProviderType, semaphore);
-
-      // Initialize metrics
-      this.metrics.providers[provider] = {
-        totalTerminals: 0,
-        idleTerminals: 0,
-        busyTerminals: 0,
-        crashedTerminals: 0,
-        activeLeases: 0,
-        p99WaitTime: 0,
-      };
+      this.semaphores.set(provider as ProviderType, new PoolSemaphore(providerConfig.size));
+      this.resetProviderMetrics(provider);
     }
+  }
+
+  private resetProviderMetrics(provider: string): void {
+    this.metrics.providers[provider] = {
+      totalTerminals: 0,
+      idleTerminals: 0,
+      busyTerminals: 0,
+      crashedTerminals: 0,
+      activeLeases: 0,
+      p99WaitTime: 0,
+    };
   }
 
   /**
@@ -78,55 +79,71 @@ export class TerminalPool {
       throw new ProviderNotFoundError(provider);
     }
 
-    const timeout = timeoutMs || providerConfig.timeout;
     const semaphore = this.semaphores.get(provider);
     if (!semaphore) {
       throw new SemaphoreNotFoundError(provider);
     }
 
+    const timeout = timeoutMs || providerConfig.timeout;
+
     try {
-      // Acquire terminal through semaphore
-      const terminal = await semaphore.acquire(provider, timeout, async () => {
-        return await this.getOrCreateTerminal(provider);
-      });
+      const terminal = await semaphore.acquire(provider, timeout, () =>
+        this.getOrCreateTerminal(provider)
+      );
 
-      // Create lease token
-      const leaseToken: LeaseToken = {
-        id: `lease-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-        terminalId: terminal.id,
-        baristaId,
-        provider,
-        leasedAt: new Date(),
-        expiresAt: new Date(Date.now() + timeout),
-        released: false,
-      };
-
-      // Update terminal status
-      terminal.status = 'busy';
-      terminal.currentBarista = baristaId;
-      terminal.leaseToken = leaseToken;
-      terminal.lastUsed = new Date();
-
-      // Track active lease
-      this.activeLeases.set(leaseToken.id, leaseToken);
-      this.updateMetrics();
-
-      return {
-        terminal,
-        token: leaseToken,
-        release: async () => {
-          await this.releaseLease(leaseToken.id);
-        },
-      };
+      return this.createActiveLease(terminal, baristaId, provider, timeout);
     } catch (error) {
-      if (error instanceof TerminalLeaseTimeoutError) {
-        // Update metrics for timeout
-        this.metrics.providers[provider].p99WaitTime = Math.max(
-          this.metrics.providers[provider].p99WaitTime,
-          timeout
-        );
-      }
+      this.handleAcquireError(error, provider, timeout);
       throw error;
+    }
+  }
+
+  private createActiveLease(
+    terminal: Terminal,
+    baristaId: string,
+    provider: ProviderType,
+    timeout: number
+  ): TerminalLease {
+    const token = this.createLeaseToken(terminal.id, baristaId, provider, timeout);
+
+    // Update terminal status
+    terminal.status = 'busy';
+    terminal.currentBarista = baristaId;
+    terminal.leaseToken = token;
+    terminal.lastUsed = new Date();
+
+    // Track active lease
+    this.activeLeases.set(token.id, token);
+    this.updateMetrics();
+
+    return {
+      terminal,
+      token,
+      release: () => this.releaseLease(token.id),
+    };
+  }
+
+  private createLeaseToken(
+    terminalId: string,
+    baristaId: string,
+    provider: ProviderType,
+    timeout: number
+  ): LeaseToken {
+    return {
+      id: `lease-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      terminalId,
+      baristaId,
+      provider,
+      leasedAt: new Date(),
+      expiresAt: new Date(Date.now() + timeout),
+      released: false,
+    };
+  }
+
+  private handleAcquireError(error: unknown, provider: ProviderType, timeout: number): void {
+    if (error instanceof TerminalLeaseTimeoutError) {
+      const currentP99 = this.metrics.providers[provider].p99WaitTime;
+      this.metrics.providers[provider].p99WaitTime = Math.max(currentP99, timeout);
     }
   }
 
@@ -144,6 +161,10 @@ export class TerminalPool {
       throw new TerminalNotFoundError(leaseToken.terminalId);
     }
 
+    this.finalizeLeaseRelease(leaseToken, terminal);
+  }
+
+  private finalizeLeaseRelease(leaseToken: LeaseToken, terminal: Terminal): void {
     // Update lease token
     leaseToken.released = true;
     leaseToken.releasedAt = new Date();
@@ -161,7 +182,7 @@ export class TerminalPool {
     }
 
     // Remove from active leases
-    this.activeLeases.delete(leaseId);
+    this.activeLeases.delete(leaseToken.id);
     this.updateMetrics();
   }
 
@@ -171,15 +192,15 @@ export class TerminalPool {
   getStatus(): PoolStatus {
     const status: PoolStatus = {};
 
-    for (const [provider, providerConfig] of Object.entries(this.config.perProvider)) {
-      const providerTerminals = Array.from(this.terminals.values())
+    for (const [provider, _] of Object.entries(this.config.perProvider)) {
+      const terminals = Array.from(this.terminals.values())
         .filter(t => t.provider === provider);
 
       status[provider] = {
-        total: providerTerminals.length,
-        idle: providerTerminals.filter(t => t.status === 'idle').length,
-        busy: providerTerminals.filter(t => t.status === 'busy').length,
-        crashed: providerTerminals.filter(t => t.status === 'crashed').length,
+        total: terminals.length,
+        idle: terminals.filter(t => t.status === 'idle').length,
+        busy: terminals.filter(t => t.status === 'busy').length,
+        crashed: terminals.filter(t => t.status === 'crashed').length,
       };
     }
 
@@ -197,18 +218,19 @@ export class TerminalPool {
    * Clean up all resources
    */
   async dispose(): Promise<void> {
-    // Release all semaphores
     for (const semaphore of this.semaphores.values()) {
       semaphore.dispose();
     }
 
-    // Kill all terminal processes
-    for (const terminal of this.terminals.values()) {
+    const killPromises = Array.from(this.terminals.values()).map(terminal => {
       if (terminal.process) {
         const adapter = ProviderAdapterFactory.get(terminal.provider);
-        await adapter.kill(terminal.process);
+        return adapter.kill(terminal.process);
       }
-    }
+      return Promise.resolve();
+    });
+
+    await Promise.all(killPromises);
 
     this.terminals.clear();
     this.semaphores.clear();
@@ -216,7 +238,6 @@ export class TerminalPool {
   }
 
   private async getOrCreateTerminal(provider: ProviderType): Promise<Terminal> {
-    // Try to find idle terminal
     const idleTerminal = Array.from(this.terminals.values())
       .find(t => t.provider === provider && t.status === 'idle');
 
@@ -224,7 +245,10 @@ export class TerminalPool {
       return idleTerminal;
     }
 
-    // Create new terminal
+    return this.createNewTerminal(provider);
+  }
+
+  private async createNewTerminal(provider: ProviderType): Promise<Terminal> {
     const adapter = ProviderAdapterFactory.get(provider);
     const process = await adapter.spawn();
 
@@ -252,25 +276,38 @@ export class TerminalPool {
 
     adapter.onExit(terminal.process, ({ exitCode }) => {
       console.log(`Terminal ${terminal.id} exited with code ${exitCode}`);
+      this.handleTerminalExit(terminal, exitCode);
+    });
+  }
 
-      if (exitCode !== 0) {
-        terminal.status = 'crashed';
-        this.updateMetrics();
+  private handleTerminalExit(terminal: Terminal, exitCode: number): void {
+    if (exitCode === 0) {
+      this.resetTerminalState(terminal);
+    } else {
+      this.handleCrashedTerminal(terminal);
+    }
+  }
 
-        // If terminal had an active lease, attempt recovery
-        if (terminal.leaseToken && !terminal.leaseToken.released) {
-          this.handleCrashDuringLease(terminal).catch((error) => {
-            console.error(`Crash recovery failed for terminal ${terminal.id}:`, error);
-            this.releaseSemaphoreOnCrashFailure(terminal);
-          });
-        }
-      } else {
-        // Normal exit
-        terminal.status = 'idle';
-        terminal.currentBarista = undefined;
-        terminal.leaseToken = undefined;
-        this.updateMetrics();
-      }
+  private resetTerminalState(terminal: Terminal): void {
+    terminal.status = 'idle';
+    terminal.currentBarista = undefined;
+    terminal.leaseToken = undefined;
+    this.updateMetrics();
+  }
+
+  private handleCrashedTerminal(terminal: Terminal): void {
+    terminal.status = 'crashed';
+    this.updateMetrics();
+
+    if (terminal.leaseToken && !terminal.leaseToken.released) {
+      this.recoverCrashedLease(terminal);
+    }
+  }
+
+  private recoverCrashedLease(terminal: Terminal): void {
+    this.handleCrashDuringLease(terminal).catch((error) => {
+      console.error(`Crash recovery failed for terminal ${terminal.id}:`, error);
+      this.releaseSemaphoreOnCrashFailure(terminal);
     });
   }
 
@@ -279,42 +316,48 @@ export class TerminalPool {
    */
   private async handleCrashDuringLease(crashedTerminal: Terminal): Promise<void> {
     const provider = crashedTerminal.provider;
-    const providerConfig = this.config.perProvider[provider];
+    const maxRetries = this.config.perProvider[provider].maxRetries;
 
     console.warn(`Attempting auto-restart for crashed terminal ${crashedTerminal.id}`);
 
     try {
-      // Attempt restart (within maxRetries)
-      for (let attempt = 0; attempt < providerConfig.maxRetries; attempt++) {
-        try {
-          const newTerminal = await this.getOrCreateTerminal(provider);
-
-          // Transfer lease to new terminal
-          if (crashedTerminal.leaseToken) {
-            newTerminal.status = 'busy';
-            newTerminal.currentBarista = crashedTerminal.leaseToken.baristaId;
-            newTerminal.leaseToken = crashedTerminal.leaseToken;
-            newTerminal.leaseToken.terminalId = newTerminal.id;
-          }
-
-          // Remove old terminal
-          this.terminals.delete(crashedTerminal.id);
-          this.updateMetrics();
-
-          console.log(`Terminal ${crashedTerminal.id} restarted as ${newTerminal.id}`);
-          return;
-        } catch (spawnError) {
-          console.error(`Restart attempt ${attempt + 1} failed:`, spawnError);
-          if (attempt === providerConfig.maxRetries - 1) {
-            throw spawnError;
-          }
-          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
-        }
-      }
+      await this.retryTerminalCreation(crashedTerminal, maxRetries);
     } catch (error) {
       console.error(`All restart attempts failed for terminal ${crashedTerminal.id}`);
       throw error;
     }
+  }
+
+  private async retryTerminalCreation(crashedTerminal: Terminal, maxRetries: number): Promise<void> {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await this.replaceCrashedTerminal(crashedTerminal);
+        return;
+      } catch (error) {
+        if (attempt === maxRetries - 1) throw error;
+
+        console.error(`Restart attempt ${attempt + 1} failed:`, error);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+    }
+  }
+
+  private async replaceCrashedTerminal(crashedTerminal: Terminal): Promise<void> {
+    const newTerminal = await this.getOrCreateTerminal(crashedTerminal.provider);
+
+    // Transfer lease to new terminal
+    if (crashedTerminal.leaseToken) {
+      newTerminal.status = 'busy';
+      newTerminal.currentBarista = crashedTerminal.leaseToken.baristaId;
+      newTerminal.leaseToken = crashedTerminal.leaseToken;
+      newTerminal.leaseToken.terminalId = newTerminal.id;
+    }
+
+    // Remove old terminal
+    this.terminals.delete(crashedTerminal.id);
+    this.updateMetrics();
+
+    console.log(`Terminal ${crashedTerminal.id} restarted as ${newTerminal.id}`);
   }
 
   /**
@@ -329,21 +372,38 @@ export class TerminalPool {
   }
 
   private updateMetrics(): void {
-    for (const [provider, providerConfig] of Object.entries(this.config.perProvider)) {
-      const providerTerminals = Array.from(this.terminals.values())
-        .filter(t => t.provider === provider);
+    const newMetrics: PoolMetrics = { providers: {} };
 
-      const activeLeases = Array.from(this.activeLeases.values())
-        .filter(l => l.provider === provider && !l.released);
-
-      this.metrics.providers[provider] = {
-        totalTerminals: providerTerminals.length,
-        idleTerminals: providerTerminals.filter(t => t.status === 'idle').length,
-        busyTerminals: providerTerminals.filter(t => t.status === 'busy').length,
-        crashedTerminals: providerTerminals.filter(t => t.status === 'crashed').length,
-        activeLeases: activeLeases.length,
+    // Initialize metrics for all configured providers
+    for (const provider of Object.keys(this.config.perProvider)) {
+      newMetrics.providers[provider] = {
+        totalTerminals: 0,
+        idleTerminals: 0,
+        busyTerminals: 0,
+        crashedTerminals: 0,
+        activeLeases: 0,
         p99WaitTime: this.metrics.providers[provider]?.p99WaitTime || 0,
       };
     }
+
+    // Aggregate terminal stats
+    for (const terminal of this.terminals.values()) {
+      const stats = newMetrics.providers[terminal.provider];
+      if (stats) {
+        stats.totalTerminals++;
+        if (terminal.status === 'idle') stats.idleTerminals++;
+        if (terminal.status === 'busy') stats.busyTerminals++;
+        if (terminal.status === 'crashed') stats.crashedTerminals++;
+      }
+    }
+
+    // Aggregate lease stats
+    for (const lease of this.activeLeases.values()) {
+      if (!lease.released && newMetrics.providers[lease.provider]) {
+        newMetrics.providers[lease.provider].activeLeases++;
+      }
+    }
+
+    this.metrics = newMetrics;
   }
 }

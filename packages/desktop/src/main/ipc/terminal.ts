@@ -54,14 +54,34 @@ function createSuccessResponse<T>(data?: T): SuccessResponse<T> {
   return { success: true, data };
 }
 
+function withTerminalPool<T>(
+  handler: (pool: TerminalPool) => Promise<T> | T,
+  { errorMessage }: { errorMessage: string }
+): (event: IpcMainInvokeEvent) => Promise<IpcResponse<T>> {
+  return async () => {
+    if (!pool) {
+      return createErrorResponse(TerminalErrorCode.NOT_INITIALIZED, 'Terminal pool not initialized');
+    }
+    try {
+      const result = await handler(pool);
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createErrorResponse(
+        TerminalErrorCode.UNKNOWN,
+        errorMessage,
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  };
+}
+
 /**
  * Register Terminal IPC handlers
  */
 export function registerTerminalHandlers() {
   // terminal:init - Initialize terminal pool
-  ipcMain.handle('terminal:init', async (event: IpcMainInvokeEvent, config: unknown): Promise<IpcResponse<void>> => {
+  ipcMain.handle('terminal:init', async (_: IpcMainInvokeEvent, config: unknown): Promise<IpcResponse<void>> => {
     try {
-      // Validate config with Zod
       const validConfig = TerminalPoolConfigSchema.parse(config);
 
       if (pool) {
@@ -88,69 +108,32 @@ export function registerTerminalHandlers() {
   });
 
   // terminal:pool-status - Get pool status (per-provider status)
-  ipcMain.handle('terminal:pool-status', async (): Promise<IpcResponse<PoolStatus>> => {
-    try {
-      if (!pool) {
-        return createErrorResponse(
-          TerminalErrorCode.NOT_INITIALIZED,
-          'Terminal pool not initialized'
-        );
-      }
-
-      const status = pool.getStatus();
-      return createSuccessResponse(status);
-    } catch (error) {
-      return createErrorResponse(
-        TerminalErrorCode.UNKNOWN,
-        'Failed to get pool status',
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-  });
+  ipcMain.handle(
+    'terminal:pool-status',
+    withTerminalPool(p => p.getStatus(), {
+      errorMessage: 'Failed to get pool status',
+    })
+  );
 
   // terminal:pool-metrics - Get pool metrics
-  ipcMain.handle('terminal:pool-metrics', async (): Promise<IpcResponse<PoolMetrics>> => {
-    try {
-      if (!pool) {
-        return createErrorResponse(
-          TerminalErrorCode.NOT_INITIALIZED,
-          'Terminal pool not initialized'
-        );
-      }
-
-      const metrics = pool.getMetrics();
-      return createSuccessResponse(metrics);
-    } catch (error) {
-      return createErrorResponse(
-        TerminalErrorCode.UNKNOWN,
-        'Failed to get pool metrics',
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-  });
+  ipcMain.handle(
+    'terminal:pool-metrics',
+    withTerminalPool(p => p.getMetrics(), {
+      errorMessage: 'Failed to get pool metrics',
+    })
+  );
 
   // terminal:shutdown - Shutdown terminal pool
-  ipcMain.handle('terminal:shutdown', async (): Promise<IpcResponse<void>> => {
-    try {
-      if (!pool) {
-        return createErrorResponse(
-          TerminalErrorCode.NOT_INITIALIZED,
-          'Terminal pool not initialized'
-        );
-      }
-
-      await pool.dispose();
-      pool = null;
-
-      return createSuccessResponse();
-    } catch (error) {
-      return createErrorResponse(
-        TerminalErrorCode.UNKNOWN,
-        'Failed to shutdown terminal pool',
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-  });
+  ipcMain.handle(
+    'terminal:shutdown',
+    withTerminalPool(
+      async p => {
+        await p.dispose();
+        pool = null;
+      },
+      { errorMessage: 'Failed to shutdown terminal pool' }
+    )
+  );
 }
 
 /**

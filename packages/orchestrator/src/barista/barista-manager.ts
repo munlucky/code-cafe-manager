@@ -3,8 +3,8 @@
  * Phase 2: Role-based Barista creation with backward compatibility
  */
 
-import { Barista, BaristaStatus, ProviderType, EventType, BaristaEvent } from '@codecafe/core';
 import { EventEmitter } from 'events';
+import { Barista, BaristaEvent, BaristaStatus, EventType, ProviderType } from '@codecafe/core';
 import { RoleManager } from '../role/role-manager';
 import { Role } from '../types';
 
@@ -26,39 +26,21 @@ export class BaristaManager extends EventEmitter {
    * Create a new Barista with Role support
    * Backward compatibility: if roleId not provided, uses default generic-agent role
    */
-  createBarista(roleId?: string, provider?: ProviderType): Barista {
+  createBarista(roleId?: string, provider: ProviderType = 'claude-code'): Barista {
     if (this.baristas.size >= this.maxBaristas) {
       throw new Error(`Maximum baristas (${this.maxBaristas}) reached`);
     }
 
-    let role: Role | null = null;
-    let finalProvider: ProviderType;
-
-    // Determine role and provider
-    if (roleId) {
-      role = this.roleManager.loadRole(roleId);
-      if (!role) {
-        throw new Error(`Role '${roleId}' not found`);
-      }
-      finalProvider = provider || 'claude-code'; // Default provider
-    } else {
-      // Backward compatibility: use default generic-agent role
-      role = this.roleManager.loadRole('generic-agent');
-      if (!role) {
-        // Fallback to basic barista without role
-        return this.createLegacyBarista(provider || 'claude-code');
-      }
-      finalProvider = provider || 'claude-code';
-    }
+    const role = this.resolveRole(roleId);
 
     const barista: Barista = {
       id: this.generateId(),
       status: BaristaStatus.IDLE,
       currentOrderId: null,
-      provider: finalProvider,
-      role: role.id, // Store role ID for reference
+      provider,
       createdAt: new Date(),
       lastActivityAt: new Date(),
+      ...(role ? { role: role.id } : {}),
     };
 
     this.baristas.set(barista.id, barista);
@@ -68,22 +50,19 @@ export class BaristaManager extends EventEmitter {
   }
 
   /**
-   * Legacy Barista creation (for backward compatibility)
+   * Resolve role based on ID or fallback to default
    */
-  private createLegacyBarista(provider: ProviderType): Barista {
-    const barista: Barista = {
-      id: this.generateId(),
-      status: BaristaStatus.IDLE,
-      currentOrderId: null,
-      provider,
-      createdAt: new Date(),
-      lastActivityAt: new Date(),
-    };
+  private resolveRole(roleId?: string): Role | null {
+    if (roleId) {
+      const role = this.roleManager.loadRole(roleId);
+      if (!role) {
+        throw new Error(`Role '${roleId}' not found`);
+      }
+      return role;
+    }
 
-    this.baristas.set(barista.id, barista);
-    this.emitEvent(EventType.BARISTA_CREATED, barista.id, barista);
-
-    return barista;
+    // Backward compatibility: try default generic-agent role
+    return this.roleManager.loadRole('generic-agent');
   }
 
   /**
@@ -144,7 +123,7 @@ export class BaristaManager extends EventEmitter {
    * Get available Baristas (IDLE status)
    */
   getAvailableBaristas(): Barista[] {
-    return Array.from(this.baristas.values()).filter(b => b.status === BaristaStatus.IDLE);
+    return this.listBaristas().filter(barista => barista.status === BaristaStatus.IDLE);
   }
 
   /**

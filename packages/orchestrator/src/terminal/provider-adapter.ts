@@ -3,80 +3,90 @@
  * Gap 1 해결: Terminal 실행 계약 및 Provider 매핑 정의
  */
 
-// import { IPty } from 'node-pty';
-type IPty = any;
 import { ProviderType } from '@codecafe/core';
 import { ClaudeCodeAdapter } from './adapters/claude-code-adapter.js';
 import { CodexAdapter } from './adapters/codex-adapter.js';
 import { AdapterNotFoundError } from './errors.js';
 
+/**
+ * Minimal interface for node-pty process to ensure type safety
+ */
+export interface IPty {
+  pid: number;
+  write(data: string): void;
+  on(event: string, listener: (...args: any[]) => void): void;
+  once(event: string, listener: (...args: any[]) => void): void;
+  removeListener(event: string, listener: (...args: any[]) => void): void;
+  kill(signal?: string): void;
+  resize?(cols: number, rows: number): void;
+}
+
 export interface IProviderAdapter {
   /**
-   * Provider 타입 식별자
+   * Provider type identifier
    */
   readonly providerType: ProviderType;
 
   /**
-   * PTY 프로세스 생성
-   * @returns node-pty IPty 인스턴스
+   * Create a new PTY process
+   * @returns node-pty IPty instance
    */
   spawn(): Promise<IPty>;
 
   /**
-   * 프롬프트를 터미널에 전송
-   * @param process - node-pty 프로세스
-   * @param prompt - 전송할 프롬프트 (Handlebars 렌더링 완료)
-   * @returns 전송 성공 여부
+   * Send prompt to the terminal
+   * @param process - node-pty process
+   * @param prompt - Prompt to send (already rendered)
+   * @returns True if sent successfully
    */
   sendPrompt(process: IPty, prompt: string): Promise<boolean>;
 
   /**
-   * 터미널 출력 읽기 (비동기 스트림)
-   * @param process - node-pty 프로세스
-   * @param timeout - 읽기 타임아웃 (ms)
-   * @returns 출력 문자열
+   * Read output from the terminal
+   * @param process - node-pty process
+   * @param timeout - Read timeout in ms
+   * @returns Output string
    */
   readOutput(process: IPty, timeout: number): Promise<string>;
 
   /**
-   * 프로세스 정상 종료 확인
-   * @param process - node-pty 프로세스
-   * @returns 종료 코드 (0 = 성공)
+   * Wait for process to exit
+   * @param process - node-pty process
+   * @param timeout - Timeout in ms
+   * @returns Exit code (0 = success)
    */
   waitForExit(process: IPty, timeout: number): Promise<number>;
 
   /**
-   * 프로세스 강제 종료
-   * @param process - node-pty 프로세스
+   * Terminate the process
+   * @param process - node-pty process
    */
   kill(process: IPty): Promise<void>;
 
   /**
-   * 프로세스 상태 확인
-   * @param process - node-pty 프로세스
-   * @returns 프로세스가 살아있는지 여부
+   * Check if process is running
+   * @param process - node-pty process
    */
   isAlive(process: IPty): boolean;
 
   /**
-   * Phase 2: Execute command with context
-   * @param process - node-pty 프로세스
+   * Execute command with context
+   * @param process - node-pty process
    * @param context - Execution context
-   * @returns Execution result
    */
   execute(process: IPty, context: any): Promise<{ success: boolean; output?: string; error?: string }>;
 
   /**
-   * Phase 2: Setup exit handler
-   * @param process - node-pty 프로세스
-   * @param handler - Exit handler
+   * Register exit handler
+   * @param process - node-pty process
+   * @param handler - Function to call on exit
    */
   onExit(process: IPty, handler: (event: { exitCode: number }) => void): void;
 }
 
 /**
  * Mock Provider Adapter for testing
- * Gap 3 해결: Deterministic tests without real CLI processes
+ * Provides deterministic behavior without spawning real processes
  */
 export class MockProviderAdapter implements IProviderAdapter {
   readonly providerType: ProviderType;
@@ -87,37 +97,40 @@ export class MockProviderAdapter implements IProviderAdapter {
     this.providerType = providerType;
   }
 
-  /**
-   * Set mock response for a specific prompt
-   */
   setMockResponse(prompt: string, response: string): void {
     this.mockResponses.set(prompt, response);
   }
 
   async spawn(): Promise<IPty> {
-    const mockPty = {
+    const mockPty: IPty = {
       pid: Math.floor(Math.random() * 10000),
-      onData: (callback: (data: string) => void) => {
-        // Mock data handler
-        setTimeout(() => callback('Mock terminal ready\n'), 10);
+      on: (event: string, listener: Function) => {
+        // Mock event listener
+      },
+      once: (event: string, listener: Function) => {
+        // Mock once listener
+      },
+      removeListener: (event: string, listener: Function) => {
+        // Mock remove listener
       },
       write: (data: string) => {
-        console.log(`Mock write: ${data}`);
+        // Mock write
       },
       kill: () => {
-        console.log('Mock kill');
+        // Mock kill
       },
       resize: (cols: number, rows: number) => {
-        console.log(`Mock resize: ${cols}x${rows}`);
+        // Mock resize
       },
-    } as unknown as IPty;
+    };
 
     this.spawnedProcesses.add(mockPty.pid.toString());
+    // Simulate async spawn
+    await new Promise(resolve => setTimeout(resolve, 10));
     return mockPty;
   }
 
   async sendPrompt(process: IPty, prompt: string): Promise<boolean> {
-    console.log(`Mock sendPrompt: ${prompt.substring(0, 50)}...`);
     return true;
   }
 
@@ -135,7 +148,7 @@ export class MockProviderAdapter implements IProviderAdapter {
   }
 
   async kill(process: IPty): Promise<void> {
-    console.log('Mock kill called');
+    // No-op for mock
   }
 
   isAlive(process: IPty): boolean {
@@ -143,19 +156,18 @@ export class MockProviderAdapter implements IProviderAdapter {
   }
 
   async execute(process: IPty, context: any): Promise<{ success: boolean; output?: string; error?: string }> {
-    console.log(`Mock execute: ${JSON.stringify(context).substring(0, 100)}...`);
     return { success: true, output: 'Mock execution completed' };
   }
 
   onExit(process: IPty, handler: (event: { exitCode: number }) => void): void {
-    console.log('Mock onExit handler registered');
-    // Store handler for later triggering
+    // Store handler if needed for testing scenarios
     (process as any)._exitHandler = handler;
   }
 }
 
 /**
  * Provider Adapter Factory
+ * Manages provider adapter instances and registration
  */
 export class ProviderAdapterFactory {
   private static adapters: Map<ProviderType, IProviderAdapter> = new Map();
@@ -178,10 +190,9 @@ export class ProviderAdapterFactory {
   }
 
   /**
-   * Create adapter with optional mock mode
-   * @param providerType - Provider type
-   * @param useMock - Use mock adapter (default: true in test environment)
-   * @returns Provider adapter instance
+   * Create or retrieve an adapter instance
+   * @param providerType - The type of provider to get
+   * @param useMock - Force use of mock adapter (defaults to true in test env)
    */
   static create(providerType: ProviderType, useMock?: boolean): IProviderAdapter {
     const shouldUseMock = useMock ?? (process.env.NODE_ENV === 'test');
@@ -190,27 +201,29 @@ export class ProviderAdapterFactory {
       return new MockProviderAdapter(providerType);
     }
 
-    // Return real adapter (must be initialized first)
+    if (!this.initialized) {
+      this.initialize();
+    }
+
     return this.get(providerType);
   }
 
   /**
-   * Initialize factory with real adapters
-   * Automatically registers ClaudeCodeAdapter and CodexAdapter
+   * Initialize and register default adapters
    */
   static initialize(): void {
     if (this.initialized) {
       return;
     }
 
-    // Register real adapters
     try {
       this.register('claude-code', new ClaudeCodeAdapter());
       this.register('codex', new CodexAdapter());
       this.initialized = true;
     } catch (error) {
-      console.error('Failed to initialize adapters:', error);
-      throw error;
+      // Re-throw with clear context
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to initialize provider adapters: ${message}`);
     }
   }
 }
