@@ -3,19 +3,7 @@ import { useRoleStore } from '../../store/useRoleStore';
 import { RoleCard } from './RoleCard';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
-// import type { Role } from '@codecafe/core/types/role';
-
-// Temporary type for compilation
-interface Role {
-  id: string;
-  name: string;
-  systemPrompt: string;
-  skills: string[];
-  recommendedProvider: string;
-  variables: any[];
-  isDefault: boolean;
-  source: string;
-}
+import type { Role } from '@codecafe/core/types/role';
 
 function FullScreenStatus({ children }: { children: ReactNode }): ReactElement {
   return (

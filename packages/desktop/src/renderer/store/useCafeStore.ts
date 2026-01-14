@@ -41,8 +41,10 @@ export const useCafeStore = create<CafeStoreState>()(
       loadCafes: async () => {
         set({ loading: true, error: null });
         try {
-          const cafes = await window.codecafe.cafe.list();
-          set({ cafes });
+          const response = await window.codecafe.cafe.list();
+          if (response.success && response.data) {
+            set({ cafes: response.data });
+          }
         } catch (err: any) {
           set({ error: err.message || 'Failed to load cafes' });
         } finally {
@@ -53,10 +55,15 @@ export const useCafeStore = create<CafeStoreState>()(
       createCafe: async (path: string) => {
         set({ loading: true, error: null });
         try {
-          const newCafe = await window.codecafe.cafe.create({ path });
-          set((state) => ({
-            cafes: [...state.cafes, newCafe]
-          }));
+          const response = await window.codecafe.cafe.create({ path });
+          if (response.success && response.data) {
+            const newCafe = response.data;
+            set((state) => ({
+              cafes: [...state.cafes, newCafe]
+            }));
+          } else {
+            throw new Error(response.error?.message || 'Failed to create cafe');
+          }
         } catch (err: any) {
           const message = err.message || 'Failed to create cafe';
           set({ error: message });

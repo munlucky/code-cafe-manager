@@ -22,7 +22,7 @@ export function Dashboard(): JSX.Element {
     setRunsLoading(true);
     try {
       const runs = await window.codecafe.listRuns();
-      setWorkflowRuns(runs);
+      setWorkflowRuns(runs.data || []);
     } catch (error) {
       console.error('Failed to fetch workflow runs:', error);
       setWorkflowRuns([]);

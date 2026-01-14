@@ -52,11 +52,11 @@ export function NewOrder({ onSuccess }: NewOrderProps) {
           return;
         }
 
-        setWorkflows(workflowList);
-        setAvailableProviders(providerList);
-        setAvailableRoles(roles);
+        setWorkflows(workflowList.data || []);
+        setAvailableProviders(providerList.data || []);
+        setAvailableRoles(roles.data || []);
         setAssignmentsByStage(
-          assignments.reduce<Record<string, ProviderAssignmentInfo>>((acc, item) => {
+          (assignments.data || []).reduce<Record<string, ProviderAssignmentInfo>>((acc, item) => {
             acc[item.stage] = item;
             return acc;
           }, {})
@@ -90,8 +90,8 @@ export function NewOrder({ onSuccess }: NewOrderProps) {
       try {
         const entries = await Promise.all(
           workflowStages.map(async (stage) => {
-            const profiles = await window.codecafe.listProfiles(stage);
-            return [stage, profiles] as const;
+            const response = await window.codecafe.listProfiles(stage);
+            return [stage, response.data || []] as const;
           })
         );
 

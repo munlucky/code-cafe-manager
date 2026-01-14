@@ -6,8 +6,10 @@ export function useBaristas() {
 
   const fetchBaristas = async () => {
     try {
-      const data = await window.codecafe.getAllBaristas();
-      setBaristas(data);
+      const response = await window.codecafe.getAllBaristas();
+      if (response.success && response.data) {
+        setBaristas(response.data);
+      }
     } catch (error) {
       console.error('Failed to fetch baristas:', error);
     }
@@ -15,9 +17,12 @@ export function useBaristas() {
 
   const createBarista = async (provider: ProviderType) => {
     try {
-      const barista = await window.codecafe.createBarista(provider);
-      addBarista(barista);
-      return barista;
+      const response = await window.codecafe.createBarista(provider);
+      if (response.success && response.data) {
+        addBarista(response.data);
+        return response.data;
+      }
+      throw new Error(response.error?.message || 'Failed to create barista');
     } catch (error) {
       console.error('Failed to create barista:', error);
       throw error;

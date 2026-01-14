@@ -6,8 +6,10 @@ export function useOrders() {
 
   const fetchOrders = async () => {
     try {
-      const data = await window.codecafe.getAllOrders();
-      setOrders(data);
+      const response = await window.codecafe.getAllOrders();
+      if (response.success && response.data) {
+        setOrders(response.data);
+      }
     } catch (error) {
       console.error('Failed to fetch orders:', error);
     }
@@ -15,9 +17,12 @@ export function useOrders() {
 
   const createOrder = async (params: CreateOrderParams) => {
     try {
-      const order = await window.codecafe.createOrder(params);
-      addOrder(order);
-      return order;
+      const response = await window.codecafe.createOrder(params);
+      if (response.success && response.data) {
+        addOrder(response.data);
+        return response.data;
+      }
+      throw new Error(response.error?.message || 'Failed to create order');
     } catch (error) {
       console.error('Failed to create order:', error);
       throw error;
@@ -26,7 +31,8 @@ export function useOrders() {
 
   const getOrderLog = async (orderId: string) => {
     try {
-      return await window.codecafe.getOrderLog(orderId);
+      const response = await window.codecafe.getOrderLog(orderId);
+      return response.data || '';
     } catch (error) {
       console.error('Failed to get order log:', error);
       return '';

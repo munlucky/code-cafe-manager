@@ -22,7 +22,7 @@ export function Worktrees() {
       if (result.success && result.data) {
         setWorktrees(result.data);
       } else {
-        setError(result.error || 'Failed to load worktrees');
+        setError(result.error?.message || 'Failed to load worktrees');
         setWorktrees([]);
       }
     } catch (err) {
@@ -44,7 +44,7 @@ export function Worktrees() {
       if (result.success && result.data) {
         alert(`Patch exported to: ${result.data}`);
       } else {
-        alert(`Failed to export patch: ${result.error}`);
+        alert(`Failed to export patch: ${result.error?.message}`);
       }
     } catch (error) {
       alert(`Error: ${error}`);
@@ -76,13 +76,13 @@ export function Worktrees() {
       } else {
         if (!force) {
           const forceConfirm = confirm(
-            `Failed: ${result.error}\n\nForce delete?`
+            `Failed: ${result.error?.message}\n\nForce delete?`
           );
           if (forceConfirm) {
             handleRemove(worktreePath, true);
           }
         } else {
-          alert(`Failed to delete: ${result.error}`);
+          alert(`Failed to delete: ${result.error?.message}`);
         }
       }
     } catch (error) {

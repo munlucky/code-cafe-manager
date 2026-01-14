@@ -51,8 +51,8 @@ function useWorkflowRuns(active: boolean) {
   const fetchRuns = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await window.codecafe.listRuns();
-      setRuns(data);
+      const response = await window.codecafe.listRuns();
+      setRuns(response.data || []);
     } catch (error) {
       console.error('Failed to fetch workflow runs:', error);
       setRuns([]);
@@ -113,8 +113,8 @@ function useRunLogs(runId: string | null, status?: string, active?: boolean) {
   const loadLogs = useCallback(async (id: string) => {
     setIsLoading(true);
     try {
-      const logs = await window.codecafe.getRunLogs(id);
-      setRunLogs(logs);
+      const response = await window.codecafe.getRunLogs(id);
+      setRunLogs(response.data || []);
     } catch (error) {
       console.error('Failed to load run logs:', error);
       setRunLogs([]);
@@ -152,9 +152,9 @@ function useOrderReceipt(orderId: string | null, status?: string) {
     let isMounted = true;
     const loadReceipt = async () => {
       try {
-        const receipts = await window.codecafe.getReceipts();
+        const response = await window.codecafe.getReceipts();
         if (!isMounted) return;
-        const matches = receipts
+        const matches = (response.data || [])
           .filter((r) => r.orderId === orderId)
           .sort((a, b) => {
             const aTime = new Date(a.endedAt || a.startedAt).getTime();
