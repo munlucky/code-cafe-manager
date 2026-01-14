@@ -16,16 +16,10 @@ export function EmptyState({
   action,
   message,
   children,
-}: EmptyStateProps): JSX.Element { // Added explicit return type
+}: EmptyStateProps) {
   // Fallback: use message as title if title is not provided
   const displayTitle = title || message || 'Empty';
-
-  let displayDescription: string | undefined;
-  if (title) {
-    displayDescription = description || message;
-  } else {
-    displayDescription = description;
-  }
+  const displayDescription = title ? (description || message) : description;
 
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
