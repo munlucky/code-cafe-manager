@@ -44,6 +44,8 @@ export const useCafeStore = create<CafeStoreState>()(
           const response = await window.codecafe.cafe.list();
           if (response.success && response.data) {
             set({ cafes: response.data });
+          } else {
+            set({ error: response.error?.message || 'Failed to load cafes' });
           }
         } catch (err: any) {
           set({ error: err.message || 'Failed to load cafes' });
@@ -83,7 +85,10 @@ export const useCafeStore = create<CafeStoreState>()(
       deleteCafe: async (id: string) => {
         set({ loading: true, error: null });
         try {
-          await window.codecafe.cafe.delete(id);
+          const response = await window.codecafe.cafe.delete(id);
+          if (!response.success) {
+            throw new Error(response.error?.message || 'Failed to delete cafe');
+          }
           set((state) => ({
             cafes: state.cafes.filter((cafe) => cafe.id !== id),
             currentCafeId: state.currentCafeId === id ? null : state.currentCafeId,

@@ -1,57 +1,149 @@
+/**
+ * Preload Script (CommonJS)
+ * Exposes IPC handlers to renderer process via contextBridge
+ */
+
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Helper to create IPC invoke functions with IpcResponse wrapper
+function createIpcInvoker(channel: string) {
+  return (...args: any[]) => ipcRenderer.invoke(channel, ...args);
+}
+
+// Helper to manage IPC event listeners
+function setupIpcListener(channel: string, callback: (event: any) => void): () => void {
+  const listener = (_: any, event: any) => callback(event);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+}
+
 contextBridge.exposeInMainWorld('codecafe', {
-  createBarista: (provider: string) => ipcRenderer.invoke('createBarista', provider),
-  getAllBaristas: () => ipcRenderer.invoke('getAllBaristas'),
-
-  createOrder: (params: any) => ipcRenderer.invoke('createOrder', params),
-  getAllOrders: () => ipcRenderer.invoke('getAllOrders'),
-  getOrder: (orderId: string) => ipcRenderer.invoke('getOrder', orderId),
-  getOrderLog: (orderId: string) => ipcRenderer.invoke('getOrderLog', orderId),
-  cancelOrder: (orderId: string) => ipcRenderer.invoke('cancelOrder', orderId),
-
-  getReceipts: () => ipcRenderer.invoke('getReceipts'),
-
-  getAvailableProviders: () => ipcRenderer.invoke('getAvailableProviders'),
-
-  listWorktrees: (repoPath: string) => ipcRenderer.invoke('listWorktrees', repoPath),
-  exportPatch: (worktreePath: string, baseBranch: string, outputPath?: string) =>
-    ipcRenderer.invoke('exportPatch', worktreePath, baseBranch, outputPath),
-  removeWorktree: (worktreePath: string, force?: boolean) =>
-    ipcRenderer.invoke('removeWorktree', worktreePath, force),
-  openWorktreeFolder: (worktreePath: string) =>
-    ipcRenderer.invoke('openWorktreeFolder', worktreePath),
-
-  listWorkflows: () => ipcRenderer.invoke('workflow:list'),
-  getWorkflow: (workflowId: string) => ipcRenderer.invoke('workflow:get', workflowId),
-  runWorkflow: (workflowId: string, options?: { mode?: string; interactive?: boolean }) =>
-    ipcRenderer.invoke('workflow:run', workflowId, options),
-  listRuns: () => ipcRenderer.invoke('run:list'),
-  getRunStatus: (runId: string) => ipcRenderer.invoke('run:status', runId),
-  resumeRun: (runId: string) => ipcRenderer.invoke('run:resume', runId),
-  getRunLogs: (runId: string) => ipcRenderer.invoke('run:logs', runId),
-  getAssignments: () => ipcRenderer.invoke('config:assignments:get'),
-  setAssignment: (stage: string, provider: string, role: string) =>
-    ipcRenderer.invoke('config:assignments:set', stage, provider, role),
-  listProfiles: (stage: string) => ipcRenderer.invoke('config:profiles:list', stage),
-  setProfile: (stage: string, profile: string) =>
-    ipcRenderer.invoke('config:profiles:set', stage, profile),
-  listRoles: () => ipcRenderer.invoke('config:roles:list'),
-
-  onBaristaEvent: (callback: (event: any) => void) => {
-    ipcRenderer.removeAllListeners('barista:event');
-    ipcRenderer.on('barista:event', (_event: unknown, event: any) => callback(event));
+  cafe: {
+    list: createIpcInvoker('cafe:list'),
+    get: createIpcInvoker('cafe:get'),
+    create: createIpcInvoker('cafe:create'),
+    update: createIpcInvoker('cafe:update'),
+    delete: createIpcInvoker('cafe:delete'),
+    setLastAccessed: createIpcInvoker('cafe:setLastAccessed'),
+    getLastAccessed: createIpcInvoker('cafe:getLastAccessed'),
   },
-  onOrderEvent: (callback: (event: any) => void) => {
-    ipcRenderer.removeAllListeners('order:event');
-    ipcRenderer.on('order:event', (_event: unknown, event: any) => callback(event));
+
+  barista: {
+    create: createIpcInvoker('barista:create'),
+    getAll: createIpcInvoker('barista:getAll'),
+    onEvent: (callback: (event: any) => void) => setupIpcListener('barista:event', callback),
   },
-  onOrderAssigned: (callback: (data: any) => void) => {
-    ipcRenderer.removeAllListeners('order:assigned');
-    ipcRenderer.on('order:assigned', (_event: unknown, data: any) => callback(data));
+
+  order: {
+    create: createIpcInvoker('order:create'),
+    getAll: createIpcInvoker('order:getAll'),
+    get: createIpcInvoker('order:get'),
+    getLog: createIpcInvoker('order:getLog'),
+    cancel: createIpcInvoker('order:cancel'),
+    onEvent: (callback: (event: any) => void) => setupIpcListener('order:event', callback),
+    onAssigned: (callback: (data: any) => void) => setupIpcListener('order:assigned', callback),
+    onCompleted: (callback: (data: any) => void) => setupIpcListener('order:completed', callback),
   },
-  onOrderCompleted: (callback: (data: any) => void) => {
-    ipcRenderer.removeAllListeners('order:completed');
-    ipcRenderer.on('order:completed', (_event: unknown, data: any) => callback(data));
+
+  receipt: {
+    getAll: createIpcInvoker('receipt:getAll'),
+  },
+
+  provider: {
+    getAvailable: createIpcInvoker('provider:getAvailable'),
+  },
+
+  worktree: {
+    list: createIpcInvoker('worktree:list'),
+    exportPatch: createIpcInvoker('worktree:exportPatch'),
+    remove: createIpcInvoker('worktree:remove'),
+    openFolder: createIpcInvoker('worktree:openFolder'),
+  },
+
+  workflow: {
+    list: createIpcInvoker('workflow:list'),
+    get: createIpcInvoker('workflow:get'),
+    run: createIpcInvoker('workflow:run'),
+  },
+
+  run: {
+    list: createIpcInvoker('run:list'),
+    getStatus: createIpcInvoker('run:status'),
+    resume: createIpcInvoker('run:resume'),
+    getLogs: createIpcInvoker('run:logs'),
+  },
+
+  config: {
+    assignments: {
+      get: createIpcInvoker('config:assignments:get'),
+      set: createIpcInvoker('config:assignments:set'),
+    },
+    profiles: {
+      list: createIpcInvoker('config:profiles:list'),
+      set: createIpcInvoker('config:profiles:set'),
+    },
+    roles: {
+      list: createIpcInvoker('config:roles:list'),
+    },
+  },
+
+  role: {
+    list: createIpcInvoker('role:list'),
+    get: createIpcInvoker('role:get'),
+    listDefault: createIpcInvoker('role:listDefault'),
+    listUser: createIpcInvoker('role:listUser'),
+    reload: createIpcInvoker('role:reload'),
+  },
+
+  terminal: {
+    init: createIpcInvoker('terminal:init'),
+    getStatus: createIpcInvoker('terminal:poolStatus'),
+    getMetrics: createIpcInvoker('terminal:poolMetrics'),
+    subscribe: createIpcInvoker('terminal:subscribe'),
+    unsubscribe: createIpcInvoker('terminal:unsubscribe'),
+    shutdown: createIpcInvoker('terminal:shutdown'),
+    onData: (terminalId: string, callback: (data: string) => void) =>
+      setupIpcListener(`terminal:data:${terminalId}`, callback),
+  },
+
+  // Backward compatibility - legacy flat API
+  createBarista: createIpcInvoker('barista:create'),
+  getAllBaristas: createIpcInvoker('barista:getAll'),
+  createOrder: createIpcInvoker('order:create'),
+  getAllOrders: createIpcInvoker('order:getAll'),
+  getOrder: createIpcInvoker('order:get'),
+  getOrderLog: createIpcInvoker('order:getLog'),
+  cancelOrder: createIpcInvoker('order:cancel'),
+  getReceipts: createIpcInvoker('receipt:getAll'),
+  getAvailableProviders: createIpcInvoker('provider:getAvailable'),
+  listWorktrees: createIpcInvoker('worktree:list'),
+  exportPatch: createIpcInvoker('worktree:exportPatch'),
+  removeWorktree: createIpcInvoker('worktree:remove'),
+  openWorktreeFolder: createIpcInvoker('worktree:openFolder'),
+  onBaristaEvent: (callback: (event: any) => void) => setupIpcListener('barista:event', callback),
+  onOrderEvent: (callback: (event: any) => void) => setupIpcListener('order:event', callback),
+  onOrderAssigned: (callback: (data: any) => void) => setupIpcListener('order:assigned', callback),
+  onOrderCompleted: (callback: (data: any) => void) => setupIpcListener('order:completed', callback),
+});
+
+// Phase 2: Expose 'api' namespace for role and terminal
+contextBridge.exposeInMainWorld('api', {
+  role: {
+    list: createIpcInvoker('role:list'),
+    get: createIpcInvoker('role:get'),
+    listDefault: createIpcInvoker('role:listDefault'),
+    listUser: createIpcInvoker('role:listUser'),
+    reload: createIpcInvoker('role:reload'),
+  },
+
+  terminal: {
+    init: createIpcInvoker('terminal:init'),
+    getStatus: createIpcInvoker('terminal:poolStatus'),
+    getMetrics: createIpcInvoker('terminal:poolMetrics'),
+    subscribe: createIpcInvoker('terminal:subscribe'),
+    unsubscribe: createIpcInvoker('terminal:unsubscribe'),
+    shutdown: createIpcInvoker('terminal:shutdown'),
+    onData: (terminalId: string, callback: (data: string) => void) =>
+      setupIpcListener(`terminal:data:${terminalId}`, callback),
   },
 });

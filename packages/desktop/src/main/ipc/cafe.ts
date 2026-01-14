@@ -249,24 +249,45 @@ class CafeRegistry {
 
 const cafeRegistry = new CafeRegistry();
 
+interface IpcResponse<T = void> {
+  success: boolean;
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+    details?: any;
+  };
+}
+
 /**
  * Standardized IPC handler wrapper
  */
 async function handleIpc<T>(
   handler: () => Promise<T>,
   context: string
-): Promise<T> {
+): Promise<IpcResponse<T>> {
   try {
-    return await handler();
-  } catch (error) {
+    const data = await handler();
+    return {
+      success: true,
+      data
+    };
+  } catch (error: any) {
     console.error(`[IPC] Error in ${context}:`, error);
 
+    let errorMessage = error.message || 'Unknown error';
     if (error instanceof z.ZodError) {
-      throw new Error(`Validation failed: ${error.errors.map(e => e.message).join(', ')}`);
+      errorMessage = `Validation failed: ${error.errors.map(e => e.message).join(', ')}`;
     }
 
-    // Preserve original error behavior (Electron serializes thrown errors)
-    throw error;
+    return {
+      success: false,
+      error: {
+        code: error.code || 'UNKNOWN',
+        message: errorMessage,
+        details: error.details
+      }
+    };
   }
 }
 
