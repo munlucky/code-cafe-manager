@@ -45,4 +45,8 @@ export interface CreateCafeParams extends Partial<CafeSettings> {
 /**
  * Cafe Update Parameters
  */
-export type UpdateCafeParams = Partial<Omit<Cafe, 'id' | 'path' | 'createdAt'>>;
+export type UpdateCafeParams = Partial<
+  Omit<Cafe, 'id' | 'path' | 'createdAt' | 'settings'>
+> & {
+  settings?: Partial<CafeSettings>;
+};

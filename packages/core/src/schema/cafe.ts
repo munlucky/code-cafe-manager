@@ -12,10 +12,10 @@ import type {
   UpdateCafeParams,
 } from '../types/cafe.js';
 
-export const CafeSettingsSchema: z.ZodType<CafeSettings> = z.object({
+export const CafeSettingsSchema = z.object({
   baseBranch: z.string().min(1),
   worktreeRoot: z.string().min(1),
-});
+}) satisfies z.ZodType<CafeSettings>;
 
 export const CafeSchema: z.ZodType<Cafe> = z.object({
   id: z.string().uuid(),

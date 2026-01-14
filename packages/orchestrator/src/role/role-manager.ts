@@ -146,6 +146,14 @@ export class RoleManager {
   }
 
   /**
+   * Rescans roles from disk.
+   * Since RoleManager does not use caching, this is a no-op.
+   */
+  rescanRoles(): void {
+    // No-op: roles are read directly from disk on each access
+  }
+
+  /**
    * Validates a role ID to prevent path traversal.
    * @returns true if the role ID is valid.
    */
@@ -196,7 +204,7 @@ export class RoleManager {
     return frontmatter;
   }
 
-  private _parseV1Role(data: matter.GrayMatterFile['data'], content: string, roleId: string): Role {
+  private _parseV1Role(data: matter.GrayMatterFile<string>['data'], content: string, roleId: string): Role {
     return {
       id: data.id || roleId,
       name: data.name || roleId,
@@ -208,7 +216,7 @@ export class RoleManager {
   }
 
   private _parseV2Role(
-    data: matter.GrayMatterFile['data'],
+    data: matter.GrayMatterFile<string>['data'],
     content: string,
     roleId: string,
     source: string,

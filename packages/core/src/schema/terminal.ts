@@ -50,15 +50,25 @@ export const TerminalSchema: z.ZodType<Omit<Terminal, 'process'>> = z.object({
   lastUsed: z.date(),
 });
 
-export const ProviderTerminalConfigSchema: z.ZodType<ProviderTerminalConfig> = z.object(
-  {
-    size: z.number().int().positive().default(8),
-    timeout: z.number().int().positive().default(30000),
-    maxRetries: z.number().int().nonnegative().default(3),
-  }
-);
+export const ProviderTerminalConfigSchema: z.ZodType<
+  ProviderTerminalConfig,
+  z.ZodTypeDef,
+  Partial<ProviderTerminalConfig>
+> = z.object({
+  size: z.number().int().positive().default(8),
+  timeout: z.number().int().positive().default(30000),
+  maxRetries: z.number().int().nonnegative().default(3),
+});
 
-export const TerminalPoolConfigSchema: z.ZodType<TerminalPoolConfig> = z.object({
+export const TerminalPoolConfigSchema: z.ZodType<
+  TerminalPoolConfig,
+  z.ZodTypeDef,
+  {
+    perProvider: {
+      [key: string]: Partial<ProviderTerminalConfig>;
+    };
+  }
+> = z.object({
   perProvider: z.record(ProviderTypeSchema, ProviderTerminalConfigSchema),
 });
 

@@ -51,7 +51,7 @@ export class CodexAdapter implements IProviderAdapter {
         },
         cols: CONFIG.TERM_COLS,
         rows: CONFIG.TERM_ROWS,
-      });
+      }) as unknown as IPtyProcess;
 
       // Wait for initialization
       await this.waitForReady(ptyProcess, CONFIG.INIT_TIMEOUT);
@@ -266,5 +266,31 @@ export class CodexAdapter implements IProviderAdapter {
    */
   private generateId(): string {
     return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  }
+
+  /**
+   * Process JSON lines from terminal output
+   */
+  private processJsonLines(data: string, handler: (parsed: CodexMessage) => boolean): void {
+    const lines = data.split('\n');
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+
+      try {
+        const parsed: CodexMessage = JSON.parse(line);
+        const shouldStop = handler(parsed);
+        if (shouldStop) break;
+      } catch (parseError) {
+        // Ignore non-JSON lines
+      }
+    }
+  }
+
+  /**
+   * Write JSON message to terminal
+   */
+  private writeJson(ptyProcess: IPtyProcess, message: CodexMessage): void {
+    ptyProcess.write(JSON.stringify(message) + '\n');
   }
 }

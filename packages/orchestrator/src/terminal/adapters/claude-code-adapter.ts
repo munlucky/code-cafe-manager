@@ -46,7 +46,7 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         cols: CONFIG.TERM_COLS,
         rows: CONFIG.TERM_ROWS,
       };
-      const ptyProcess = pty.spawn('claude', [], spawnOptions);
+      const ptyProcess = pty.spawn('claude', [], spawnOptions) as unknown as IPtyProcess;
 
       // Wait for initialization prompt
       await this.waitForPrompt(ptyProcess, CONFIG.WAIT_TIMEOUT);
