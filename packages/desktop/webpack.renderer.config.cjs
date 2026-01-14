@@ -1,4 +1,5 @@
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const webpack = require('webpack');
 const path = require('path');
 
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -7,6 +8,8 @@ module.exports = {
   mode: process.env.NODE_ENV || 'development',
   entry: './src/renderer/index.tsx',
   target: 'electron-renderer',
+  externalsPresets: { node: false },
+  externals: {},
   output: {
     path: path.resolve(__dirname, 'dist/renderer'),
     filename: 'bundle.js',
@@ -14,6 +17,15 @@ module.exports = {
   },
   resolve: {
     extensions: ['.tsx', '.ts', '.js', '.jsx'],
+    fallback: {
+      events: require.resolve('events/'),
+      stream: require.resolve('stream-browserify'),
+      buffer: require.resolve('buffer/'),
+      path: require.resolve('path-browserify'),
+      util: require.resolve('util/'),
+      fs: false,
+      'fs/promises': false,
+    },
   },
   module: {
     rules: [
@@ -38,6 +50,10 @@ module.exports = {
     new HtmlWebpackPlugin({
       template: './src/renderer/index.html',
       filename: 'index.html',
+    }),
+    new webpack.ProvidePlugin({
+      Buffer: ['buffer', 'Buffer'],
+      process: 'process/browser',
     }),
   ],
   devtool: 'source-map',
