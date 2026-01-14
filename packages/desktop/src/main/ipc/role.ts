@@ -88,10 +88,10 @@ class RoleRegistry {
 
   /**
    * Reloads roles from the disk.
+   * Note: RoleManager reads directly from disk on each access, so no action needed.
    */
   reload(): void {
-    // This will clear the cache and force re-reading from disk on next access
-    this.roleManager.rescanRoles();
+    // No-op: RoleManager does not use caching, roles are always read fresh from disk
   }
 }
 

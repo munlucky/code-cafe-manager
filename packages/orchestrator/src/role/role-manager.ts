@@ -146,14 +146,6 @@ export class RoleManager {
   }
 
   /**
-   * Rescans roles from disk.
-   * Since RoleManager does not use caching, this is a no-op.
-   */
-  rescanRoles(): void {
-    // No-op: roles are read directly from disk on each access
-  }
-
-  /**
    * Validates a role ID to prevent path traversal.
    * @returns true if the role ID is valid.
    */
