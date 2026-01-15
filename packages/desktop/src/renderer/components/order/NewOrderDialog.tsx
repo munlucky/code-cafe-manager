@@ -8,18 +8,13 @@ import { X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { cn } from '../../utils/cn';
+import type { WorkflowInfo } from '../../types/window';
 
 interface NewOrderDialogProps {
   isOpen: boolean;
   onClose: () => void;
   cafeId: string;
   onSuccess: (orderId: string) => void;
-}
-
-interface Workflow {
-  id: string;
-  name: string;
-  description?: string;
 }
 
 export function NewOrderDialog({
@@ -33,7 +28,7 @@ export function NewOrderDialog({
   const [provider, setProvider] = useState('claude-code');
   const [createWorktree, setCreateWorktree] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowInfo[]>([]);
 
   // 워크플로우 목록 로드
   useEffect(() => {
@@ -44,16 +39,8 @@ export function NewOrderDialog({
 
   const loadWorkflows = async () => {
     try {
-      // TODO: 실제 워크플로우 목록 API 호출
-      // const result = await window.codecafe.workflow.list();
-      // setWorkflows(result.data || []);
-
-      // 임시 데이터
-      setWorkflows([
-        { id: 'feature-workflow', name: 'Feature Development', description: 'Develop a new feature' },
-        { id: 'bugfix-workflow', name: 'Bug Fix', description: 'Fix a bug' },
-        { id: 'refactor-workflow', name: 'Refactoring', description: 'Refactor code' },
-      ]);
+      const result = await window.codecafe.workflow.list();
+      setWorkflows(result.data || []);
     } catch (error) {
       console.error('[NewOrderDialog] Failed to load workflows:', error);
     }
