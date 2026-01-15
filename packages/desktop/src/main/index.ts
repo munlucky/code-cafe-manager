@@ -4,7 +4,6 @@ import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import dotenv from 'dotenv';
 import { Orchestrator } from '@codecafe/core';
-import { registerElectronHandlers } from '@codecafe/orchestrator';
 
 import { registerCafeHandlers } from './ipc/cafe.js';
 import { registerRoleIpcHandlers } from './ipc/role.js';
@@ -13,6 +12,7 @@ import { registerWorktreeHandlers } from './ipc/worktree.js';
 import { registerProviderHandlers } from './ipc/provider.js';
 import { registerOrchestratorHandlers } from './ipc/orchestrator.js';
 import { registerOrderHandlers, cleanupOrderHandlers } from './ipc/order.js';
+import { registerWorkflowHandlers } from './ipc/workflow.js';
 
 import { existsSync } from 'fs';
 
@@ -51,6 +51,25 @@ function resolveOrchDir(): string {
 }
 
 /**
+ * Wait for webpack dev server to be ready
+ */
+async function waitForDevServer(url: string, maxAttempts = 30): Promise<void> {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        console.log(`[Main] Dev server is ready at ${url}`);
+        return;
+      }
+    } catch (error) {
+      // Server not ready yet
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  throw new Error(`Dev server at ${url} did not become ready`);
+}
+
+/**
  * Create the main application window
  */
 async function createWindow(): Promise<void> {
@@ -68,13 +87,21 @@ async function createWindow(): Promise<void> {
     mainWindow.webContents.openDevTools();
   }
 
-  const isDev = process.env.NODE_ENV === 'development';
+  const isDev = !app.isPackaged;
+  console.log(`[Main] isDev: ${isDev}, app.isPackaged: ${app.isPackaged}`);
+
   if (isDev) {
     const port = process.env.RENDERER_PORT || '8081';
     const url = process.env.RENDERER_URL || `http://localhost:${port}`;
+    console.log(`[Main] Waiting for dev server at ${url}...`);
+    await waitForDevServer(url);
+    console.log(`[Main] Loading renderer from ${url}`);
     await mainWindow.loadURL(url);
   } else {
-    await mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+    // In production, files are relative to the app root
+    const indexPath = join(__dirname, '../../renderer/index.html');
+    console.log(`[Main] Loading renderer from file: ${indexPath}`);
+    await mainWindow.loadFile(indexPath);
   }
 
   mainWindow.on('closed', () => {
@@ -117,13 +144,16 @@ function setupIpcHandlers(): void {
   registerTerminalHandlers();
   registerWorktreeHandlers();
   registerProviderHandlers();
+  registerWorkflowHandlers();
 
   if (orchestrator) {
     registerOrchestratorHandlers(orchestrator);
     registerOrderHandlers(orchestrator);
   }
 
-  registerElectronHandlers(ipcMain, orchDir);
+  // Note: registerElectronHandlers removed to avoid duplicate handler registration
+  // Workflow handlers are now registered via registerWorkflowHandlers
+  // TODO: Add run handlers if needed
   console.log('[Main] IPC handlers set up.');
 }
 

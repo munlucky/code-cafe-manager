@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { useEffect, useState, type ReactElement } from 'react';
 import { Plus, AlertCircle, MoreHorizontal, Edit, Trash2 } from 'lucide-react';
 import type { Workflow } from '../../types/models';
@@ -5,7 +6,6 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
 import { WorkflowEditorDialog } from '../workflow/WorkflowEditorDialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/DropdownMenu';
 
 function WorkflowCard({
   workflow,
@@ -16,6 +16,8 @@ function WorkflowCard({
   onEdit: (workflow: Workflow) => void;
   onDelete: (workflow: Workflow) => void;
 }): ReactElement {
+  const [showMenu, setShowMenu] = React.useState(false);
+
   return (
     <Card className="p-4 hover:border-coffee transition-colors">
       <div className="flex items-start justify-between">
@@ -23,30 +25,56 @@ function WorkflowCard({
           <h3 className="font-semibold text-bone mb-1">{workflow.name}</h3>
           <p className="text-sm text-gray-400">ID: {workflow.id}</p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="p-1 h-auto">
-              <MoreHorizontal className="w-4 h-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem onClick={() => onEdit(workflow)}>
-              <Edit className="w-3 h-3 mr-2" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onDelete(workflow)} className="text-red-400">
-              <Trash2 className="w-3 h-3 mr-2" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="relative">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="p-1 h-auto"
+            onClick={() => setShowMenu(!showMenu)}
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </Button>
+          {showMenu && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowMenu(false)}
+              />
+              <div className="absolute right-0 top-8 z-50 min-w-[8rem] overflow-hidden rounded-md border border-gray-600 bg-gray-800 p-1 shadow-lg">
+                <button
+                  className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-gray-700 focus:bg-gray-700"
+                  onClick={() => {
+                    setShowMenu(false);
+                    onEdit(workflow);
+                  }}
+                >
+                  <Edit className="w-3 h-3 mr-2" />
+                  Edit
+                </button>
+                <button
+                  className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-gray-700 focus:bg-gray-700 text-red-400"
+                  onClick={() => {
+                    setShowMenu(false);
+                    onDelete(workflow);
+                  }}
+                >
+                  <Trash2 className="w-3 h-3 mr-2" />
+                  Delete
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
       <p className="mt-2 text-sm text-gray-300">{workflow.description}</p>
       <div className="mt-3 flex items-center gap-2">
         <span className="text-xs text-gray-400">Stages:</span>
         <div className="flex flex-wrap gap-1">
           {workflow.stages.map((stage) => (
-            <span key={stage} className="px-2 py-0.5 bg-gray-700 text-xs text-gray-200 rounded-full">
+            <span
+              key={stage}
+              className="px-2 py-0.5 bg-gray-700 text-xs text-gray-200 rounded-full"
+            >
               {stage}
             </span>
           ))}

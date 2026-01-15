@@ -14,6 +14,7 @@ module.exports = {
     path: path.resolve(__dirname, 'dist/renderer'),
     filename: 'bundle.js',
     clean: true,
+    globalObject: 'this',
   },
   resolve: {
     extensions: ['.tsx', '.ts', '.js', '.jsx'],
@@ -54,6 +55,10 @@ module.exports = {
     new webpack.ProvidePlugin({
       Buffer: ['buffer', 'Buffer'],
       process: 'process/browser',
+    }),
+    new webpack.DefinePlugin({
+      'global': 'window',
+      'global.GENTLY': false,
     }),
   ],
   devtool: 'source-map',
