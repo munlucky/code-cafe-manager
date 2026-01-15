@@ -11,11 +11,14 @@ import {
 import { GlobalLobby } from './components/views/GlobalLobby';
 import { CafeDashboard } from './components/views/CafeDashboard';
 import { RoleManager } from './components/role/RoleManager';
+import { OrderTerminals } from './components/terminal/OrderTerminals';
 
 const VIEW_MAP: Record<string, React.ComponentType> = {
+  cafes: GlobalLobby,
   dashboard: Dashboard,
   'new-order': NewOrder,
   orders: OrderDetail,
+  terminals: OrderTerminals,
   worktrees: Worktrees,
   roles: RoleManager,
 };
@@ -30,18 +33,17 @@ function selectViewComponent(view: string): React.ComponentType {
 }
 
 export function App(): JSX.Element {
-  const currentView = useViewStore((s) => s.currentView);
+  const { currentView, setView } = useViewStore();
   const currentCafeId = useCafeStore((s) => s.currentCafeId);
 
   useIpcEffect();
 
-  // Phase 1: Cafe context routing
-  // If no cafe is selected, show Global Lobby
-  if (!currentCafeId) {
-    return <GlobalLobby />;
+  // Auto-navigate to cafes view if no cafe is selected
+  if (!currentCafeId && currentView !== 'cafes') {
+    setView('cafes');
   }
 
-const ViewComponent = selectViewComponent(currentView);
+  const ViewComponent = selectViewComponent(currentView);
 
   return (
     <Layout>

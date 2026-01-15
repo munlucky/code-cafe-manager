@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { useCafeStore } from '../../store/useCafeStore';
+import { useViewStore } from '../../store/useViewStore';
 import { CafeCard } from '../cafe/CafeCard';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
@@ -22,6 +23,7 @@ export function GlobalLobby() {
     selectCafe
   } = useCafeStore();
 
+  const setView = useViewStore((s) => s.setView);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newCafePath, setNewCafePath] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
@@ -38,6 +40,8 @@ export function GlobalLobby() {
     // selectCafe handles persistence of "last accessed"
     await selectCafe(cafe.id);
     console.log('[Global Lobby] Navigating to cafe:', cafe.id);
+    // Auto-navigate to dashboard after selecting cafe
+    setView('dashboard');
   };
 
   const handleAddCafe = async () => {

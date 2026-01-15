@@ -40,6 +40,18 @@ export function registerElectronHandlers(ipcMain: any, orchDir: string): void {
     return getWorkflow(orchDir, id);
   });
 
+  ipcMain.handle('workflow:create', async (_event: any, workflowData: WorkflowInfo) => {
+    return createWorkflow(orchDir, workflowData);
+  });
+
+  ipcMain.handle('workflow:update', async (_event: any, workflowData: WorkflowInfo) => {
+    return updateWorkflow(orchDir, workflowData);
+  });
+
+  ipcMain.handle('workflow:delete', async (_event: any, id: string) => {
+    return deleteWorkflow(orchDir, id);
+  });
+
   ipcMain.handle(
     'workflow:run',
     async (_event: any, id: string, options?: { mode?: string; interactive?: boolean }) => {
@@ -298,4 +310,59 @@ function buildRunProgress(state: RunState, stages: string[]): RunProgress {
     completedNodes: state.completedNodes.flat ? state.completedNodes.flat() : [],
     lastError: state.lastError,
   };
+}
+
+// --- New functions for workflow CRUD ---
+
+function createWorkflow(orchDir: string, workflowData: WorkflowInfo): WorkflowInfo {
+  const workflowsDir = path.join(orchDir, 'workflows');
+  if (!fs.existsSync(workflowsDir)) {
+    fs.mkdirSync(workflowsDir, { recursive: true });
+  }
+
+  const filePath = path.join(workflowsDir, `${workflowData.id}.workflow.yml`);
+  if (fs.existsSync(filePath)) {
+    throw new Error(`Workflow with id "${workflowData.id}" already exists.`);
+  }
+
+  writeWorkflowToFile(filePath, workflowData);
+  return workflowData;
+}
+
+function updateWorkflow(orchDir: string, workflowData: WorkflowInfo): WorkflowInfo {
+  const filePath = path.join(orchDir, 'workflows', `${workflowData.id}.workflow.yml`);
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Workflow with id "${workflowData.id}" not found.`);
+  }
+
+  writeWorkflowToFile(filePath, workflowData);
+  return workflowData;
+}
+
+function deleteWorkflow(orchDir: string, id: string): { success: boolean } {
+  const filePath = path.join(orchDir, 'workflows', `${id}.workflow.yml`);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+  return { success: true };
+}
+
+function writeWorkflowToFile(filePath: string, workflowData: WorkflowInfo): void {
+  // Use a default 'simple' profile for each stage if not provided
+  const stageProfiles = workflowData.stages.reduce(
+    (acc, stage) => ({ ...acc, [stage]: 'simple' }),
+    {}
+  );
+
+  const yamlData = {
+    workflow: {
+      name: workflowData.name,
+      description: workflowData.description,
+      stages: workflowData.stages,
+    },
+    ...stageProfiles,
+  };
+
+  const content = yaml.dump(yamlData);
+  fs.writeFileSync(filePath, content, 'utf-8');
 }

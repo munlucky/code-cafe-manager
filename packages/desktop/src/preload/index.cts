@@ -40,9 +40,13 @@ contextBridge.exposeInMainWorld('codecafe', {
     get: createIpcInvoker('order:get'),
     getLog: createIpcInvoker('order:getLog'),
     cancel: createIpcInvoker('order:cancel'),
+    createWithWorktree: createIpcInvoker('order:createWithWorktree'),
+    subscribeOutput: createIpcInvoker('order:subscribeOutput'),
+    unsubscribeOutput: createIpcInvoker('order:unsubscribeOutput'),
     onEvent: (callback: (event: any) => void) => setupIpcListener('order:event', callback),
     onAssigned: (callback: (data: any) => void) => setupIpcListener('order:assigned', callback),
     onCompleted: (callback: (data: any) => void) => setupIpcListener('order:completed', callback),
+    onOutput: (callback: (event: any) => void) => setupIpcListener('order:output', callback),
   },
 
   receipt: {

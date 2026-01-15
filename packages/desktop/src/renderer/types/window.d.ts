@@ -30,6 +30,27 @@ export interface CreateOrderParams {
   recipeName?: string;
 }
 
+export interface CreateOrderWithWorktreeParams {
+  cafeId: string;
+  workflowId: string;
+  workflowName: string;
+  provider: string;
+  vars?: Record<string, string>;
+  createWorktree: boolean;
+  worktreeOptions?: {
+    baseBranch?: string;
+    branchPrefix?: string;
+  };
+}
+
+export interface CreateOrderWithWorktreeResult {
+  order: Order;
+  worktree?: {
+    path: string;
+    branch: string;
+  };
+}
+
 export interface ProviderInfo {
   id: ProviderType;
   name: string;
@@ -96,7 +117,25 @@ declare global {
       createBarista: (provider: ProviderType) => Promise<IpcResponse<Barista>>;
       getAllBaristas: () => Promise<IpcResponse<Barista[]>>;
 
-      // Order 관리
+      // Order 관리 (Namespace)
+      order: {
+        create: (params: CreateOrderParams) => Promise<IpcResponse<Order>>;
+        getAll: () => Promise<IpcResponse<Order[]>>;
+        get: (orderId: string) => Promise<IpcResponse<Order>>;
+        getLog: (orderId: string) => Promise<IpcResponse<string>>;
+        cancel: (orderId: string) => Promise<IpcResponse<void>>;
+        createWithWorktree: (
+          params: CreateOrderWithWorktreeParams
+        ) => Promise<IpcResponse<CreateOrderWithWorktreeResult>>;
+        subscribeOutput: (orderId: string) => Promise<IpcResponse<{ subscribed: boolean }>>;
+        unsubscribeOutput: (orderId: string) => Promise<IpcResponse<{ unsubscribed: boolean }>>;
+        onEvent: (callback: (event: any) => void) => void;
+        onAssigned: (callback: (data: any) => void) => void;
+        onCompleted: (callback: (data: any) => void) => void;
+        onOutput: (callback: (event: any) => void) => () => void;
+      };
+
+      // Order 관리 (Legacy flat API - backward compatibility)
       createOrder: (params: CreateOrderParams) => Promise<IpcResponse<Order>>;
       getAllOrders: () => Promise<IpcResponse<Order[]>>;
       getOrder: (orderId: string) => Promise<IpcResponse<Order>>;

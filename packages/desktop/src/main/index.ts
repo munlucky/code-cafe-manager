@@ -12,6 +12,7 @@ import { registerTerminalHandlers } from './ipc/terminal.js';
 import { registerWorktreeHandlers } from './ipc/worktree.js';
 import { registerProviderHandlers } from './ipc/provider.js';
 import { registerOrchestratorHandlers } from './ipc/orchestrator.js';
+import { registerOrderHandlers, cleanupOrderHandlers } from './ipc/order.js';
 
 import { existsSync } from 'fs';
 
@@ -116,6 +117,7 @@ function setupIpcHandlers(): void {
 
   if (orchestrator) {
     registerOrchestratorHandlers(orchestrator);
+    registerOrderHandlers(orchestrator);
   }
 
   registerElectronHandlers(ipcMain, orchDir);
@@ -142,5 +144,6 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
+  cleanupOrderHandlers();
   orchestrator?.stop();
 });

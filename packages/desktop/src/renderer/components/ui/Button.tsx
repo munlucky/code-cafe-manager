@@ -1,7 +1,7 @@
 import { cn } from '../../utils/cn';
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive';
   size?: 'sm' | 'md' | 'lg';
 };
 
@@ -21,6 +21,7 @@ const variantStyles = {
   secondary: 'bg-gray-700 hover:bg-gray-600 text-white',
   outline: 'bg-transparent border border-gray-600 hover:bg-gray-800 text-white',
   ghost: 'bg-transparent hover:bg-gray-800 text-white',
+  destructive: 'bg-red-800 hover:bg-red-700 text-white',
 };
 
 export function Button({

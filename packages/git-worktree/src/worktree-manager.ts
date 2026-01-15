@@ -22,23 +22,26 @@ export class WorktreeManager {
   static async createWorktree(options: WorktreeCreateOptions): Promise<WorktreeInfo> {
     const { repoPath, baseBranch, newBranch, worktreePath } = options;
 
+    // 1. 브랜치 중복 확인 (필요 시 suffix 추가)
+    const finalBranchName = await this.getUniqueBranchName(repoPath, newBranch);
+
     // Worktree 경로 결정 (사전 합의서: 프로젝트 외부)
     const finalWorktreePath =
       worktreePath ||
-      path.resolve(repoPath, '..', '.codecafe-worktrees', newBranch);
+      path.resolve(repoPath, '..', '.codecafe-worktrees', finalBranchName);
 
     try {
-      // 1. Worktree 디렉터리 생성
+      // 2. Worktree 디렉터리 생성
       fs.mkdirSync(path.dirname(finalWorktreePath), { recursive: true });
 
-      // 2. Git worktree add 실행 (보안: execFile 사용)
+      // 3. Git worktree add 실행 (보안: execFile 사용)
       await execFileAsync(
         'git',
-        ['worktree', 'add', '-b', newBranch, finalWorktreePath, baseBranch],
+        ['worktree', 'add', '-b', finalBranchName, finalWorktreePath, baseBranch],
         { cwd: repoPath }
       );
 
-      // 3. Worktree 정보 조회
+      // 4. Worktree 정보 조회
       const info = await this.getWorktreeInfo(repoPath, finalWorktreePath);
 
       return info;
@@ -188,5 +191,39 @@ export class WorktreeManager {
     }
 
     return worktrees;
+  }
+
+  /**
+   * 중복되지 않는 브랜치명 생성
+   * 브랜치가 이미 존재하면 suffix를 붙여서 고유한 이름 생성 (예: order-123 -> order-123-2)
+   */
+  private static async getUniqueBranchName(repoPath: string, baseName: string): Promise<string> {
+    const branches = await this.listBranches(repoPath);
+    let candidateName = baseName;
+    let suffix = 2;
+
+    while (branches.includes(candidateName)) {
+      candidateName = `${baseName}-${suffix}`;
+      suffix++;
+    }
+
+    return candidateName;
+  }
+
+  /**
+   * 모든 브랜치 목록 조회
+   */
+  private static async listBranches(repoPath: string): Promise<string[]> {
+    try {
+      const { stdout } = await execFileAsync(
+        'git',
+        ['branch', '--format=%(refname:short)'],
+        { cwd: repoPath }
+      );
+      return stdout.trim().split('\n').filter(Boolean);
+    } catch (error: any) {
+      // 브랜치가 없는 경우 빈 배열 반환
+      return [];
+    }
   }
 }

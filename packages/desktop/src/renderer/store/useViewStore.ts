@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 
 export type ViewParams = {
+  cafes: void;
   dashboard: void;
   'new-order': void;
   orders: { orderId?: string };
+  terminals: void;
   worktrees: void;
   roles: { roleId?: string; mode?: 'list' | 'detail' | 'create' | 'edit' };
 };

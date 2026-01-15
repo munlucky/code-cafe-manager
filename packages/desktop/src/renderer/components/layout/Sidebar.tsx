@@ -3,9 +3,10 @@ import { cn } from '../../utils/cn';
 import { useViewStore, type ViewName } from '../../store/useViewStore';
 
 const NAV_ITEMS: Array<{ view: ViewName; label: string }> = [
+  { view: 'cafes', label: 'Cafes' },
   { view: 'dashboard', label: 'Dashboard' },
-  { view: 'new-order', label: 'New Order' },
   { view: 'orders', label: 'Orders' },
+  { view: 'terminals', label: 'Terminals' },
   { view: 'worktrees', label: 'Worktrees' },
 ];
 

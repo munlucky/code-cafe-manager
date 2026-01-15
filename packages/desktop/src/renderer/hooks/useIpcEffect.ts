@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useBaristaStore } from '../store/useBaristaStore';
 import { useOrderStore } from '../store/useOrderStore';
+import { OrderStatus } from '@codecafe/core';
 
 export function useIpcEffect() {
   const { updateBarista } = useBaristaStore();
@@ -28,7 +29,7 @@ export function useIpcEffect() {
       console.log('Order Assigned:', data);
       if (data.orderId) {
         updateOrder(data.orderId, {
-          status: 'RUNNING',
+          status: OrderStatus.RUNNING,
           baristaId: data.baristaId,
         });
       }
@@ -38,7 +39,7 @@ export function useIpcEffect() {
     window.codecafe.onOrderCompleted((data) => {
       console.log('Order Completed:', data);
       if (data.orderId) {
-        updateOrder(data.orderId, { status: 'COMPLETED' });
+        updateOrder(data.orderId, { status: OrderStatus.COMPLETED });
       }
     });
   }, [updateBarista, updateOrder]);

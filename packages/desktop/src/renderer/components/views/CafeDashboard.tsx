@@ -16,10 +16,12 @@ import {
 import { OrderStatus, type Order } from '../../types/models';
 
 import { useCafeStore } from '../../store/useCafeStore';
+import { useViewStore } from '../../store/useViewStore';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
+import { NewOrderDialog } from '../order/NewOrderDialog';
 
 // Mock data removed in favor of real API 연동
 
@@ -37,11 +39,15 @@ const STATUS_CONFIG: Record<
 
 interface OrderCardProps {
   order: Order;
+  onViewTerminal?: (orderId: string) => void;
+  onCancelOrder?: (orderId: string) => void;
 }
 
-function OrderCard({ order }: OrderCardProps): ReactElement {
+function OrderCard({ order, onViewTerminal, onCancelOrder }: OrderCardProps): ReactElement {
   const config = STATUS_CONFIG[order.status];
   const Icon = config.icon;
+  const isRunning = order.status === OrderStatus.RUNNING;
+  const isCancellable = order.status === OrderStatus.RUNNING || order.status === OrderStatus.PENDING;
 
   return (
     <Card className="p-4 hover:border-coffee transition-colors">
@@ -83,6 +89,27 @@ function OrderCard({ order }: OrderCardProps): ReactElement {
           {order.error}
         </div>
       )}
+
+      <div className="mt-4 flex items-center gap-2">
+        {isRunning && onViewTerminal && (
+          <Button
+            variant="primary"
+            onClick={() => onViewTerminal(order.id)}
+            className="flex-1 text-sm"
+          >
+            View Terminal
+          </Button>
+        )}
+        {isCancellable && onCancelOrder && (
+          <Button
+            variant="destructive"
+            onClick={() => onCancelOrder(order.id)}
+            className="flex-1 text-sm"
+          >
+            Cancel Order
+          </Button>
+        )}
+      </div>
     </Card>
   );
 }
@@ -90,9 +117,16 @@ function OrderCard({ order }: OrderCardProps): ReactElement {
 interface OrderListProps {
   orders: Order[];
   onNewOrder: () => void;
+  onViewTerminal: (orderId: string) => void;
+  onCancelOrder: (orderId: string) => void;
 }
 
-function OrderList({ orders, onNewOrder }: OrderListProps): ReactElement {
+function OrderList({
+  orders,
+  onNewOrder,
+  onViewTerminal,
+  onCancelOrder,
+}: OrderListProps): ReactElement {
   if (orders.length === 0) {
     return (
       <EmptyState
@@ -112,7 +146,12 @@ function OrderList({ orders, onNewOrder }: OrderListProps): ReactElement {
   return (
     <div className="space-y-3">
       {orders.map((order) => (
-        <OrderCard key={order.id} order={order} />
+        <OrderCard
+          key={order.id}
+          order={order}
+          onViewTerminal={onViewTerminal}
+          onCancelOrder={onCancelOrder}
+        />
       ))}
     </div>
   );
@@ -120,9 +159,11 @@ function OrderList({ orders, onNewOrder }: OrderListProps): ReactElement {
 
 interface OrderKanbanProps {
   orders: Order[];
+  onViewTerminal: (orderId: string) => void;
+  onCancelOrder: (orderId: string) => void;
 }
 
-function OrderKanban({ orders }: OrderKanbanProps): ReactElement {
+function OrderKanban({ orders, onViewTerminal, onCancelOrder }: OrderKanbanProps): ReactElement {
   const columns = useMemo(() => {
     const cols: Record<OrderStatus, Order[]> = {
       [OrderStatus.PENDING]: [],
@@ -152,7 +193,12 @@ function OrderKanban({ orders }: OrderKanbanProps): ReactElement {
             </div>
             <div className="space-y-3 overflow-auto">
               {ordersList.map((order) => (
-                <OrderCard key={order.id} order={order} />
+                <OrderCard
+                  key={order.id}
+                  order={order}
+                  onViewTerminal={onViewTerminal}
+                  onCancelOrder={onCancelOrder}
+                />
               ))}
             </div>
           </div>
@@ -178,11 +224,13 @@ function InfoItem({ label, value }: InfoItemProps): ReactElement {
 
 export function CafeDashboard(): ReactElement {
   const { getCurrentCafe, setCurrentCafe } = useCafeStore();
+  const setView = useViewStore((s) => s.setView);
   const currentCafe = getCurrentCafe();
   const [orders, setOrders] = useState<Order[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showNewOrderDialog, setShowNewOrderDialog] = useState(false);
 
   // Load orders from API
   useEffect(() => {
@@ -280,10 +328,46 @@ export function CafeDashboard(): ReactElement {
 
   const handleBackToLobby = (): void => {
     setCurrentCafe(null);
+    setView('cafes');
   };
 
   const handleNewOrder = (): void => {
-    console.log('[Cafe Dashboard] New Order clicked (placeholder)');
+    setShowNewOrderDialog(true);
+  };
+
+  const handleOrderCreated = (orderId: string): void => {
+    console.log('[Cafe Dashboard] Order created:', orderId);
+    // 오더 목록 새로고침
+    window.codecafe.getAllOrders().then((response) => {
+      if (response.success && response.data) {
+        setOrders(response.data);
+      }
+    });
+  };
+
+  const handleViewTerminal = (orderId: string): void => {
+    setView('terminals');
+  };
+
+  const handleCancelOrder = async (orderId: string) => {
+    if (!confirm('Are you sure you want to cancel this order?')) {
+      return;
+    }
+    try {
+      const response = await window.codecafe.order.cancel(orderId);
+      if (response.success) {
+        // Optimistically update UI or wait for event
+        setOrders((prevOrders) =>
+          prevOrders.map((o) =>
+            o.id === orderId ? { ...o, status: OrderStatus.CANCELLED } : o
+          )
+        );
+      } else {
+        alert(`Failed to cancel order: ${response.error?.message}`);
+      }
+    } catch (err: any) {
+      alert(`Failed to cancel order: ${err.message}`);
+    }
   };
 
   return (
@@ -340,11 +424,28 @@ export function CafeDashboard(): ReactElement {
       {/* Orders */}
       <div className="flex-1 overflow-auto">
         {viewMode === 'list' ? (
-          <OrderList orders={orders} onNewOrder={handleNewOrder} />
+          <OrderList
+            orders={orders}
+            onNewOrder={handleNewOrder}
+            onViewTerminal={handleViewTerminal}
+            onCancelOrder={handleCancelOrder}
+          />
         ) : (
-          <OrderKanban orders={orders} />
+          <OrderKanban
+            orders={orders}
+            onViewTerminal={handleViewTerminal}
+            onCancelOrder={handleCancelOrder}
+          />
         )}
       </div>
+
+      {/* New Order Dialog */}
+      <NewOrderDialog
+        isOpen={showNewOrderDialog}
+        onClose={() => setShowNewOrderDialog(false)}
+        cafeId={currentCafe.id}
+        onSuccess={handleOrderCreated}
+      />
     </div>
   );
 }

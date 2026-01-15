@@ -1,16 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { EmptyState } from '../ui/EmptyState';
-import type { WorktreeInfo } from '../../types/models';
+import { StatusBadge } from '../ui/Badge';
+import { useViewStore } from '../../store/useViewStore';
+import type { WorktreeInfo, Order } from '../../types/models';
+import { OrderStatus } from '@codecafe/core';
+
+interface WorktreeWithOrder extends WorktreeInfo {
+  order?: Order | null;
+}
 
 export function Worktrees() {
   const [repoPath, setRepoPath] = useState('.');
   const [baseBranch, setBaseBranch] = useState('main');
-  const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
+  const [worktrees, setWorktrees] = useState<WorktreeWithOrder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const setView = useViewStore((s) => s.setView);
 
   const handleLoad = async () => {
     setIsLoading(true);
@@ -20,7 +28,26 @@ export function Worktrees() {
       const result = await window.codecafe.listWorktrees(repoPath);
 
       if (result.success && result.data) {
-        setWorktrees(result.data);
+        // 오더 정보를 가져와서 워크트리에 연결
+        const worktreesWithOrders = await Promise.all(
+          result.data.map(async (wt) => {
+            // 브랜치명에서 orderId 추출 (order-123 → 123)
+            const orderIdMatch = wt.branch?.match(/^order-(\d+)$/);
+            if (orderIdMatch) {
+              const orderId = orderIdMatch[1];
+              try {
+                const orderResult = await window.codecafe.order.get(orderId);
+                if (orderResult.success && orderResult.data) {
+                  return { ...wt, order: orderResult.data };
+                }
+              } catch (err) {
+                console.error('[Worktrees] Failed to fetch order:', orderId, err);
+              }
+            }
+            return { ...wt, order: null };
+          })
+        );
+        setWorktrees(worktreesWithOrders);
       } else {
         setError(result.error?.message || 'Failed to load worktrees');
         setWorktrees([]);
@@ -59,16 +86,24 @@ export function Worktrees() {
     }
   };
 
-  const handleRemove = async (worktreePath: string, force = false) => {
+  const handleRemove = async (worktree: WorktreeWithOrder, force = false) => {
+    // RUNNING 오더 워크트리 삭제 시 경고
+    if (!force && worktree.order?.status === OrderStatus.RUNNING) {
+      const confirmed = confirm(
+        `This worktree is linked to a RUNNING order (#${worktree.order.id}).\n\nAre you sure you want to delete it?`
+      );
+      if (!confirmed) return;
+    }
+
     if (!force) {
       const confirmed = confirm(
-        `Delete worktree at ${worktreePath}?\n\nThis will fail if there are uncommitted changes.`
+        `Delete worktree at ${worktree.path}?\n\nThis will fail if there are uncommitted changes.`
       );
       if (!confirmed) return;
     }
 
     try {
-      const result = await window.codecafe.removeWorktree(worktreePath, force);
+      const result = await window.codecafe.removeWorktree(worktree.path, force);
 
       if (result.success) {
         alert('Worktree deleted successfully');
@@ -79,7 +114,7 @@ export function Worktrees() {
             `Failed: ${result.error?.message}\n\nForce delete?`
           );
           if (forceConfirm) {
-            handleRemove(worktreePath, true);
+            handleRemove(worktree, true);
           }
         } else {
           alert(`Failed to delete: ${result.error?.message}`);
@@ -88,6 +123,10 @@ export function Worktrees() {
     } catch (error) {
       alert(`Error: ${error}`);
     }
+  };
+
+  const handleViewOrder = (orderId: string) => {
+    setView('orders', { orderId });
   };
 
   return (
@@ -135,6 +174,7 @@ export function Worktrees() {
                 <th className="text-left py-3 px-4 text-coffee">Branch</th>
                 <th className="text-left py-3 px-4 text-coffee">Path</th>
                 <th className="text-left py-3 px-4 text-coffee">Commit</th>
+                <th className="text-left py-3 px-4 text-coffee">Order</th>
                 <th className="text-left py-3 px-4 text-coffee">Actions</th>
               </tr>
             </thead>
@@ -147,7 +187,29 @@ export function Worktrees() {
                     {wt.commit ? wt.commit.substring(0, 7) : 'N/A'}
                   </td>
                   <td className="py-3 px-4">
+                    {wt.order ? (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-bone">#{wt.order.id}</span>
+                          <StatusBadge status={wt.order.status} />
+                        </div>
+                        <div className="text-xs text-gray-500">{wt.order.workflowName}</div>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-400">No order</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-4">
                     <div className="flex gap-2">
+                      {wt.order && (
+                        <Button
+                          variant="primary"
+                          onClick={() => handleViewOrder(wt.order!.id)}
+                          className="text-xs py-1 px-2"
+                        >
+                          View Order
+                        </Button>
+                      )}
                       <Button
                         variant="secondary"
                         onClick={() => handleExportPatch(wt.path)}
@@ -164,7 +226,7 @@ export function Worktrees() {
                       </Button>
                       <Button
                         variant="secondary"
-                        onClick={() => handleRemove(wt.path)}
+                        onClick={() => handleRemove(wt)}
                         className="text-xs py-1 px-2 bg-red-700 hover:bg-red-600"
                       >
                         Delete
