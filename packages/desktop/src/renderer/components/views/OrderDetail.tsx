@@ -51,7 +51,7 @@ function useWorkflowRuns(active: boolean) {
   const fetchRuns = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await window.codecafe.listRuns();
+      const response = await window.codecafe.run.list();
       setRuns(response.data || []);
     } catch (error) {
       console.error('Failed to fetch workflow runs:', error);
@@ -113,7 +113,7 @@ function useRunLogs(runId: string | null, status?: string, active?: boolean) {
   const loadLogs = useCallback(async (id: string) => {
     setIsLoading(true);
     try {
-      const response = await window.codecafe.getRunLogs(id);
+      const response = await window.codecafe.run.getLogs(id);
       setRunLogs(response.data || []);
     } catch (error) {
       console.error('Failed to load run logs:', error);
@@ -712,7 +712,7 @@ export function OrderDetail(): JSX.Element {
 
     setIsResuming(true);
     try {
-      await window.codecafe.resumeRun(selectedRun.runId);
+      await window.codecafe.run.resume(selectedRun.runId);
       await fetchRuns();
     } catch (error) {
       alert(`Failed to resume run: ${error}`);

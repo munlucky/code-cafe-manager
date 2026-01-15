@@ -42,10 +42,10 @@ export function NewOrder({ onSuccess }: NewOrderProps) {
       setIsWorkflowLoading(true);
       try {
         const [workflowList, providerList, roles, assignments] = await Promise.all([
-          window.codecafe.listWorkflows(),
+          window.codecafe.workflow.list(),
           window.codecafe.getAvailableProviders(),
-          window.codecafe.listRoles(),
-          window.codecafe.getAssignments(),
+          window.codecafe.config.roles.list(),
+          window.codecafe.config.assignments.get(),
         ]);
 
         if (!active) {
@@ -56,7 +56,7 @@ export function NewOrder({ onSuccess }: NewOrderProps) {
         setAvailableProviders(providerList.data || []);
         setAvailableRoles(roles.data || []);
         setAssignmentsByStage(
-          (assignments.data || []).reduce<Record<string, ProviderAssignmentInfo>>((acc, item) => {
+          (assignments.data || []).reduce<Record<string, ProviderAssignmentInfo>>((acc: Record<string, ProviderAssignmentInfo>, item: ProviderAssignmentInfo) => {
             acc[item.stage] = item;
             return acc;
           }, {})
@@ -90,7 +90,7 @@ export function NewOrder({ onSuccess }: NewOrderProps) {
       try {
         const entries = await Promise.all(
           workflowStages.map(async (stage) => {
-            const response = await window.codecafe.listProfiles(stage);
+            const response = await window.codecafe.config.profiles.list(stage);
             return [stage, response.data || []] as const;
           })
         );
@@ -151,7 +151,7 @@ export function NewOrder({ onSuccess }: NewOrderProps) {
     setAssignmentsByStage((prev) => ({ ...prev, [stage]: next }));
 
     try {
-      await window.codecafe.setAssignment(stage, next.provider, next.role);
+      await window.codecafe.config.assignments.set(stage, next.provider, next.role);
     } catch (error) {
       console.error('Failed to update assignment:', error);
     }
@@ -162,7 +162,7 @@ export function NewOrder({ onSuccess }: NewOrderProps) {
     setAssignmentsByStage((prev) => ({ ...prev, [stage]: next }));
 
     try {
-      await window.codecafe.setProfile(stage, profile);
+      await window.codecafe.config.profiles.set(stage, profile);
     } catch (error) {
       console.error('Failed to update profile:', error);
     }
@@ -176,12 +176,16 @@ export function NewOrder({ onSuccess }: NewOrderProps) {
 
     setIsSubmitting(true);
     try {
-      const runId = await window.codecafe.runWorkflow(selectedWorkflowId, {
+      const response = await window.codecafe.workflow.run(selectedWorkflowId, {
         mode: 'auto',
         interactive: false,
       });
-      alert(`Workflow started. Run ID: ${runId}`);
-      onSuccess?.();
+      if (response.success && response.data) {
+        alert(`Workflow started. Run ID: ${response.data}`);
+        onSuccess?.();
+      } else {
+        throw new Error(response.error?.message || 'Failed to start workflow');
+      }
     } catch (error) {
       alert(`Failed to run workflow: ${error}`);
     } finally {

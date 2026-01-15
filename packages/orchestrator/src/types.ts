@@ -5,6 +5,22 @@
 // Stage types
 export type StageType = 'plan' | 'code' | 'test' | 'check'
 
+/**
+ * Workflow definition
+ */
+export interface Workflow {
+  id: string
+  name: string
+  description?: string
+  stages: StageType[]
+  loop: {
+    max_iters: number
+    fallback_next_stage: StageType
+    stop_when: string
+  }
+  source?: string
+}
+
 // Node types
 export type NodeType = 'run' | 'foreach' | 'reduce' | 'branch' | 'export'
 
@@ -18,6 +34,7 @@ export type ExecutionMode = 'assisted' | 'headless' | 'auto'
  * Workflow definition
  */
 export interface Workflow {
+  id: string
   name: string
   stages: StageType[]
   loop: {
@@ -25,6 +42,8 @@ export interface Workflow {
     fallback_next_stage: StageType
     stop_when: string
   }
+  source?: string
+  description?: string
 }
 
 /**

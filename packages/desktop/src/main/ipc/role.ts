@@ -117,102 +117,50 @@ const RoleUpdateSchema = z.object({
   variables: z.array(RoleVariableSchema).optional(),
 });
 
-// Error handling
-export enum RoleErrorCode {
-  NOT_FOUND = 'ROLE_NOT_FOUND',
-  VALIDATION_FAILED = 'ROLE_VALIDATION_FAILED',
-  ALREADY_EXISTS = 'ROLE_ALREADY_EXISTS',
-  UNKNOWN = 'ROLE_UNKNOWN_ERROR',
-}
-
-class RoleError extends Error {
-  constructor(
-    public readonly code: RoleErrorCode,
-    message: string,
-    public readonly details?: any,
-  ) {
-    super(message);
-    this.name = 'RoleError';
-  }
-}
-
-interface ErrorResponse {
-  success: false;
-  error: {
-    code: RoleErrorCode;
-    message: string;
-    details?: any;
-  };
-}
-
-interface SuccessResponse<T> {
-  success: true;
-  data: T;
-}
-
-type IpcResponse<T> = SuccessResponse<T> | ErrorResponse;
-
-function createErrorResponse(code: RoleErrorCode, message: string, details?: any): ErrorResponse {
-  return { success: false, error: { code, message, details } };
-}
-
-function createSuccessResponse<T>(data: T): SuccessResponse<T> {
-  return { success: true, data };
-}
-
-/**
- * Wraps an async function with standardized try-catch and error reporting.
- */
-async function handleIpc<T>(
-  logic: () => Promise<T> | T,
-  errorContext: { unknown: string; zod?: string },
-): Promise<IpcResponse<T>> {
-  try {
-    const result = await Promise.resolve(logic());
-    return createSuccessResponse(result);
-  } catch (error) {
-    if (error instanceof RoleError) {
-      return createErrorResponse(error.code, error.message, error.details);
-    }
-    if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        RoleErrorCode.VALIDATION_FAILED,
-        errorContext.zod || 'Validation failed',
-        error.errors,
-      );
-    }
-    return createErrorResponse(
-      RoleErrorCode.UNKNOWN,
-      errorContext.unknown,
-      error instanceof Error ? error.message : String(error),
-    );
-  }
-}
 
 /**
  * Registers all role-related IPC handlers.
  */
 export function registerRoleIpcHandlers(): void {
-  const listRolesHandler = () => handleIpc(() => roleRegistry.getAll(), { unknown: 'Failed to list roles' });
-  ipcMain.handle('role:list', listRolesHandler);
-  ipcMain.handle('role:getAll', listRolesHandler); // For backward compatibility
+  ipcMain.handle('role:list', async () => {
+    try {
+      return { status: 'success', data: roleRegistry.getAll() };
+    } catch (error) {
+      console.error('Failed to list roles:', error);
+      return { status: 'error', error: { message: 'Failed to list roles', code: 'UNKNOWN' } };
+    }
+  });
+  ipcMain.handle('role:getAll', async () => { // For backward compatibility
+    try {
+      return { status: 'success', data: roleRegistry.getAll() };
+    } catch (error) {
+      console.error('Failed to list roles:', error);
+      return { status: 'error', error: { message: 'Failed to list roles', code: 'UNKNOWN' } };
+    }
+  });
 
-  ipcMain.handle('role:get', (_, roleId: string) =>
-    handleIpc(() => {
+  ipcMain.handle('role:get', async (_, roleId: string) => {
+    try {
       const validatedId = RoleIdSchema.parse(roleId);
       const role = roleRegistry.get(validatedId);
       if (!role) {
-        throw new RoleError(RoleErrorCode.NOT_FOUND, `Role not found: ${validatedId}`);
+        return { status: 'error', error: { message: `Role not found: ${validatedId}`, code: 'NOT_FOUND' } };
       }
-      return role;
-    }, { unknown: 'Failed to get role', zod: 'Invalid role ID' }),
-  );
+      return { status: 'success', data: role };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return { status: 'error', error: { message: 'Invalid role ID', code: 'VALIDATION_FAILED', details: error.errors } };
+      }
+      console.error('Failed to get role:', error);
+      return { status: 'error', error: { message: 'Failed to get role', code: 'UNKNOWN' } };
+    }
+  });
 
-  ipcMain.handle('role:create', (_, roleData: unknown) =>
-    handleIpc(() => {
+  ipcMain.handle('role:create', async (_, roleData: unknown) => {
+    try {
       const validatedData = RoleCreateSchema.parse(roleData);
       if (roleRegistry.get(validatedData.id)) {
-        throw new RoleError(RoleErrorCode.ALREADY_EXISTS, `Role already exists: ${validatedData.id}`);
+        return { status: 'error', error: { message: `Role already exists: ${validatedData.id}`, code: 'ALREADY_EXISTS' } };
       }
       const role: CoreRole = {
         ...validatedData,
@@ -221,17 +169,23 @@ export function registerRoleIpcHandlers(): void {
         variables: validatedData.variables ?? [],
       };
       roleRegistry.save(role);
-      return role;
-    }, { unknown: 'Failed to create role', zod: 'Invalid role data' }),
-  );
+      return { status: 'success', data: role };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return { status: 'error', error: { message: 'Invalid role data', code: 'VALIDATION_FAILED', details: error.errors } };
+      }
+      console.error('Failed to create role:', error);
+      return { status: 'error', error: { message: 'Failed to create role', code: 'UNKNOWN' } };
+    }
+  });
 
-  ipcMain.handle('role:update', (_, roleId: string, updates: unknown) =>
-    handleIpc(() => {
+  ipcMain.handle('role:update', async (_, roleId: string, updates: unknown) => {
+    try {
       const validatedId = RoleIdSchema.parse(roleId);
       const validatedUpdates = RoleUpdateSchema.parse(updates);
       const existingRole = roleRegistry.get(validatedId);
       if (!existingRole) {
-        throw new RoleError(RoleErrorCode.NOT_FOUND, `Role not found: ${validatedId}`);
+        return { status: 'error', error: { message: `Role not found: ${validatedId}`, code: 'NOT_FOUND' } };
       }
       const updatedRole: CoreRole = {
         ...existingRole,
@@ -239,42 +193,73 @@ export function registerRoleIpcHandlers(): void {
         variables: validatedUpdates.variables ?? existingRole.variables,
       };
       roleRegistry.save(updatedRole);
-      return updatedRole;
-    }, { unknown: 'Failed to update role', zod: 'Invalid update data' }),
-  );
+      return { status: 'success', data: updatedRole };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return { status: 'error', error: { message: 'Invalid update data', code: 'VALIDATION_FAILED', details: error.errors } };
+      }
+      console.error('Failed to update role:', error);
+      return { status: 'error', error: { message: 'Failed to update role', code: 'UNKNOWN' } };
+    }
+  });
 
-  ipcMain.handle('role:delete', (_, roleId: string) =>
-    handleIpc(() => {
+  ipcMain.handle('role:delete', async (_, roleId: string) => {
+    try {
       const validatedId = RoleIdSchema.parse(roleId);
       const existingRole = roleRegistry.get(validatedId);
       if (!existingRole) {
-        throw new RoleError(RoleErrorCode.NOT_FOUND, `Role not found: ${validatedId}`);
+        return { status: 'error', error: { message: `Role not found: ${validatedId}`, code: 'NOT_FOUND' } };
       }
       if (existingRole.isDefault) {
-        throw new RoleError(RoleErrorCode.VALIDATION_FAILED, 'Cannot delete a default role');
+        return { status: 'error', error: { message: 'Cannot delete a default role', code: 'VALIDATION_FAILED' } };
       }
       roleRegistry.delete(validatedId);
-      return undefined;
-    }, { unknown: 'Failed to delete role', zod: 'Invalid role ID' }),
-  );
+      return { status: 'success', data: undefined };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return { status: 'error', error: { message: 'Invalid role ID', code: 'VALIDATION_FAILED', details: error.errors } };
+      }
+      console.error('Failed to delete role:', error);
+      return { status: 'error', error: { message: 'Failed to delete role', code: 'UNKNOWN' } };
+    }
+  });
 
-  const listDefaultRolesHandler = () =>
-    handleIpc(() => roleRegistry.getAll().filter((role) => role.isDefault), {
-      unknown: 'Failed to get default roles',
-    });
-  ipcMain.handle('role:list-default', listDefaultRolesHandler);
-  ipcMain.handle('role:getDefaults', listDefaultRolesHandler); // For backward compatibility
+  ipcMain.handle('role:list-default', async () => {
+    try {
+      const roles = roleRegistry.getAll().filter((role) => role.isDefault);
+      return { status: 'success', data: roles };
+    } catch (error) {
+      console.error('Failed to get default roles:', error);
+      return { status: 'error', error: { message: 'Failed to get default roles', code: 'UNKNOWN' } };
+    }
+  });
+  ipcMain.handle('role:getDefaults', async () => { // For backward compatibility
+    try {
+      const roles = roleRegistry.getAll().filter((role) => role.isDefault);
+      return { status: 'success', data: roles };
+    } catch (error) {
+      console.error('Failed to get default roles:', error);
+      return { status: 'error', error: { message: 'Failed to get default roles', code: 'UNKNOWN' } };
+    }
+  });
 
-  const listUserRolesHandler = () =>
-    handleIpc(() => roleRegistry.getAll().filter((role) => !role.isDefault), {
-      unknown: 'Failed to get user roles',
-    });
-  ipcMain.handle('role:list-user', listUserRolesHandler);
+  ipcMain.handle('role:list-user', async () => {
+    try {
+      const roles = roleRegistry.getAll().filter((role) => !role.isDefault);
+      return { status: 'success', data: roles };
+    } catch (error) {
+      console.error('Failed to get user roles:', error);
+      return { status: 'error', error: { message: 'Failed to get user roles', code: 'UNKNOWN' } };
+    }
+  });
 
-  ipcMain.handle('role:reload', () =>
-    handleIpc(() => {
+  ipcMain.handle('role:reload', async () => {
+    try {
       roleRegistry.reload();
-      return roleRegistry.getAll();
-    }, { unknown: 'Failed to reload roles' }),
-  );
+      return { status: 'success', data: roleRegistry.getAll() };
+    } catch (error) {
+      console.error('Failed to reload roles:', error);
+      return { status: 'error', error: { message: 'Failed to reload roles', code: 'UNKNOWN' } };
+    }
+  });
 }

@@ -86,6 +86,7 @@ async function createWindow(): Promise<void> {
  * Initialize and start the Orchestrator
  */
 async function initOrchestrator(): Promise<void> {
+  console.log('[Main] Initializing orchestrator...');
   const codecafeDir = join(homedir(), '.codecafe');
   const dataDir = join(codecafeDir, 'data');
   const logsDir = join(codecafeDir, 'logs');
@@ -101,12 +102,14 @@ async function initOrchestrator(): Promise<void> {
       mainWindow?.webContents.send(event, data);
     });
   }
+  console.log('[Main] Orchestrator initialized.');
 }
 
 /**
  * Set up all IPC handlers
  */
 function setupIpcHandlers(): void {
+  console.log('[Main] Setting up IPC handlers...');
   const orchDir = resolveOrchDir();
 
   registerCafeHandlers();
@@ -121,13 +124,16 @@ function setupIpcHandlers(): void {
   }
 
   registerElectronHandlers(ipcMain, orchDir);
+  console.log('[Main] IPC handlers set up.');
 }
 
 // Application Lifecycle
 app.whenReady().then(async () => {
+  console.log('[Main] App is ready.');
   await initOrchestrator();
   setupIpcHandlers();
   await createWindow();
+  console.log('[Main] Window created.');
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -143,7 +149,17 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('will-quit', () => {
+let isQuitting = false;
+
+app.on('will-quit', async (event) => {
+  if (isQuitting) {
+    return;
+  }
+  event.preventDefault();
+  isQuitting = true;
   cleanupOrderHandlers();
-  orchestrator?.stop();
+  if (orchestrator) {
+    await orchestrator.stop();
+  }
+  app.quit();
 });

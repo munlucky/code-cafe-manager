@@ -51,6 +51,9 @@ export class Storage {
       return [];
     }
     const content = await readFile(this.ordersFile, 'utf-8');
+    if (!content) {
+      return [];
+    }
     const orders = JSON.parse(content);
     // Date 복원
     return orders.map((order: any) => ({
@@ -73,6 +76,9 @@ export class Storage {
       return [];
     }
     const content = await readFile(this.baristasFile, 'utf-8');
+    if (!content) {
+      return [];
+    }
     const baristas = JSON.parse(content);
     // Date 복원
     return baristas.map((barista: any) => ({
@@ -94,6 +100,9 @@ export class Storage {
       return [];
     }
     const content = await readFile(this.receiptsFile, 'utf-8');
+    if (!content) {
+      return [];
+    }
     const receipts = JSON.parse(content);
     // Date 복원
     return receipts.map((receipt: any) => ({

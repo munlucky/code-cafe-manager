@@ -103,7 +103,7 @@ export class Orchestrator extends EventEmitter {
   /**
    * Orchestrator 중지
    */
-  stop(): void {
+  async stop(): Promise<void> {
     if (!this.isRunning) {
       return;
     }
@@ -114,6 +114,9 @@ export class Orchestrator extends EventEmitter {
       clearInterval(this.checkInterval);
       this.checkInterval = null;
     }
+
+    this.baristaManager.stopAll();
+    await this.saveState();
   }
 
   /**

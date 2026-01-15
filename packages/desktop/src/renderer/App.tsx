@@ -7,6 +7,7 @@ import {
   NewOrder,
   OrderDetail,
   Worktrees,
+  Workflows,
 } from './components/views';
 import { GlobalLobby } from './components/views/GlobalLobby';
 import { CafeDashboard } from './components/views/CafeDashboard';
@@ -20,6 +21,7 @@ const VIEW_MAP: Record<string, React.ComponentType> = {
   orders: OrderDetail,
   terminals: OrderTerminals,
   worktrees: Worktrees,
+  workflows: Workflows,
   roles: RoleManager,
 };
 
@@ -38,10 +40,6 @@ export function App(): JSX.Element {
 
   useIpcEffect();
 
-  // Auto-navigate to cafes view if no cafe is selected
-  if (!currentCafeId && currentView !== 'cafes') {
-    setView('cafes');
-  }
 
   const ViewComponent = selectViewComponent(currentView);
 

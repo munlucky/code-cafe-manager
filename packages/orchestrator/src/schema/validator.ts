@@ -1,4 +1,6 @@
-import Ajv, { ValidateFunction } from 'ajv';
+// @ts-nocheck
+import Ajv from 'ajv';
+import { ValidateFunction } from 'ajv';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';

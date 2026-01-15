@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc -b",
     "dev": "tsc -b --watch",
-    "clean": "rm -rf dist *.tsbuildinfo",
+    "clean": "powershell -Command \"Remove-Item -Recurse -Force dist, *.tsbuildinfo -ErrorAction SilentlyContinue\"",
     "typecheck": "tsc --noEmit"
   },
   "keywords": ["codecafe", "schema", "validation"],

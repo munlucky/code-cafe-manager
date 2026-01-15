@@ -7,6 +7,7 @@ export type ViewParams = {
   orders: { orderId?: string };
   terminals: void;
   worktrees: void;
+  workflows: void;
   roles: { roleId?: string; mode?: 'list' | 'detail' | 'create' | 'edit' };
 };
 
@@ -19,7 +20,7 @@ interface ViewState {
 }
 
 export const useViewStore = create<ViewState>((set) => ({
-  currentView: 'dashboard',
+  currentView: 'cafes',
   viewParams: undefined,
   setView: (view, params) => set({ currentView: view, viewParams: params }),
 }));

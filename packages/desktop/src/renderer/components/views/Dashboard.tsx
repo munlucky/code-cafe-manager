@@ -21,7 +21,7 @@ export function Dashboard(): JSX.Element {
   const fetchRuns = async () => {
     setRunsLoading(true);
     try {
-      const runs = await window.codecafe.listRuns();
+      const runs = await window.codecafe.run.list();
       setWorkflowRuns(runs.data || []);
     } catch (error) {
       console.error('Failed to fetch workflow runs:', error);

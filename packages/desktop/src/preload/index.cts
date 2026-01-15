@@ -67,6 +67,9 @@ contextBridge.exposeInMainWorld('codecafe', {
   workflow: {
     list: createIpcInvoker('workflow:list'),
     get: createIpcInvoker('workflow:get'),
+    create: createIpcInvoker('workflow:create'),
+    update: createIpcInvoker('workflow:update'),
+    delete: createIpcInvoker('workflow:delete'),
     run: createIpcInvoker('workflow:run'),
   },
 

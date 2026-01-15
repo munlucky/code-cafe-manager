@@ -161,22 +161,50 @@ declare global {
       ) => Promise<IpcResponse<void>>;
       openWorktreeFolder: (worktreePath: string) => Promise<IpcResponse<void>>;
 
-      // Orchestrator - Using standardized IpcResponse
-      listWorkflows: () => Promise<IpcResponse<WorkflowInfo[]>>;
-      getWorkflow: (workflowId: string) => Promise<IpcResponse<WorkflowInfo | null>>;
-      runWorkflow: (
-        workflowId: string,
-        options?: { mode?: string; interactive?: boolean }
-      ) => Promise<IpcResponse<string>>;
-      listRuns: () => Promise<IpcResponse<RunProgress[]>>;
-      getRunStatus: (runId: string) => Promise<IpcResponse<RunProgress | null>>;
-      resumeRun: (runId: string) => Promise<IpcResponse<void>>;
-      getRunLogs: (runId: string) => Promise<IpcResponse<RunLogEntry[]>>;
-      getAssignments: () => Promise<IpcResponse<ProviderAssignmentInfo[]>>;
-      setAssignment: (stage: string, provider: string, role: string) => Promise<IpcResponse<void>>;
-      listProfiles: (stage: string) => Promise<IpcResponse<string[]>>;
-      setProfile: (stage: string, profile: string) => Promise<IpcResponse<void>>;
-      listRoles: () => Promise<IpcResponse<string[]>>;
+      // Workflow Management
+      workflow: {
+        list: () => Promise<IpcResponse<WorkflowInfo[]>>;
+        get: (workflowId: string) => Promise<IpcResponse<WorkflowInfo | null>>;
+        create: (workflowData: WorkflowInfo) => Promise<IpcResponse<WorkflowInfo>>;
+        update: (workflowData: WorkflowInfo) => Promise<IpcResponse<WorkflowInfo>>;
+        delete: (workflowId: string) => Promise<IpcResponse<{ success: boolean }>>;
+        run: (
+          workflowId: string,
+          options?: { mode?: string; interactive?: boolean }
+        ) => Promise<IpcResponse<string>>;
+      };
+
+      // Orchestrator (Run Management)
+      run: {
+        list: () => Promise<IpcResponse<RunProgress[]>>;
+        getStatus: (runId: string) => Promise<IpcResponse<RunProgress | null>>;
+        resume: (runId: string) => Promise<IpcResponse<void>>;
+        getLogs: (runId: string) => Promise<IpcResponse<RunLogEntry[]>>;
+      };
+
+      // Config
+      config: {
+        assignments: {
+          get: () => Promise<IpcResponse<ProviderAssignmentInfo[]>>;
+          set: (stage: string, provider: string, role: string) => Promise<IpcResponse<void>>;
+        };
+        profiles: {
+          list: (stage: string) => Promise<IpcResponse<string[]>>;
+          set: (stage: string, profile: string) => Promise<IpcResponse<void>>;
+        };
+        roles: {
+          list: () => Promise<IpcResponse<string[]>>;
+        };
+      };
+
+      // Role Management (re-namespaced)
+      role: {
+        list: () => Promise<IpcResponse<Role[]>>;
+        get: (id: string) => Promise<IpcResponse<Role>>;
+        listDefault: () => Promise<IpcResponse<Role[]>>;
+        listUser: () => Promise<IpcResponse<Role[]>>;
+        reload: () => Promise<IpcResponse<void>>;
+      };
 
       // Event Listeners - No change for callbacks
       onBaristaEvent: (callback: (event: any) => void) => void;

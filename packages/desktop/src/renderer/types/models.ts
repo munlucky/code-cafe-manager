@@ -56,3 +56,10 @@ export interface Receipt {
   changedFiles?: string[];
   logs?: string;
 }
+
+export interface Workflow {
+  id: string;
+  name: string;
+  description?: string;
+  stages: string[];
+}

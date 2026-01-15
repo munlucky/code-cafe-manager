@@ -103,6 +103,18 @@ export class BaristaManager extends EventEmitter {
     this.baristas.delete(baristaId);
   }
 
+  /**
+   * 모든 바리스타 중지
+   */
+  stopAll(): void {
+    for (const barista of this.baristas.values()) {
+      if (barista.status === BaristaStatus.RUNNING || barista.status === BaristaStatus.IDLE) {
+        this.updateBaristaStatus(barista.id, BaristaStatus.STOPPED);
+      }
+    }
+  }
+
+
   private generateId(): string {
     return `barista-${Date.now()}-${Math.random().toString(36).substring(7)}`;
   }
