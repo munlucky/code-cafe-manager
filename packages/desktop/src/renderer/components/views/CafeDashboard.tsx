@@ -13,8 +13,7 @@ import {
   AlertCircle,
   type LucideIcon,
 } from 'lucide-react';
-import { OrderStatus } from '@codecafe/core';
-import type { Order } from '@codecafe/core';
+import { OrderStatus, type Order } from '../../types/models';
 
 import { useCafeStore } from '../../store/useCafeStore';
 import { Badge } from '../ui/Badge';
@@ -22,110 +21,8 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
 
-// Mock orders data (Phase 1)
-const MOCK_ORDERS_DATA: Order[] = [
-  {
-    id: 'order-001',
-    workflowId: 'feature-implementation',
-    workflowName: 'Feature Implementation',
-    baristaId: 'barista-001',
-    status: OrderStatus.RUNNING,
-    counter: '/path/to/cafe/worktree-1',
-    provider: 'claude-code',
-    vars: {
-      feature: 'User Authentication',
-      description: 'Implement JWT-based authentication',
-    },
-    createdAt: new Date('2026-01-12T09:00:00.000Z'),
-    startedAt: new Date('2026-01-12T09:01:00.000Z'),
-    endedAt: null,
-    worktreeInfo: {
-      path: '/path/to/cafe/.codecafe-worktrees/feature-auth',
-      branch: 'feature/auth',
-      baseBranch: 'main',
-    },
-  },
-  {
-    id: 'order-002',
-    workflowId: 'bug-fix',
-    workflowName: 'Bug Fix',
-    baristaId: 'barista-002',
-    status: OrderStatus.COMPLETED,
-    counter: '/path/to/cafe/worktree-2',
-    provider: 'codex',
-    vars: {
-      issue: 'Memory leak in event handler',
-      severity: 'high',
-    },
-    createdAt: new Date('2026-01-12T08:00:00.000Z'),
-    startedAt: new Date('2026-01-12T08:05:00.000Z'),
-    endedAt: new Date('2026-01-12T08:45:00.000Z'),
-    worktreeInfo: {
-      path: '/path/to/cafe/.codecafe-worktrees/fix-memory-leak',
-      branch: 'fix/memory-leak',
-      baseBranch: 'main',
-    },
-  },
-  {
-    id: 'order-003',
-    workflowId: 'refactor',
-    workflowName: 'Code Refactoring',
-    baristaId: null,
-    status: OrderStatus.PENDING,
-    counter: '/path/to/cafe',
-    provider: 'claude-code',
-    vars: {
-      target: 'Database layer',
-      goal: 'Extract to separate module',
-    },
-    createdAt: new Date('2026-01-12T10:00:00.000Z'),
-    startedAt: null,
-    endedAt: null,
-  },
-  {
-    id: 'order-004',
-    workflowId: 'feature-implementation',
-    workflowName: 'Feature Implementation',
-    baristaId: 'barista-003',
-    status: OrderStatus.RUNNING,
-    counter: '/path/to/cafe/worktree-3',
-    provider: 'claude-code',
-    vars: {
-      feature: 'Dark Mode',
-      description: 'Add theme toggle with localStorage persistence',
-    },
-    createdAt: new Date('2026-01-12T09:30:00.000Z'),
-    startedAt: new Date('2026-01-12T09:35:00.000Z'),
-    endedAt: null,
-    worktreeInfo: {
-      path: '/path/to/cafe/.codecafe-worktrees/feature-dark-mode',
-      branch: 'feature/dark-mode',
-      baseBranch: 'main',
-    },
-  },
-  {
-    id: 'order-005',
-    workflowId: 'test-coverage',
-    workflowName: 'Test Coverage Improvement',
-    baristaId: 'barista-004',
-    status: OrderStatus.FAILED,
-    counter: '/path/to/cafe/worktree-4',
-    provider: 'codex',
-    vars: {
-      module: 'User Service',
-      targetCoverage: '90%',
-    },
-    createdAt: new Date('2026-01-12T07:00:00.000Z'),
-    startedAt: new Date('2026-01-12T07:10:00.000Z'),
-    endedAt: new Date('2026-01-12T07:55:00.000Z'),
-    error: 'Test execution failed: TypeError in mock setup',
-    worktreeInfo: {
-      path: '/path/to/cafe/.codecafe-worktrees/test-user-service',
-      branch: 'test/user-service',
-      baseBranch: 'main',
-    },
-  },
-];
+// Mock data removed in favor of real API 연동
+
 
 const STATUS_CONFIG: Record<
   OrderStatus,
@@ -284,11 +181,65 @@ export function CafeDashboard(): ReactElement {
   const currentCafe = getCurrentCafe();
   const [orders, setOrders] = useState<Order[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // Load orders from API
   useEffect(() => {
-    // Phase 1: Load mock orders
-    setOrders(MOCK_ORDERS_DATA);
+    const loadOrders = async () => {
+      if (!currentCafe) return;
+
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await window.codecafe.getAllOrders();
+        
+        if (response.success && response.data) {
+          setOrders(response.data);
+        } else {
+          setError(response.error?.message || 'Failed to load orders');
+        }
+      } catch (err: any) {
+        console.error('[Cafe Dashboard] Failed to load orders:', err);
+        setError(err.message || 'Failed to load orders');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadOrders();
   }, [currentCafe]);
+
+  // Subscribe to order events for real-time updates
+  useEffect(() => {
+    const handleOrderEvent = (event: any) => {
+      console.log('[Cafe Dashboard] Order event:', event);
+      
+      // Reload orders when there's an event
+      window.codecafe.getAllOrders().then((response) => {
+        if (response.success && response.data) {
+          setOrders(response.data);
+        }
+      });
+    };
+
+    const handleOrderAssigned = (data: any) => {
+      console.log('[Cafe Dashboard] Order assigned:', data);
+      handleOrderEvent(data);
+    };
+
+    const handleOrderCompleted = (data: any) => {
+      console.log('[Cafe Dashboard] Order completed:', data);
+      handleOrderEvent(data);
+    };
+
+    // Set up event listeners
+    window.codecafe.onOrderEvent(handleOrderEvent);
+    window.codecafe.onOrderAssigned(handleOrderAssigned);
+    window.codecafe.onOrderCompleted(handleOrderCompleted);
+
+    // Cleanup is handled by the next effect call
+  }, []);
 
   const activeOrdersCount = useMemo(
     () => orders.filter((o) => o.status === OrderStatus.RUNNING).length,
@@ -299,6 +250,30 @@ export function CafeDashboard(): ReactElement {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-gray-400">No cafe selected</div>
+      </div>
+    );
+  }
+
+  if (loading && orders.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-8 h-8 border-4 border-coffee border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-gray-400">Loading orders...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && orders.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+        <h3 className="text-lg font-semibold text-bone mb-2">Failed to load orders</h3>
+        <p className="text-gray-400 mb-6">{error}</p>
+        <Button onClick={() => window.location.reload()} variant="secondary">
+          Retry
+        </Button>
       </div>
     );
   }

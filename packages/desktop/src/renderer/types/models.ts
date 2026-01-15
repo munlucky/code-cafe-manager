@@ -1,7 +1,13 @@
 // 도메인 모델 타입 정의
 export type ProviderType = 'claude-code' | 'codex' | 'gemini' | 'grok';
 export type BaristaStatus = 'IDLE' | 'RUNNING' | 'ERROR' | 'STOPPED';
-export type OrderStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+export enum OrderStatus {
+  PENDING = 'PENDING',
+  RUNNING = 'RUNNING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  CANCELLED = 'CANCELLED',
+}
 export type WorkspaceMode = 'in-place' | 'worktree' | 'temp';
 
 export interface Barista {
