@@ -162,10 +162,15 @@ export interface RunLogEntry {
   nodeId?: string;
 }
 
-// Skill preset types
+// Skill types (단일 스킬 관리)
 export type SkillCategory = 'analysis' | 'planning' | 'implementation' | 'verification' | 'utility';
 
-export interface SkillPresetItem {
+/**
+ * 단일 스킬 정의
+ * - Skills 메뉴에서 개별 관리
+ * - Workflow의 Stage에서 skills: ['skill-id-1', 'skill-id-2'] 형태로 참조
+ */
+export interface Skill {
   id: string;
   name: string;
   description: string;
@@ -173,14 +178,20 @@ export interface SkillPresetItem {
   skillCommand: string; // e.g., '/moonshot-classify-task'
   context?: 'fork' | 'inherit';
   isBuiltIn?: boolean; // 시스템 제공 여부
+  createdAt?: string;
+  updatedAt?: string;
 }
 
+// Legacy: SkillPresetItem은 Skill의 별칭으로 유지 (하위 호환성)
+export type SkillPresetItem = Skill;
+
+// Legacy: SkillPreset은 하위 호환성을 위해 유지 (사용하지 않음)
 export interface SkillPreset {
   id: string;
   name: string;
   description: string;
-  skills: SkillPresetItem[];
-  isBuiltIn?: boolean; // 시스템 제공 프리셋 여부
+  skills: Skill[];
+  isBuiltIn?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

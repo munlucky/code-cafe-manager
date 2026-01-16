@@ -1,11 +1,11 @@
 import * as React from 'react';
 import { useEffect, useState, type ReactElement } from 'react';
-import { Plus, AlertCircle, Edit, Trash2, Copy, Filter } from 'lucide-react';
-import type { SkillPreset, SkillCategory } from '../../types/models';
+import { Plus, AlertCircle, Edit, Trash2, Copy, Filter, Terminal } from 'lucide-react';
+import type { Skill, SkillCategory } from '../../types/models';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
-import { SkillPresetEditorDialog } from '../skill/SkillPresetEditorDialog';
+import { SkillEditorDialog } from '../skill/SkillEditorDialog';
 
 // Available categories for filtering
 const CATEGORIES: { value: SkillCategory; label: string }[] = [
@@ -25,113 +25,110 @@ const CATEGORY_COLORS: Record<SkillCategory, string> = {
   utility: 'bg-gray-700/30 text-gray-300',
 };
 
-interface SkillPresetCardProps {
-  preset: SkillPreset;
-  onEdit: (preset: SkillPreset, e: React.MouseEvent) => void;
-  onDelete: (preset: SkillPreset, e: React.MouseEvent) => void;
-  onDuplicate: (preset: SkillPreset, e: React.MouseEvent) => void;
+interface SkillCardProps {
+  skill: Skill;
+  onEdit: (skill: Skill, e: React.MouseEvent) => void;
+  onDelete: (skill: Skill, e: React.MouseEvent) => void;
+  onDuplicate: (skill: Skill, e: React.MouseEvent) => void;
 }
 
-function SkillPresetCard({
-  preset,
+function SkillCard({
+  skill,
   onEdit,
   onDelete,
   onDuplicate,
-}: SkillPresetCardProps): ReactElement {
-  const categoryCounts = preset.skills.reduce((acc, skill) => {
-    acc[skill.category] = (acc[skill.category] || 0) + 1;
-    return acc;
-  }, {} as Record<SkillCategory, number>);
-
+}: SkillCardProps): ReactElement {
   return (
     <Card className="p-4 hover:border-coffee transition-colors group">
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-bone truncate">{preset.name}</h3>
-            {preset.isBuiltIn && (
+            <h3 className="font-semibold text-bone truncate">{skill.name}</h3>
+            {skill.isBuiltIn && (
               <span className="px-1.5 py-0.5 bg-coffee/20 text-coffee text-xs rounded flex-shrink-0">
                 Built-in
               </span>
             )}
+            <span
+              className={`px-2 py-0.5 text-xs rounded-full ${CATEGORY_COLORS[skill.category]}`}
+            >
+              {CATEGORIES.find((c) => c.value === skill.category)?.label || skill.category}
+            </span>
           </div>
-          <p className="text-sm text-gray-400 truncate">ID: {preset.id}</p>
+          <p className="text-sm text-gray-400 truncate">ID: {skill.id}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-          {preset.isBuiltIn && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={(e) => onDuplicate(preset, e)}
-              className="p-1.5 h-auto hover:bg-gray-700"
-              title="Duplicate preset"
-            >
-              <Copy className="w-4 h-4 text-gray-400 group-hover:text-bone" />
-            </Button>
-          )}
           <Button
             size="sm"
             variant="ghost"
-            onClick={(e) => onEdit(preset, e)}
+            onClick={(e) => onDuplicate(skill, e)}
             className="p-1.5 h-auto hover:bg-gray-700"
-            title="Edit preset"
+            title="Duplicate skill"
           >
-            <Edit className="w-4 h-4 text-gray-400 group-hover:text-bone" />
+            <Copy className="w-4 h-4 text-gray-400 group-hover:text-bone" />
           </Button>
-          {!preset.isBuiltIn && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={(e) => onDelete(preset, e)}
-              className="p-1.5 h-auto hover:bg-red-900/30"
-              title="Delete preset"
-            >
-              <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-400" />
-            </Button>
+          {!skill.isBuiltIn && (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => onEdit(skill, e)}
+                className="p-1.5 h-auto hover:bg-gray-700"
+                title="Edit skill"
+              >
+                <Edit className="w-4 h-4 text-gray-400 group-hover:text-bone" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => onDelete(skill, e)}
+                className="p-1.5 h-auto hover:bg-red-900/30"
+                title="Delete skill"
+              >
+                <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-400" />
+              </Button>
+            </>
           )}
         </div>
       </div>
-      <p className="mt-2 text-sm text-gray-300 line-clamp-2">{preset.description}</p>
-      <div className="mt-3 flex items-center gap-2">
-        <span className="text-xs text-gray-400">Skills:</span>
-        <div className="flex flex-wrap gap-1">
-          {CATEGORIES.filter((cat) => categoryCounts[cat.value] > 0).map((cat) => (
-            <span
-              key={cat.value}
-              className={`px-2 py-0.5 text-xs rounded-full flex items-center gap-1 ${CATEGORY_COLORS[cat.value]}`}
-            >
-              {cat.label} ({categoryCounts[cat.value]})
-            </span>
-          ))}
-          <span className="px-2 py-0.5 bg-gray-700 text-xs text-gray-200 rounded-full">
-            {preset.skills.length} total
-          </span>
+      <p className="mt-2 text-sm text-gray-300 line-clamp-2">{skill.description}</p>
+      <div className="mt-3 flex items-center gap-3">
+        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+          <Terminal className="w-3.5 h-3.5" />
+          <code className="bg-gray-800 px-1.5 py-0.5 rounded">{skill.skillCommand}</code>
         </div>
+        <span className={`text-xs px-2 py-0.5 rounded ${
+          skill.context === 'inherit'
+            ? 'bg-orange-900/30 text-orange-300'
+            : 'bg-cyan-900/30 text-cyan-300'
+        }`}>
+          {skill.context === 'inherit' ? 'Inherit Context' : 'Fork Context'}
+        </span>
       </div>
     </Card>
   );
 }
 
 export function Skills(): ReactElement {
-  const [presets, setPresets] = useState<SkillPreset[]>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [editingPreset, setEditingPreset] = useState<SkillPreset | null>(null);
+  const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<SkillCategory | 'all'>('all');
 
-  const loadPresets = async () => {
+  const loadSkills = async () => {
     try {
       setLoading(true);
       setError(null);
       const response = await window.codecafe.skill.list();
       if (response.success && response.data) {
-        setPresets(response.data);
+        setSkills(response.data);
       } else {
-        setError(response.error?.message || 'Failed to load skill presets');
+        setError(response.error?.message || 'Failed to load skills');
       }
     } catch (err: any) {
-      console.error('[Skills] Failed to load presets:', err);
+      console.error('[Skills] Failed to load skills:', err);
       setError(err.message || 'An unknown error occurred');
     } finally {
       setLoading(false);
@@ -139,100 +136,108 @@ export function Skills(): ReactElement {
   };
 
   useEffect(() => {
-    loadPresets();
+    loadSkills();
   }, []);
 
-  const handleNewPreset = () => {
-    setEditingPreset(null);
+  const handleNewSkill = () => {
+    setEditingSkill(null);
     setIsEditorOpen(true);
   };
 
-  const handleEditPreset = (preset: SkillPreset, e: React.MouseEvent) => {
+  const handleEditSkill = (skill: Skill, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (preset.isBuiltIn) {
-      // For built-in presets, show a message to duplicate first
-      alert('Built-in presets cannot be edited directly. Please duplicate it first to create a custom version.');
+    if (skill.isBuiltIn) {
+      alert('Built-in skills cannot be edited directly. Please duplicate it first to create a custom version.');
       return;
     }
-    setEditingPreset(preset);
+    setEditingSkill(skill);
     setIsEditorOpen(true);
   };
 
-  const handleDeletePreset = async (preset: SkillPreset, e: React.MouseEvent) => {
+  const handleDeleteSkill = async (skill: Skill, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (preset.isBuiltIn) {
-      alert('Built-in presets cannot be deleted.');
+    if (skill.isBuiltIn) {
+      alert('Built-in skills cannot be deleted.');
       return;
     }
-    if (!confirm(`Are you sure you want to delete skill preset "${preset.name}"?`)) {
+    if (!confirm(`Are you sure you want to delete skill "${skill.name}"?`)) {
       return;
     }
     try {
-      const response = await window.codecafe.skill.delete(preset.id);
+      const response = await window.codecafe.skill.delete(skill.id);
       if (response.success) {
-        await loadPresets();
+        await loadSkills();
       } else {
         throw new Error(response.error?.message || 'Failed to delete');
       }
     } catch (err: any) {
-      alert(`Error deleting preset: ${err.message}`);
+      alert(`Error deleting skill: ${err.message}`);
     }
   };
 
-  const handleDuplicatePreset = async (preset: SkillPreset, e: React.MouseEvent) => {
+  const handleDuplicateSkill = async (skill: Skill, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
     // Generate a new ID
-    const baseId = preset.id.replace(/-copy$/, '');
+    const baseId = skill.id.replace(/-copy\d*$/, '');
     let newId = `${baseId}-copy`;
     let counter = 1;
-    while (presets.some((p) => p.id === newId)) {
+    while (skills.some((s) => s.id === newId)) {
       newId = `${baseId}-copy${counter}`;
       counter++;
     }
 
     try {
-      const response = await window.codecafe.skill.duplicate(preset.id, newId, `${preset.name} (Copy)`);
+      const response = await window.codecafe.skill.duplicate(skill.id, newId, `${skill.name} (Copy)`);
       if (response.success) {
-        await loadPresets();
+        await loadSkills();
       } else {
         throw new Error(response.error?.message || 'Failed to duplicate');
       }
     } catch (err: any) {
-      alert(`Error duplicating preset: ${err.message}`);
+      alert(`Error duplicating skill: ${err.message}`);
     }
   };
 
   const handleSuccess = async () => {
-    await loadPresets();
+    await loadSkills();
   };
 
-  const filteredPresets = presets.filter((preset) => {
+  const filteredSkills = skills.filter((skill) => {
     if (categoryFilter === 'all') return true;
-    return preset.skills.some((skill) => skill.category === categoryFilter);
+    return skill.category === categoryFilter;
   });
 
-  if (loading && presets.length === 0) {
+  // Group skills by category
+  const groupedSkills = CATEGORIES.reduce((acc, cat) => {
+    const catSkills = filteredSkills.filter((s) => s.category === cat.value);
+    if (catSkills.length > 0) {
+      acc.push({ category: cat, skills: catSkills });
+    }
+    return acc;
+  }, [] as { category: typeof CATEGORIES[0]; skills: Skill[] }[]);
+
+  if (loading && skills.length === 0) {
     return (
       <div className="p-6 h-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-2">
           <div className="w-8 h-8 border-4 border-coffee border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-400">Loading skill presets...</p>
+          <p className="text-gray-400">Loading skills...</p>
         </div>
       </div>
     );
   }
 
-  if (error && presets.length === 0) {
+  if (error && skills.length === 0) {
     return (
       <div className="p-6 h-full flex flex-col items-center justify-center text-center">
         <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-        <h3 className="text-lg font-semibold text-bone mb-2">Failed to load skill presets</h3>
+        <h3 className="text-lg font-semibold text-bone mb-2">Failed to load skills</h3>
         <p className="text-gray-400 mb-6">{error}</p>
-        <Button onClick={loadPresets} variant="secondary">
+        <Button onClick={loadSkills} variant="secondary">
           Retry
         </Button>
       </div>
@@ -243,10 +248,15 @@ export function Skills(): ReactElement {
     <>
       <div className="p-6 h-full overflow-auto">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-bone">Skill Presets</h1>
-          <Button onClick={handleNewPreset} className="flex items-center gap-2">
+          <div>
+            <h1 className="text-2xl font-bold text-bone">Skills</h1>
+            <p className="text-sm text-gray-400 mt-1">
+              개별 스킬을 관리합니다. Workflow의 Stage에서 스킬을 선택하여 사용할 수 있습니다.
+            </p>
+          </div>
+          <Button onClick={handleNewSkill} className="flex items-center gap-2">
             <Plus className="w-4 h-4" />
-            New Preset
+            New Skill
           </Button>
         </div>
 
@@ -261,60 +271,92 @@ export function Skills(): ReactElement {
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
-            All
+            All ({skills.length})
           </button>
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat.value}
-              onClick={() => setCategoryFilter(cat.value)}
-              className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                categoryFilter === cat.value
-                  ? `${CATEGORY_COLORS[cat.value]} border border-current`
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
+          {CATEGORIES.map((cat) => {
+            const count = skills.filter((s) => s.category === cat.value).length;
+            return (
+              <button
+                key={cat.value}
+                onClick={() => setCategoryFilter(cat.value)}
+                className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                  categoryFilter === cat.value
+                    ? `${CATEGORY_COLORS[cat.value]} border border-current`
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                {cat.label} ({count})
+              </button>
+            );
+          })}
         </div>
 
-        {filteredPresets.length === 0 ? (
+        {filteredSkills.length === 0 ? (
           <EmptyState
             icon={AlertCircle}
-            title={presets.length === 0 ? 'No Skill Presets Found' : 'No Matching Presets'}
+            title={skills.length === 0 ? 'No Skills Found' : 'No Matching Skills'}
             description={
-              presets.length === 0
-                ? 'Create your first skill preset to get started.'
-                : 'No presets match the selected category filter.'
+              skills.length === 0
+                ? 'Create your first skill to get started.'
+                : 'No skills match the selected category filter.'
             }
             action={
-              presets.length === 0 ? (
-                <Button onClick={handleNewPreset} className="flex items-center gap-2">
+              skills.length === 0 ? (
+                <Button onClick={handleNewSkill} className="flex items-center gap-2">
                   <Plus className="w-4 h-4" />
-                  New Preset
+                  New Skill
                 </Button>
               ) : undefined
             }
           />
+        ) : categoryFilter === 'all' ? (
+          // Grouped view when showing all
+          <div className="space-y-6">
+            {groupedSkills.map(({ category, skills: catSkills }) => (
+              <div key={category.value}>
+                <h2 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${
+                  CATEGORY_COLORS[category.value].split(' ')[1]
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${
+                    CATEGORY_COLORS[category.value].split(' ')[0]
+                  }`}></span>
+                  {category.label}
+                  <span className="text-gray-500 font-normal">({catSkills.length})</span>
+                </h2>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {catSkills.map((skill) => (
+                    <SkillCard
+                      key={skill.id}
+                      skill={skill}
+                      onEdit={handleEditSkill}
+                      onDelete={handleDeleteSkill}
+                      onDuplicate={handleDuplicateSkill}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
-          <div className="space-y-4">
-            {filteredPresets.map((preset) => (
-              <SkillPresetCard
-                key={preset.id}
-                preset={preset}
-                onEdit={handleEditPreset}
-                onDelete={handleDeletePreset}
-                onDuplicate={handleDuplicatePreset}
+          // Flat view when filtering by category
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {filteredSkills.map((skill) => (
+              <SkillCard
+                key={skill.id}
+                skill={skill}
+                onEdit={handleEditSkill}
+                onDelete={handleDeleteSkill}
+                onDuplicate={handleDuplicateSkill}
               />
             ))}
           </div>
         )}
       </div>
-      <SkillPresetEditorDialog
+      <SkillEditorDialog
         isOpen={isEditorOpen}
         onClose={() => setIsEditorOpen(false)}
         onSuccess={handleSuccess}
-        preset={editingPreset}
+        skill={editingSkill}
       />
     </>
   );

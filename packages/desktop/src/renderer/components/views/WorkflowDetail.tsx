@@ -11,11 +11,12 @@ import {
   CheckCircle2,
   Edit2,
   Check,
+  ChevronDown,
 } from 'lucide-react';
 import { useViewStore } from '../../store/useViewStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import type { ExtendedWorkflowInfo, ExtendedStageAssignment } from '../../types/models';
+import type { ExtendedWorkflowInfo, ExtendedStageAssignment, Skill } from '../../types/models';
 import type { StageExecutionMode, FailureStrategy } from '../../types/window';
 
 interface WorkflowDetailProps {
@@ -41,6 +42,8 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
   const [editingWorkflowDesc, setEditingWorkflowDesc] = useState(false);
   const [tempName, setTempName] = useState('');
   const [tempDesc, setTempDesc] = useState('');
+  const [availableSkills, setAvailableSkills] = useState<Skill[]>([]);
+  const [skillDropdownOpen, setSkillDropdownOpen] = useState<string | null>(null);
 
   const loadWorkflow = async () => {
     try {
@@ -63,8 +66,20 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
     }
   };
 
+  const loadSkills = async () => {
+    try {
+      const response = await window.codecafe.skill.list();
+      if (response.success && response.data) {
+        setAvailableSkills(response.data);
+      }
+    } catch (err) {
+      console.error('[WorkflowDetail] Failed to load skills:', err);
+    }
+  };
+
   useEffect(() => {
     loadWorkflow();
+    loadSkills();
   }, [workflowId]);
 
   const hasChanges = (): boolean => {
@@ -751,15 +766,94 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
 
                       <div>
                         <label className="block text-xs font-medium text-gray-400 mb-1.5">Skills</label>
-                        <input
-                          type="text"
-                          value={editingConfig?.skills?.join(', ') || ''}
-                          onChange={(e) => updateStageConfig(stage, {
-                            skills: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
-                          })}
-                          placeholder="code-review, test-integration..."
-                          className="w-full px-3 py-2 bg-background border border-border rounded text-sm text-bone focus:outline-none focus:ring-1 focus:ring-coffee"
-                        />
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setSkillDropdownOpen(skillDropdownOpen === stage ? null : stage)}
+                            className="w-full px-3 py-2 bg-background border border-border rounded text-sm text-bone focus:outline-none focus:ring-1 focus:ring-coffee flex items-center justify-between"
+                          >
+                            <span className="truncate">
+                              {editingConfig?.skills?.length
+                                ? `${editingConfig.skills.length} skill(s) selected`
+                                : 'Select skills...'}
+                            </span>
+                            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${
+                              skillDropdownOpen === stage ? 'rotate-180' : ''
+                            }`} />
+                          </button>
+                          {skillDropdownOpen === stage && (
+                            <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-card border border-border rounded shadow-lg max-h-48 overflow-y-auto">
+                              {availableSkills.length === 0 ? (
+                                <div className="px-3 py-2 text-sm text-gray-500">No skills available</div>
+                              ) : (
+                                availableSkills.map((skill) => {
+                                  const isSelected = editingConfig?.skills?.includes(skill.id);
+                                  return (
+                                    <button
+                                      key={skill.id}
+                                      type="button"
+                                      onClick={() => {
+                                        const currentSkills = editingConfig?.skills || [];
+                                        const newSkills = isSelected
+                                          ? currentSkills.filter((s) => s !== skill.id)
+                                          : [...currentSkills, skill.id];
+                                        updateStageConfig(stage, { skills: newSkills });
+                                      }}
+                                      className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-gray-700/50 ${
+                                        isSelected ? 'bg-coffee/20' : ''
+                                      }`}
+                                    >
+                                      <span className={`w-4 h-4 rounded border flex items-center justify-center ${
+                                        isSelected ? 'bg-coffee border-coffee' : 'border-gray-500'
+                                      }`}>
+                                        {isSelected && <Check className="w-3 h-3 text-white" />}
+                                      </span>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-bone truncate">{skill.name}</div>
+                                        <div className="text-xs text-gray-500 truncate">{skill.id}</div>
+                                      </div>
+                                      <span className={`px-1.5 py-0.5 text-xs rounded ${
+                                        skill.category === 'analysis' ? 'bg-blue-900/30 text-blue-300' :
+                                        skill.category === 'planning' ? 'bg-purple-900/30 text-purple-300' :
+                                        skill.category === 'implementation' ? 'bg-green-900/30 text-green-300' :
+                                        skill.category === 'verification' ? 'bg-yellow-900/30 text-yellow-300' :
+                                        'bg-gray-700/30 text-gray-300'
+                                      }`}>
+                                        {skill.category}
+                                      </span>
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        {/* Selected skills tags */}
+                        {editingConfig?.skills && editingConfig.skills.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {editingConfig.skills.map((skillId) => {
+                              const skill = availableSkills.find((s) => s.id === skillId);
+                              return (
+                                <span
+                                  key={skillId}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-700 text-gray-300 text-xs rounded"
+                                >
+                                  {skill?.name || skillId}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newSkills = editingConfig.skills!.filter((s) => s !== skillId);
+                                      updateStageConfig(stage, { skills: newSkills });
+                                    }}
+                                    className="text-gray-400 hover:text-red-400"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       <div>
