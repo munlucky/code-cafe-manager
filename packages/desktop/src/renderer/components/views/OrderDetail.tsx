@@ -301,7 +301,7 @@ function OrderDetailView({ order, onStop, onRestart, isStopping, isRestarting }:
 
   if (!order) {
     return (
-      <Card className="flex flex-col min-h-[520px]">
+      <Card className="flex flex-col min-h-[300px] lg:min-h-[520px]">
         <EmptyState message="Select an order to view details" />
       </Card>
     );
@@ -310,26 +310,26 @@ function OrderDetailView({ order, onStop, onRestart, isStopping, isRestarting }:
   const canStop = order.status === 'PENDING' || order.status === 'RUNNING';
 
   return (
-    <Card className="flex flex-col min-h-[520px]">
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div>
+    <Card className="flex flex-col min-h-[300px] lg:min-h-[520px] p-3 sm:p-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 mb-4">
+        <div className="min-w-0">
           <div className="text-xs uppercase tracking-wide text-gray-500">Order Detail</div>
-          <h3 className="text-2xl font-bold text-bone">{order.workflowName}</h3>
-          <div className="text-xs text-gray-500 mt-1">ID: {order.id}</div>
+          <h3 className="text-lg sm:text-2xl font-bold text-bone truncate">{order.workflowName}</h3>
+          <div className="text-xs text-gray-500 mt-1 truncate">ID: {order.id}</div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        <div className="flex items-center gap-2 flex-wrap">
           <StatusBadge status={order.status} />
           {canStop && (
             <Button
               variant="secondary"
               onClick={onStop}
               disabled={isStopping}
-              className="bg-red-700 hover:bg-red-600"
+              className="bg-red-700 hover:bg-red-600 text-sm"
             >
               {isStopping ? 'Stopping...' : 'Stop'}
             </Button>
           )}
-          <Button variant="secondary" onClick={onRestart} disabled={isRestarting}>
+          <Button variant="secondary" onClick={onRestart} disabled={isRestarting} className="text-sm">
             {isRestarting ? 'Restarting...' : 'Restart'}
           </Button>
         </div>
@@ -723,11 +723,12 @@ export function OrderDetail(): JSX.Element {
 
   return (
     <div className="space-y-4 h-full">
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <Button
           type="button"
           variant={detailMode === 'orders' ? 'primary' : 'secondary'}
           onClick={() => setDetailMode('orders')}
+          className="text-sm"
         >
           Orders
         </Button>
@@ -735,12 +736,13 @@ export function OrderDetail(): JSX.Element {
           type="button"
           variant={detailMode === 'runs' ? 'primary' : 'secondary'}
           onClick={() => setDetailMode('runs')}
+          className="text-sm"
         >
           Workflow Runs
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-6 h-full">
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] xl:grid-cols-[320px_1fr] gap-4 lg:gap-6 h-full">
         {detailMode === 'orders' ? (
           <>
             <OrderSidebar

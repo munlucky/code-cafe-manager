@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { 
-  Coffee, ChevronDown, ChevronRight, Settings, Plus,
+import {
+  Coffee, ChevronDown, ChevronRight, Settings, Plus, X,
   LayoutDashboard, List, FolderOpen, Zap, ChefHat
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
@@ -19,10 +19,14 @@ const GLOBAL_NAV_ITEMS: Array<{ view: ViewName; label: string; icon: any }> = [
   { view: 'skills', label: 'Skills', icon: Zap }, // Using Zap for skills
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  onClose?: () => void;
+}
+
+export function Sidebar({ onClose }: SidebarProps) {
   const { currentView, setView } = useViewStore();
   const { cafes, currentCafeId, selectCafe } = useCafeStore();
-  
+
   const [expandedCafes, setExpandedCafes] = useState<Set<string>>(() => {
     return currentCafeId ? new Set([currentCafeId]) : new Set();
   });
@@ -43,20 +47,42 @@ export function Sidebar() {
     await selectCafe(cafeId);
     setView('dashboard');
     setExpandedCafes(prev => new Set(prev).add(cafeId));
+    onClose?.();
   };
 
   const handleManageCafes = () => {
     setView('cafes');
+    onClose?.();
+  };
+
+  const handleNavClick = (view: ViewName, cafeId?: string) => {
+    if (cafeId && currentCafeId !== cafeId) {
+      selectCafe(cafeId);
+    }
+    setView(view);
+    onClose?.();
   };
 
   return (
-    <div className="w-[240px] bg-[#1E1E1E] border-r border-[#333] flex flex-col h-full font-sans select-none">
+    <div className="w-[240px] sm:w-[280px] lg:w-[240px] bg-[#1E1E1E] border-r border-[#333] flex flex-col h-full font-sans select-none">
       {/* Brand / Header */}
-      <div className="flex items-center gap-3 px-4 py-5 mb-2">
-        <div className="bg-coffee/20 p-1.5 rounded-lg">
-          <Coffee className="text-coffee" size={20} />
+      <div className="flex items-center justify-between px-4 py-5 mb-2">
+        <div className="flex items-center gap-3">
+          <div className="bg-coffee/20 p-1.5 rounded-lg">
+            <Coffee className="text-coffee" size={20} />
+          </div>
+          <h1 className="text-lg font-bold text-gray-100 tracking-tight">CodeCafe</h1>
         </div>
-        <h1 className="text-lg font-bold text-gray-100 tracking-tight">CodeCafe</h1>
+        {/* Close button for mobile */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="lg:hidden p-2 rounded-lg hover:bg-[#2A2A2A] transition-colors"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5 text-gray-400" />
+          </button>
+        )}
       </div>
 
       {/* Cafe List Section */}
@@ -79,7 +105,7 @@ export function Sidebar() {
             <Plus size={14} />
           </button>
         </div>
-        
+
         <div className="space-y-1">
           {cafes.length === 0 ? (
             <div className="text-sm text-gray-500 italic px-2 py-2">
@@ -89,7 +115,7 @@ export function Sidebar() {
             cafes.map((cafe) => {
               const isSelected = currentCafeId === cafe.id;
               const isExpanded = expandedCafes.has(cafe.id);
-              
+
               return (
                 <div key={cafe.id} className="mb-1">
                   {/* Cafe Header Row */}
@@ -105,12 +131,12 @@ export function Sidebar() {
                       }}
                       className="p-2 text-gray-500 hover:text-white transition-colors cursor-pointer"
                     >
-                      <ChevronRight 
-                        size={14} 
-                        className={cn("transition-transform duration-200", isExpanded && "rotate-90")} 
+                      <ChevronRight
+                        size={14}
+                        className={cn("transition-transform duration-200", isExpanded && "rotate-90")}
                       />
                     </button>
-                    
+
                     {/* Cafe Name - Click to Select */}
                     <button
                       onClick={() => handleCafeSelect(cafe.id)}
@@ -119,23 +145,20 @@ export function Sidebar() {
                     >
                       {cafe.name}
                     </button>
-                    
+
                     {/* Active Indicator Dot */}
                     {isSelected && (
                       <div className="w-1.5 h-1.5 rounded-full bg-coffee shadow-[0_0_8px_rgba(var(--coffee-rgb),0.5)]" />
                     )}
                   </div>
-                  
+
                   {/* Sub-menu with Tree Lines */}
                   {isExpanded && (
                     <div className="relative ml-[19px] pl-3 border-l border-[#333] pt-1 pb-1 space-y-0.5">
                       {CAFE_NAV_ITEMS.map(({ view, label, icon: Icon }) => (
                         <button
                           key={view}
-                          onClick={() => {
-                            if (currentCafeId !== cafe.id) selectCafe(cafe.id);
-                            setView(view);
-                          }}
+                          onClick={() => handleNavClick(view, cafe.id)}
                           className={cn(
                             'w-full text-left px-2 py-1.5 rounded-md text-[13px] flex items-center gap-2 transition-all duration-150 group relative',
                             currentView === view && currentCafeId === cafe.id
@@ -145,7 +168,7 @@ export function Sidebar() {
                         >
                           <Icon size={14} className="opacity-70 group-hover:opacity-100" />
                           <span>{label}</span>
-                          
+
                           {/* Active Item Border Indicator */}
                           {currentView === view && currentCafeId === cafe.id && (
                             <div className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-coffee rounded-full" />
@@ -170,7 +193,7 @@ export function Sidebar() {
           {GLOBAL_NAV_ITEMS.map(({ view, label, icon: Icon }) => (
             <button
               key={view}
-              onClick={() => setView(view)}
+              onClick={() => handleNavClick(view)}
               className={cn(
                 'w-full text-left px-2 py-1.5 rounded-md text-[13px] flex items-center gap-2 transition-all duration-150',
                 currentView === view

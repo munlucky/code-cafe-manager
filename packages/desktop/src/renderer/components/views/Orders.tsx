@@ -21,15 +21,15 @@ function OrderItem({ order, onViewLog, onCancel, onViewTerminal }: OrderItemProp
   const isRunning = order.status === OrderStatus.RUNNING;
 
   return (
-    <div className="p-4 bg-background rounded border border-border">
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-2">
-            <strong className="text-bone text-lg">{order.workflowName}</strong>
+    <div className="p-3 sm:p-4 bg-background rounded border border-border">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+            <strong className="text-bone text-base sm:text-lg truncate">{order.workflowName}</strong>
             <StatusBadge status={order.status} />
           </div>
-          <div className="text-sm text-gray-500 space-y-1">
-            <div>ID: {order.id}</div>
+          <div className="text-xs sm:text-sm text-gray-500 space-y-1">
+            <div className="truncate">ID: {order.id}</div>
             <div>Provider: {order.provider}</div>
             <div>Barista: {order.baristaId || 'Not assigned'}</div>
             <div>Created: {formatRelativeTime(order.createdAt)}</div>
@@ -45,20 +45,20 @@ function OrderItem({ order, onViewLog, onCancel, onViewTerminal }: OrderItemProp
             )}
           </div>
         </div>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-row sm:flex-col gap-2 flex-wrap">
           {isRunning && (
-            <Button variant="primary" onClick={() => onViewTerminal(order.id)}>
+            <Button variant="primary" onClick={() => onViewTerminal(order.id)} className="text-sm">
               View Terminal
             </Button>
           )}
-          <Button variant="secondary" onClick={() => onViewLog(order.id)}>
+          <Button variant="secondary" onClick={() => onViewLog(order.id)} className="text-sm">
             View Log
           </Button>
           {isCancellable && (
             <Button
               variant="secondary"
               onClick={() => onCancel(order.id)}
-              className="bg-red-700 hover:bg-red-600"
+              className="bg-red-700 hover:bg-red-600 text-sm"
             >
               Cancel
             </Button>
@@ -111,9 +111,9 @@ export function Orders(): JSX.Element {
   }
 
   return (
-    <Card>
-      <h3 className="text-xl font-bold mb-4 text-coffee">All Orders</h3>
-      <div className="space-y-3">
+    <Card className="p-3 sm:p-4">
+      <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-coffee">All Orders</h3>
+      <div className="space-y-2 sm:space-y-3">
         {sortedOrders.map((order) => (
           <OrderItem
             key={order.id}

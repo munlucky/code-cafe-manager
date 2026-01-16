@@ -182,14 +182,14 @@ function OrderKanban({ orders, onViewTerminal, onCancelOrder }: OrderKanbanProps
   }, [orders]);
 
   return (
-    <div className="grid grid-cols-5 gap-4 h-full">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 h-full">
       {(Object.entries(columns) as [OrderStatus, Order[]][]).map(([status, ordersList]) => {
         const config = STATUS_CONFIG[status];
         return (
-          <div key={status} className="flex flex-col">
+          <div key={status} className="flex flex-col min-w-0">
             <div className="mb-3 pb-2 border-b border-border">
-              <h3 className="font-semibold text-bone">{config.label}</h3>
-              <p className="text-sm text-gray-400">{ordersList.length} orders</p>
+              <h3 className="font-semibold text-bone text-sm sm:text-base">{config.label}</h3>
+              <p className="text-xs sm:text-sm text-gray-400">{ordersList.length} orders</p>
             </div>
             <div className="space-y-3 overflow-auto">
               {ordersList.map((order) => (
@@ -371,9 +371,9 @@ export function CafeDashboard(): ReactElement {
   };
 
   return (
-    <div className="p-6 h-full overflow-auto flex flex-col">
+    <div className="h-full overflow-auto flex flex-col">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
           <Button
             variant="secondary"
@@ -381,21 +381,21 @@ export function CafeDashboard(): ReactElement {
             className="flex items-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back
+            <span className="hidden sm:inline">Back</span>
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-bone">{currentCafe.name}</h1>
-            <p className="text-sm text-gray-400">{currentCafe.path}</p>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-bone truncate">{currentCafe.name}</h1>
+            <p className="text-xs sm:text-sm text-gray-400 truncate">{currentCafe.path}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* View Mode Toggle */}
           <div className="flex border border-border rounded overflow-hidden">
             {(['list', 'kanban'] as const).map((mode) => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
-                className={`px-3 py-1 text-sm capitalize transition-colors ${
+                className={`px-2 sm:px-3 py-1 text-xs sm:text-sm capitalize transition-colors ${
                   viewMode === mode
                     ? 'bg-coffee text-bone'
                     : 'bg-background text-gray-400 hover:text-bone'
@@ -405,16 +405,17 @@ export function CafeDashboard(): ReactElement {
               </button>
             ))}
           </div>
-          <Button onClick={handleNewOrder} className="flex items-center gap-2">
+          <Button onClick={handleNewOrder} className="flex items-center gap-2 text-sm">
             <Plus className="w-4 h-4" />
-            New Order
+            <span className="hidden sm:inline">New Order</span>
+            <span className="sm:hidden">New</span>
           </Button>
         </div>
       </div>
 
       {/* Cafe Info */}
-      <div className="mb-4 p-3 bg-card border border-border rounded flex items-center justify-between">
-        <div className="flex items-center gap-4 text-sm">
+      <div className="mb-4 p-3 bg-card border border-border rounded">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm">
           <InfoItem label="Branch" value={currentCafe.currentBranch} />
           <InfoItem label="Active Orders" value={activeOrdersCount} />
           <InfoItem label="Base Branch" value={currentCafe.settings.baseBranch} />

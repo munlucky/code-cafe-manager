@@ -417,17 +417,17 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-8 py-6 border-b border-gray-800 shrink-0">
-        <div className="flex items-center gap-4 mb-4">
+      <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 border-b border-gray-800 shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4 mb-4">
           <Button
             variant="ghost"
             size="sm"
             onClick={handleBack}
-            className="p-1 h-auto"
+            className="p-1 h-auto self-start"
           >
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             {/* Workflow Name */}
             {editingWorkflowName ? (
               <div className="flex items-center gap-2">
@@ -457,8 +457,8 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
                 </Button>
               </div>
             ) : (
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-bone">{workflow.name}</h1>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <h1 className="text-xl sm:text-2xl font-bold text-bone truncate">{workflow.name}</h1>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -467,7 +467,7 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
                 >
                   <Edit2 className="w-4 h-4" />
                 </Button>
-                <span className="px-2 py-0.5 bg-gray-700 text-xs text-gray-300 rounded">
+                <span className="px-2 py-0.5 bg-gray-700 text-xs text-gray-300 rounded truncate max-w-[120px] sm:max-w-none">
                   {workflow.id}
                 </span>
               </div>
@@ -516,19 +516,20 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 mt-3 sm:mt-0">
             {saveMessage && (
-              <div className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm ${
+              <div className={`flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded text-xs sm:text-sm ${
                 saveMessage.type === 'success'
                   ? 'bg-green-600/20 text-green-400'
                   : 'bg-red-600/20 text-red-400'
               }`}>
                 {saveMessage.type === 'success' ? (
-                  <CheckCircle2 className="w-4 h-4" />
+                  <CheckCircle2 className="w-3 sm:w-4 h-3 sm:h-4" />
                 ) : (
-                  <AlertCircle className="w-4 h-4" />
+                  <AlertCircle className="w-3 sm:w-4 h-3 sm:h-4" />
                 )}
-                {saveMessage.text}
+                <span className="hidden sm:inline">{saveMessage.text}</span>
+                <span className="sm:hidden">{saveMessage.type === 'success' ? 'Saved' : 'Error'}</span>
               </div>
             )}
             {isAnyEditing && (
@@ -538,19 +539,21 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
                   size="sm"
                   onClick={handleCancel}
                   disabled={saving}
-                  className="flex items-center gap-1"
+                  className="flex items-center gap-1 text-xs sm:text-sm"
                 >
                   <X className="w-4 h-4" />
-                  Cancel All
+                  <span className="hidden sm:inline">Cancel All</span>
+                  <span className="sm:hidden">Cancel</span>
                 </Button>
                 <Button
                   variant="secondary"
                   onClick={handleSave}
                   disabled={saving}
-                  className="flex items-center gap-1"
+                  className="flex items-center gap-1 text-xs sm:text-sm"
                 >
                   <Save className="w-4 h-4" />
-                  Save All
+                  <span className="hidden sm:inline">Save All</span>
+                  <span className="sm:hidden">Save</span>
                 </Button>
               </>
             )}
@@ -559,35 +562,36 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
               size="sm"
               onClick={openSaveAsDialog}
               disabled={saving}
-              className="flex items-center gap-1"
+              className="flex items-center gap-1 text-xs sm:text-sm"
             >
               <Copy className="w-4 h-4" />
-              Save As
+              <span className="hidden sm:inline">Save As</span>
             </Button>
           </div>
         </div>
       </div>
 
       {/* Kanban-style Step Board */}
-      <div className="flex-1 overflow-auto px-8 pb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-bone">Steps</h2>
+      <div className="flex-1 overflow-auto px-4 sm:px-6 lg:px-8 pb-4 sm:pb-6">
+        <div className="flex items-center justify-between mb-3 sm:mb-4">
+          <h2 className="text-base sm:text-lg font-semibold text-bone">Steps</h2>
           {!isProtected && (
             <Button
               variant="ghost"
               size="sm"
               onClick={addStage}
               disabled={saving}
-              className="flex items-center gap-1 text-coffee hover:text-coffee/80"
+              className="flex items-center gap-1 text-coffee hover:text-coffee/80 text-sm"
             >
               <Plus className="w-4 h-4" />
-              Add Step
+              <span className="hidden sm:inline">Add Step</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           )}
         </div>
 
-        {/* Kanban Board - Horizontal scrollable columns */}
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        {/* Kanban Board - Horizontal scrollable columns on desktop, vertical on mobile */}
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:overflow-x-auto pb-4">
           {workflow.stages.map((stage, index) => {
             const config = workflow.stageConfigs?.[stage];
             const isEditing = editingStages[stage] !== undefined;
@@ -596,7 +600,7 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
             return (
               <div
                 key={stage}
-                className={`flex-shrink-0 w-80 rounded-lg border transition-colors ${
+                className={`flex-shrink-0 w-full sm:w-72 lg:w-80 rounded-lg border transition-colors ${
                   isEditing
                     ? 'bg-card border-coffee'
                     : 'bg-card border-border'
