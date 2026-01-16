@@ -6,37 +6,7 @@ workflow:
     - plan
     - code
     - review
-  loop:
-    max_iters: 15
-    fallback_next_stage: plan
-    stop_when: "$.done"
-
-# Stage-specific provider/role/profile configuration
-# 각 stage는 어떤 provider/role을 사용할지 지정할 수 있습니다
-# Moonshot 스타일: analyze → plan → code → review
-
-# analyze: 요구사항 분석, 문제 이해, 범위 정의
-analyze:
-  provider: claude-code
-  role: planner
-  profile: simple
-
-# plan: 상세 계획 수립, 설계, 접근 방법 결정
-plan:
-  provider: claude-code
-  role: planner
-  profile: simple
-
-# code: 실제 구현, 코드 작성
-code:
-  provider: claude-code
-  role: coder
-  profile: simple
-
-# review: 검증, 개선점 찾기, 완료 여부 판단
-# min_iterations: 10 = 완료되더라도 최소 10번의 반복 후 종료
-review:
-  provider: claude-code
-  role: checker
-  profile: simple
-  min_iterations: 10
+analyze: simple
+plan: simple
+code: simple
+review: simple

@@ -161,3 +161,26 @@ export interface RunLogEntry {
   stage?: string;
   nodeId?: string;
 }
+
+// Skill preset types
+export type SkillCategory = 'analysis' | 'planning' | 'implementation' | 'verification' | 'utility';
+
+export interface SkillPresetItem {
+  id: string;
+  name: string;
+  description: string;
+  category: SkillCategory;
+  skillCommand: string; // e.g., '/moonshot-classify-task'
+  context?: 'fork' | 'inherit';
+  isBuiltIn?: boolean; // 시스템 제공 여부
+}
+
+export interface SkillPreset {
+  id: string;
+  name: string;
+  description: string;
+  skills: SkillPresetItem[];
+  isBuiltIn?: boolean; // 시스템 제공 프리셋 여부
+  createdAt?: string;
+  updatedAt?: string;
+}

@@ -8,6 +8,8 @@ import {
   OrderDetail,
   Worktrees,
   Workflows,
+  WorkflowDetail,
+  Skills,
 } from './components/views';
 import { GlobalLobby } from './components/views/GlobalLobby';
 import { CafeDashboard } from './components/views/CafeDashboard';
@@ -22,6 +24,8 @@ const VIEW_MAP: Record<string, React.ComponentType> = {
   terminals: OrderTerminals,
   worktrees: Worktrees,
   workflows: Workflows,
+  'workflow-detail': WorkflowDetail,
+  skills: Skills,
   roles: RoleManager,
 };
 
@@ -35,7 +39,7 @@ function selectViewComponent(view: string): React.ComponentType {
 }
 
 export function App(): JSX.Element {
-  const { currentView, setView } = useViewStore();
+  const { currentView, viewParams } = useViewStore();
   const currentCafeId = useCafeStore((s) => s.currentCafeId);
 
   useIpcEffect();
@@ -45,7 +49,11 @@ export function App(): JSX.Element {
 
   return (
     <Layout>
-      <ViewComponent />
+      {currentView === 'workflow-detail' ? (
+        <ViewComponent workflowId={viewParams?.workflowId || ''} />
+      ) : (
+        <ViewComponent />
+      )}
     </Layout>
   );
 }

@@ -4,6 +4,7 @@ import type {
   ProviderType,
   WorktreeInfo,
   Receipt,
+  SkillPreset,
 } from './models';
 import type { Cafe, CreateCafeParams, UpdateCafeParams, Role } from '@codecafe/core';
 import type { TerminalPoolConfig, PoolStatus, PoolMetrics } from '@codecafe/core';
@@ -316,6 +317,16 @@ declare global {
           workflowId: string,
           options?: WorkflowRunOptions
         ) => Promise<IpcResponse<{ runId: string }>>;
+      };
+
+      // Skill Preset Management
+      skill: {
+        list: () => Promise<IpcResponse<SkillPreset[]>>;
+        get: (presetId: string) => Promise<IpcResponse<SkillPreset | null>>;
+        create: (presetData: SkillPreset) => Promise<IpcResponse<SkillPreset>>;
+        update: (presetData: SkillPreset) => Promise<IpcResponse<SkillPreset>>;
+        delete: (presetId: string) => Promise<IpcResponse<{ success: boolean }>>;
+        duplicate: (presetId: string, newId: string, newName?: string) => Promise<IpcResponse<SkillPreset>>;
       };
 
       // Orchestrator (Run Management)

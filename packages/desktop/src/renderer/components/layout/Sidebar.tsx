@@ -9,6 +9,7 @@ const NAV_ITEMS: Array<{ view: ViewName; label: string }> = [
   { view: 'terminals', label: 'Terminals' },
   { view: 'worktrees', label: 'Worktrees' },
   { view: 'workflows', label: 'Workflows' },
+  { view: 'skills', label: 'Skills' },
 ];
 
 export function Sidebar() {

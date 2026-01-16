@@ -73,6 +73,15 @@ contextBridge.exposeInMainWorld('codecafe', {
     run: createIpcInvoker('workflow:run'),
   },
 
+  skill: {
+    list: createIpcInvoker('skill:list'),
+    get: createIpcInvoker('skill:get'),
+    create: createIpcInvoker('skill:create'),
+    update: createIpcInvoker('skill:update'),
+    delete: createIpcInvoker('skill:delete'),
+    duplicate: createIpcInvoker('skill:duplicate'),
+  },
+
   run: {
     list: createIpcInvoker('run:list'),
     getStatus: createIpcInvoker('run:status'),

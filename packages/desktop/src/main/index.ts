@@ -13,6 +13,7 @@ import { registerProviderHandlers } from './ipc/provider.js';
 import { registerOrchestratorHandlers } from './ipc/orchestrator.js';
 import { registerOrderHandlers, cleanupOrderHandlers } from './ipc/order.js';
 import { registerWorkflowHandlers } from './ipc/workflow.js';
+import { registerSkillHandlers } from './ipc/skill.js';
 
 import { existsSync } from 'fs';
 
@@ -145,6 +146,7 @@ function setupIpcHandlers(): void {
   registerWorktreeHandlers();
   registerProviderHandlers();
   registerWorkflowHandlers();
+  registerSkillHandlers();
 
   if (orchestrator) {
     registerOrchestratorHandlers(orchestrator);

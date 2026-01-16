@@ -8,6 +8,8 @@ export type ViewParams = {
   terminals: void;
   worktrees: void;
   workflows: void;
+  'workflow-detail': { workflowId: string };
+  skills: void;
   roles: { roleId?: string; mode?: 'list' | 'detail' | 'create' | 'edit' };
 };
 
