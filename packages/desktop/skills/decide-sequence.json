@@ -1,0 +1,11 @@
+{
+  "id": "decide-sequence",
+  "name": "Sequence Decision",
+  "description": "analysisContext를 기반으로 단계와 실행 체인 결정",
+  "category": "planning",
+  "skillCommand": "/moonshot-decide-sequence",
+  "context": "fork",
+  "isBuiltIn": true,
+  "createdAt": "2026-01-16T10:06:17.270Z",
+  "updatedAt": "2026-01-16T10:06:17.270Z"
+}

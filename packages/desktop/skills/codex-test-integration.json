@@ -1,0 +1,11 @@
+{
+  "id": "codex-test-integration",
+  "name": "Codex Integration Test",
+  "description": "통합 영향 및 회귀 위험 검증 (Codex Integration Reviewer)",
+  "category": "verification",
+  "skillCommand": "codex-test-integration",
+  "context": "fork",
+  "isBuiltIn": true,
+  "createdAt": "2026-01-16T10:06:17.275Z",
+  "updatedAt": "2026-01-16T10:06:17.275Z"
+}

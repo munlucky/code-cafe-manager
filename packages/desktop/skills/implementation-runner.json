@@ -1,0 +1,11 @@
+{
+  "id": "implementation-runner",
+  "name": "Implementation Runner",
+  "description": "구현 실행 및 변경사항 기록 (Agent)",
+  "category": "implementation",
+  "skillCommand": "implementation-runner",
+  "context": "inherit",
+  "isBuiltIn": true,
+  "createdAt": "2026-01-16T10:06:17.273Z",
+  "updatedAt": "2026-01-16T10:06:17.273Z"
+}

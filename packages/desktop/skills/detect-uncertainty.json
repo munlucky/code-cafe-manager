@@ -1,0 +1,11 @@
+{
+  "id": "detect-uncertainty",
+  "name": "Uncertainty Detection",
+  "description": "누락된 요구사항 감지 및 질문 생성",
+  "category": "analysis",
+  "skillCommand": "/moonshot-detect-uncertainty",
+  "context": "fork",
+  "isBuiltIn": true,
+  "createdAt": "2026-01-16T10:06:17.269Z",
+  "updatedAt": "2026-01-16T10:06:17.269Z"
+}

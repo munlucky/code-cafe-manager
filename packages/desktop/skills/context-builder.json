@@ -1,0 +1,11 @@
+{
+  "id": "context-builder",
+  "name": "Context Builder",
+  "description": "구현 계획(context.md) 작성 (Agent)",
+  "category": "planning",
+  "skillCommand": "context-builder",
+  "context": "fork",
+  "isBuiltIn": true,
+  "createdAt": "2026-01-16T10:06:17.272Z",
+  "updatedAt": "2026-01-16T10:06:17.272Z"
+}

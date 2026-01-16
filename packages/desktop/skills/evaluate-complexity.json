@@ -1,0 +1,11 @@
+{
+  "id": "evaluate-complexity",
+  "name": "Complexity Evaluation",
+  "description": "예상 파일/라인/시간을 기반으로 복잡도(simple, medium, complex) 평가",
+  "category": "analysis",
+  "skillCommand": "/moonshot-evaluate-complexity",
+  "context": "fork",
+  "isBuiltIn": true,
+  "createdAt": "2026-01-16T10:06:17.268Z",
+  "updatedAt": "2026-01-16T10:06:17.268Z"
+}

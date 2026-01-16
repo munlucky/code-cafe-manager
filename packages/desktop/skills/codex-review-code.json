@@ -1,0 +1,11 @@
+{
+  "id": "codex-review-code",
+  "name": "Codex Code Review",
+  "description": "구현 품질 및 회귀 위험 검토 (Codex Code Reviewer)",
+  "category": "verification",
+  "skillCommand": "codex-review-code",
+  "context": "fork",
+  "isBuiltIn": true,
+  "createdAt": "2026-01-16T10:06:17.274Z",
+  "updatedAt": "2026-01-16T10:06:17.274Z"
+}
