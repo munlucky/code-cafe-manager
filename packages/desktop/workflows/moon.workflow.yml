@@ -7,7 +7,7 @@ workflow:
     - code
     - review
   loop:
-    max_iters: 5
+    max_iters: 15
     fallback_next_stage: plan
     stop_when: "$.done"
 
@@ -34,7 +34,9 @@ code:
   profile: simple
 
 # review: 검증, 개선점 찾기, 완료 여부 판단
+# min_iterations: 10 = 완료되더라도 최소 10번의 반복 후 종료
 review:
   provider: claude-code
   role: checker
   profile: simple
+  min_iterations: 10

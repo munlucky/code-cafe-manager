@@ -45,6 +45,8 @@ export interface ExtendedStageAssignment extends StageAssignment {
   retries?: number;
   /** Backoff multiplier in seconds for retries */
   retry_backoff?: number;
+  /** Minimum iterations before this stage can be skipped (e.g., review must run at least N times) */
+  min_iterations?: number;
   /** List of skill names to use */
   skills?: string[];
   /** Custom prompt template for this stage */

@@ -1,4 +1,4 @@
-import { Workflow, StageType } from '../types';
+import { Workflow, StageType, StageConfig } from '../types';
 import { JSONPath } from 'jsonpath-plus';
 
 /**
@@ -9,12 +9,49 @@ export class FSMEngine {
   private currentStage: StageType;
   private currentIter: number;
   private stageHistory: Array<{ stage: StageType; iter: number }>;
+  // Track execution count for each stage (for min_iterations check)
+  private stageExecutionCounts: Map<StageType, number>;
 
   constructor(workflow: Workflow, initialStage?: StageType) {
     this.workflow = workflow;
     this.currentStage = initialStage || workflow.stages[0];
     this.currentIter = 0;
     this.stageHistory = [];
+    this.stageExecutionCounts = new Map();
+    // Initialize all stages with 0 count
+    for (const stage of workflow.stages) {
+      this.stageExecutionCounts.set(stage, 0);
+    }
+  }
+
+  /**
+   * Get stage config for current stage
+   */
+  private getStageConfig(stage: StageType): StageConfig | undefined {
+    return this.workflow.stageConfigs?.[stage];
+  }
+
+  /**
+   * Get min iterations for a stage
+   */
+  private getMinIterations(stage: StageType): number {
+    const config = this.getStageConfig(stage);
+    return config?.min_iterations ?? 0;
+  }
+
+  /**
+   * Get execution count for a specific stage
+   */
+  getStageExecutionCount(stage: StageType): number {
+    return this.stageExecutionCounts.get(stage) ?? 0;
+  }
+
+  /**
+   * Increment execution count for a stage
+   */
+  incrementStageCount(stage: StageType): void {
+    const current = this.stageExecutionCounts.get(stage) ?? 0;
+    this.stageExecutionCounts.set(stage, current + 1);
   }
 
   /**
@@ -116,6 +153,17 @@ export class FSMEngine {
     }
 
     if (done) {
+      // Check if current stage has min_iterations requirement
+      const minIters = this.getMinIterations(this.currentStage);
+      const stageCount = this.getStageExecutionCount(this.currentStage);
+      if (minIters > 0 && stageCount < minIters) {
+        return {
+          done: false,
+          nextStage: this.workflow.loop.fallback_next_stage,
+          reason: `Stage '${this.currentStage}' requires minimum ${minIters} executions (current: ${stageCount})`,
+        };
+      }
+
       return {
         done: true,
         nextStage: null,
@@ -178,6 +226,10 @@ export class FSMEngine {
     this.currentStage = this.workflow.stages[0];
     this.currentIter = 0;
     this.stageHistory = [];
+    this.stageExecutionCounts.clear();
+    for (const stage of this.workflow.stages) {
+      this.stageExecutionCounts.set(stage, 0);
+    }
   }
 
   /**
@@ -196,13 +248,19 @@ export class FSMEngine {
     maxIters: number;
     canContinue: boolean;
     history: Array<{ stage: StageType; iter: number }>;
+    stageExecutionCounts: Record<string, number>;
   } {
+    const counts: Record<string, number> = {};
+    for (const [stage, count] of this.stageExecutionCounts.entries()) {
+      counts[stage] = count;
+    }
     return {
       currentStage: this.currentStage,
       currentIter: this.currentIter,
       maxIters: this.workflow.loop.max_iters,
       canContinue: this.canContinue(),
       history: this.getHistory(),
+      stageExecutionCounts: counts,
     };
   }
 
@@ -213,9 +271,16 @@ export class FSMEngine {
     currentStage: StageType;
     currentIter: number;
     history: Array<{ stage: StageType; iter: number }>;
+    stageExecutionCounts?: Record<string, number>;
   }): void {
     this.currentStage = state.currentStage;
     this.currentIter = state.currentIter;
     this.stageHistory = [...state.history];
+    // Restore stage execution counts if provided
+    if (state.stageExecutionCounts) {
+      for (const [stage, count] of Object.entries(state.stageExecutionCounts)) {
+        this.stageExecutionCounts.set(stage as StageType, count);
+      }
+    }
   }
 }

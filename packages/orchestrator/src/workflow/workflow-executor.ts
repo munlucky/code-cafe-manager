@@ -347,6 +347,9 @@ export class WorkflowExecutor extends EventEmitter {
         run.stageResults.set(stage, stageResult);
         run.context.stages[stage] = stageResult.output;
 
+        // Increment stage execution count (for min_iterations check)
+        fsm.incrementStageCount(stage);
+
         // Notify stage complete
         if (options.onStageComplete) {
           options.onStageComplete(stageResult);
@@ -379,8 +382,8 @@ export class WorkflowExecutor extends EventEmitter {
 
         eventLogger.log({ type: 'stage_end', stage, data: { success: stageResult.status === 'completed' } });
 
-        // Handle check stage
-        if (stage === 'check') {
+        // Handle check stage and review stage (both can determine completion)
+        if (stage === 'check' || stage === 'review') {
           const checkResult = fsm.evaluateCheckResult(stageResult.output);
           if (checkResult.done || !checkResult.nextStage) {
             run.status = 'completed';

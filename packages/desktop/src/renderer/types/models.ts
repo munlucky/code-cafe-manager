@@ -90,6 +90,7 @@ export interface ExtendedStageAssignment extends StageAssignment {
   on_failure?: FailureStrategy;
   retries?: number;
   retry_backoff?: number;
+  min_iterations?: number;
   skills?: string[];
   prompt?: string;
 }
