@@ -345,24 +345,26 @@ export function StageConfigEditor({
                     </div>
                   )}
 
-                  {/* Min Iterations (for stages like review) */}
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">
-                      Min Iterations (optional)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={config.min_iterations || ''}
-                      onChange={(e) => updateStageConfig(stage, { min_iterations: e.target.value ? parseInt(e.target.value) : undefined })}
-                      placeholder="0 = no minimum"
-                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-sm text-bone focus:outline-none focus:ring-1 focus:ring-coffee"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      최소 N번 반복 후 종료 가능 (예: review stage에서 10 설정 시 완료되어도 10번 반복)
-                    </p>
-                  </div>
+                  {/* Min Iterations (only for review/check stages) */}
+                  {(stage === 'review' || stage === 'check') && (
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">
+                        Min Iterations
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={config.min_iterations || ''}
+                        onChange={(e) => updateStageConfig(stage, { min_iterations: e.target.value ? parseInt(e.target.value) : undefined })}
+                        placeholder="0 = no minimum"
+                        className="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-sm text-bone focus:outline-none focus:ring-1 focus:ring-coffee"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        최소 N번 실행 후 종료 가능 (완료 시에도 지정된 횟수만큼 반복)
+                      </p>
+                    </div>
+                  )}
 
                   {/* Skills */}
                   <div>

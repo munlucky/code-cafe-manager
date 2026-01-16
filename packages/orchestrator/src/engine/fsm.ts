@@ -152,15 +152,17 @@ export class FSMEngine {
       done = checkResult.done === true;
     }
 
+    // Check if current stage has min_iterations requirement (workflow iteration count)
+    const minIters = this.getMinIterations(this.currentStage);
+
     if (done) {
-      // Check if current stage has min_iterations requirement
-      const minIters = this.getMinIterations(this.currentStage);
-      const stageCount = this.getStageExecutionCount(this.currentStage);
-      if (minIters > 0 && stageCount < minIters) {
+      // Done but check min_iterations (must complete at least N workflow iterations)
+      if (minIters > 0 && this.currentIter < minIters) {
+        // Min workflow iterations not met - restart from beginning
         return {
           done: false,
-          nextStage: this.workflow.loop.fallback_next_stage,
-          reason: `Stage '${this.currentStage}' requires minimum ${minIters} executions (current: ${stageCount})`,
+          nextStage: this.workflow.stages[0], // Restart from first stage
+          reason: `Workflow requires minimum ${minIters} iterations (current: ${this.currentIter}), restarting`,
         };
       }
 
@@ -180,7 +182,9 @@ export class FSMEngine {
       };
     }
 
-    // Determine next stage
+    // Not done - restart workflow from beginning
+    // This is the moonshot-style loop behavior: when check/review is not done,
+    // restart the entire workflow from the first stage (e.g., analyze -> plan -> code -> review)
     let nextStage: StageType;
 
     if (checkResult.recommended_next_stage) {
@@ -189,19 +193,19 @@ export class FSMEngine {
 
       if (!this.workflow.stages.includes(nextStage)) {
         console.warn(
-          `Invalid recommended_next_stage: ${checkResult.recommended_next_stage}, using fallback`
+          `Invalid recommended_next_stage: ${checkResult.recommended_next_stage}, restarting from beginning`
         );
-        nextStage = this.workflow.loop.fallback_next_stage;
+        nextStage = this.workflow.stages[0]; // Restart from first stage
       }
     } else {
-      // Use fallback
-      nextStage = this.workflow.loop.fallback_next_stage;
+      // Default: restart from beginning (moonshot-style loop)
+      nextStage = this.workflow.stages[0];
     }
 
     return {
       done: false,
       nextStage,
-      reason: 'Check requires more work',
+      reason: 'Check requires more work - restarting workflow from beginning',
     };
   }
 

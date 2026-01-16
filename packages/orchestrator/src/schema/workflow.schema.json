@@ -19,7 +19,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["plan", "code", "test", "check"]
+            "enum": ["analyze", "plan", "code", "review", "test", "check"]
           },
           "minItems": 1,
           "description": "List of stages to execute in order"
@@ -36,8 +36,8 @@
             },
             "fallback_next_stage": {
               "type": "string",
-              "enum": ["plan", "code", "test", "check"],
-              "description": "Default stage to return to if check fails"
+              "enum": ["analyze", "plan", "code", "review", "test", "check"],
+              "description": "Default stage to return to if check fails (legacy, now defaults to first stage)"
             },
             "stop_when": {
               "type": "string",
@@ -46,6 +46,26 @@
           }
         }
       }
+    },
+    "analyze": {
+      "oneOf": [
+        { "type": "string", "description": "Profile name for analyze stage (backward compatibility)" },
+        {
+          "type": "object",
+          "description": "Analyze stage configuration",
+          "properties": {
+            "provider": { "type": "string", "enum": ["claude-code", "codex", "gemini", "grok"] },
+            "role": { "type": "string" },
+            "profile": { "type": "string" },
+            "mode": { "type": "string", "enum": ["sequential", "parallel"], "description": "Execution mode (default: sequential)" },
+            "on_failure": { "type": "string", "enum": ["stop", "continue", "retry"], "description": "Failure handling strategy" },
+            "retries": { "type": "integer", "minimum": 0, "maximum": 10, "description": "Number of retries when on_failure is 'retry'" },
+            "retry_backoff": { "type": "number", "minimum": 0, "description": "Backoff multiplier in seconds for retries" },
+            "skills": { "type": "array", "items": { "type": "string" }, "description": "List of skill names to use" },
+            "prompt": { "type": "string", "description": "Custom prompt template for this stage" }
+          }
+        }
+      ]
     },
     "plan": {
       "oneOf": [
@@ -87,6 +107,27 @@
         }
       ]
     },
+    "review": {
+      "oneOf": [
+        { "type": "string", "description": "Profile name for review stage (backward compatibility)" },
+        {
+          "type": "object",
+          "description": "Review stage configuration (can determine workflow completion)",
+          "properties": {
+            "provider": { "type": "string", "enum": ["claude-code", "codex", "gemini", "grok"] },
+            "role": { "type": "string" },
+            "profile": { "type": "string" },
+            "mode": { "type": "string", "enum": ["sequential", "parallel"], "description": "Execution mode (default: sequential)" },
+            "on_failure": { "type": "string", "enum": ["stop", "continue", "retry"], "description": "Failure handling strategy" },
+            "retries": { "type": "integer", "minimum": 0, "maximum": 10, "description": "Number of retries when on_failure is 'retry'" },
+            "retry_backoff": { "type": "number", "minimum": 0, "description": "Backoff multiplier in seconds for retries" },
+            "min_iterations": { "type": "integer", "minimum": 0, "maximum": 100, "description": "Minimum times this stage must run before completion is allowed" },
+            "skills": { "type": "array", "items": { "type": "string" }, "description": "List of skill names to use" },
+            "prompt": { "type": "string", "description": "Custom prompt template for this stage" }
+          }
+        }
+      ]
+    },
     "test": {
       "oneOf": [
         { "type": "string", "description": "Profile name for test stage (backward compatibility)" },
@@ -112,7 +153,7 @@
         { "type": "string", "description": "Profile name for check stage (backward compatibility)" },
         {
           "type": "object",
-          "description": "Check stage configuration",
+          "description": "Check stage configuration (can determine workflow completion)",
           "properties": {
             "provider": { "type": "string", "enum": ["claude-code", "codex", "gemini", "grok"] },
             "role": { "type": "string" },
@@ -121,6 +162,7 @@
             "on_failure": { "type": "string", "enum": ["stop", "continue", "retry"], "description": "Failure handling strategy" },
             "retries": { "type": "integer", "minimum": 0, "maximum": 10, "description": "Number of retries when on_failure is 'retry'" },
             "retry_backoff": { "type": "number", "minimum": 0, "description": "Backoff multiplier in seconds for retries" },
+            "min_iterations": { "type": "integer", "minimum": 0, "maximum": 100, "description": "Minimum times this stage must run before completion is allowed" },
             "skills": { "type": "array", "items": { "type": "string" }, "description": "List of skill names to use" },
             "prompt": { "type": "string", "description": "Custom prompt template for this stage" }
           }

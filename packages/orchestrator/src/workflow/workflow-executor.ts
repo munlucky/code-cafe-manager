@@ -259,9 +259,12 @@ export class WorkflowExecutor extends EventEmitter {
           role: stageConfig.role,
           profile: stageConfig.profile || 'simple',
           mode: stageConfig.mode,
+          providers: stageConfig.providers,
+          parallel_strategy: stageConfig.parallel_strategy,
           on_failure: stageConfig.on_failure,
           retries: stageConfig.retries,
           retry_backoff: stageConfig.retry_backoff,
+          min_iterations: stageConfig.min_iterations,
           skills: stageConfig.skills,
           prompt: stageConfig.prompt,
         };
