@@ -6,13 +6,18 @@
 
 import * as path from 'path';
 import { EventEmitter } from 'events';
-import { nanoid } from 'nanoid';
+import { randomBytes } from 'crypto';
 import { DAGExecutor } from '../engine/dag-executor';
 import { FSMEngine } from '../engine/fsm';
 import { EventLogger } from '../storage/event-logger';
 import { RunStateManager } from '../storage/run-state';
 import { ProviderExecutor } from '../provider/executor';
 import { RoleManager } from '../role/role-manager';
+
+/** Generate a unique ID using crypto */
+function nanoid(): string {
+  return randomBytes(8).toString('hex');
+}
 import {
   loadStageProfile,
   loadWorkflow,
