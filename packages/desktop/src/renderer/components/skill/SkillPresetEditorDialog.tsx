@@ -164,8 +164,8 @@ export function SkillPresetEditorDialog({
       };
 
       const response = isEditing
-        ? await window.codecafe.skill.update(presetData)
-        : await window.codecafe.skill.create(presetData);
+        ? await window.codecafe.skillPreset.update(presetData)
+        : await window.codecafe.skillPreset.create(presetData);
 
       if (response.success && response.data) {
         onSuccess(response.data);

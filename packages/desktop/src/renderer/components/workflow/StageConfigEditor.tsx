@@ -51,7 +51,7 @@ export function StageConfigEditor({
   return (
     <div className="space-y-3">
       <label className="block text-sm font-medium text-gray-400">
-        Stage Configuration
+        Step Configuration
       </label>
       <div className="space-y-2">
         {stages.map((stage) => {
@@ -79,11 +79,11 @@ export function StageConfigEditor({
 
               {isExpanded && (
                 <div className="p-3 space-y-3 bg-gray-900">
-                  {/* Provider */}
+                  {/* Barista */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs text-gray-400 mb-1">
-                        Provider
+                        Barista
                       </label>
                       <select
                         value={config.provider || ''}
@@ -176,7 +176,7 @@ export function StageConfigEditor({
                     <div className="space-y-3 p-3 bg-gray-800 rounded-lg">
                       <div className="flex items-center justify-between">
                         <label className="block text-xs text-gray-400">
-                          Parallel Providers
+                          Parallel Baristas
                         </label>
                         <button
                           type="button"
@@ -192,7 +192,7 @@ export function StageConfigEditor({
                           className="flex items-center gap-1 px-2 py-1 bg-coffee hover:bg-coffee/80 text-white text-xs rounded transition-colors"
                         >
                           <Plus className="w-3 h-3" />
-                          Add Provider
+                          Add Barista
                         </button>
                       </div>
 
@@ -222,14 +222,14 @@ export function StageConfigEditor({
                       {/* Providers List */}
                       {(config.providers || []).length === 0 ? (
                         <p className="text-xs text-gray-500 text-center py-2">
-                          No providers added. Click "Add Provider" to add one.
+                          No baristas added. Click "Add Barista" to add one.
                         </p>
                       ) : (
                         <div className="space-y-2">
                           {(config.providers || []).map((providerItem, idx) => (
                             <div key={idx} className="p-2 bg-gray-700 rounded-lg">
                               <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs text-gray-400">Provider #{idx + 1}</span>
+                                <span className="text-xs text-gray-400">Barista #{idx + 1}</span>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -244,10 +244,10 @@ export function StageConfigEditor({
                               </div>
 
                               <div className="grid grid-cols-3 gap-2">
-                                {/* Provider Select */}
+                                {/* Barista Select */}
                                 <div>
                                   <label className="block text-xs text-gray-500 mb-1">
-                                    Provider
+                                    Barista
                                   </label>
                                   <select
                                     value={providerItem.provider}
@@ -390,7 +390,7 @@ export function StageConfigEditor({
                     <textarea
                       value={config.prompt || ''}
                       onChange={(e) => updateStageConfig(stage, { prompt: e.target.value })}
-                      placeholder="Override the default prompt for this stage..."
+                      placeholder="Override the default prompt for this step..."
                       rows={2}
                       className="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-sm text-bone focus:outline-none focus:ring-1 focus:ring-coffee resize-none"
                     />

@@ -83,7 +83,7 @@ export function WorkflowEditorDialog({
         onSuccess(response.data);
         onClose();
       } else {
-        throw new Error(response.error?.message || 'Failed to save workflow');
+        throw new Error(response.error?.message || 'Failed to save recipe');
       }
     } catch (err: any) {
       setError(err.message);
@@ -96,7 +96,7 @@ export function WorkflowEditorDialog({
     <Dialog
       isOpen={isOpen}
       onClose={onClose}
-      title={isEditing ? 'Edit Workflow' : 'New Workflow'}
+      title={isEditing ? 'Edit Recipe' : 'New Recipe'}
       size="large"
     >
       <div className="space-y-4 max-h-[60vh] overflow-y-auto">
@@ -109,7 +109,7 @@ export function WorkflowEditorDialog({
               id="workflow-id"
               value={id}
               onChange={(e) => setId(e.target.value)}
-              placeholder="e.g., my-custom-workflow"
+              placeholder="e.g., my-custom-recipe"
               disabled={isEditing}
             />
           </div>
@@ -121,7 +121,7 @@ export function WorkflowEditorDialog({
               id="workflow-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., My Custom Workflow"
+              placeholder="e.g., My Custom Recipe"
             />
           </div>
         </div>
@@ -134,13 +134,13 @@ export function WorkflowEditorDialog({
             id="workflow-desc"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="A brief description of the workflow"
+            placeholder="A brief description of the recipe"
           />
         </div>
 
         <div>
           <label htmlFor="workflow-stages" className="block text-sm font-medium text-gray-400 mb-1">
-            Stages (comma-separated)
+            Steps (comma-separated)
           </label>
           <Input
             id="workflow-stages"
@@ -158,7 +158,7 @@ export function WorkflowEditorDialog({
             className="flex items-center gap-2 text-sm text-gray-400 hover:text-bone transition-colors"
           >
             <span className="w-2 h-2 rounded-full bg-coffee" />
-            {showAdvanced ? 'Hide' : 'Show'} Stage Configuration
+            {showAdvanced ? 'Hide' : 'Show'} Step Configuration
           </button>
         </div>
 
@@ -181,7 +181,7 @@ export function WorkflowEditorDialog({
           Cancel
         </Button>
         <Button onClick={handleSubmit} disabled={isSubmitting}>
-          {isSubmitting ? 'Saving...' : 'Save Workflow'}
+          {isSubmitting ? 'Saving...' : 'Save Recipe'}
         </Button>
       </div>
     </Dialog>

@@ -24,7 +24,6 @@ const VIEW_MAP: Record<string, React.ComponentType> = {
   terminals: OrderTerminals,
   worktrees: Worktrees,
   workflows: Workflows,
-  'workflow-detail': WorkflowDetail,
   skills: Skills,
   roles: RoleManager,
 };
@@ -38,22 +37,31 @@ function selectViewComponent(view: string): React.ComponentType {
   return VIEW_MAP[view];
 }
 
+// Type guard for workflow params
+function isWorkflowParams(params: any): params is { workflowId: string } {
+  return params && typeof params.workflowId === 'string';
+}
+
 export function App(): JSX.Element {
   const { currentView, viewParams } = useViewStore();
   const currentCafeId = useCafeStore((s) => s.currentCafeId);
 
   useIpcEffect();
 
+  // Special handling for views with required props
+  if (currentView === 'workflow-detail' && isWorkflowParams(viewParams)) {
+    return (
+      <Layout>
+        <WorkflowDetail workflowId={viewParams.workflowId} />
+      </Layout>
+    );
+  }
 
   const ViewComponent = selectViewComponent(currentView);
 
   return (
     <Layout>
-      {currentView === 'workflow-detail' ? (
-        <ViewComponent workflowId={viewParams?.workflowId || ''} />
-      ) : (
-        <ViewComponent />
-      )}
+      <ViewComponent />
     </Layout>
   );
 }

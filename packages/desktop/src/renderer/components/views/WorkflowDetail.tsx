@@ -142,12 +142,12 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
         setEditingStages({});
         setEditingWorkflowName(false);
         setEditingWorkflowDesc(false);
-        showSuccessMessage('Workflow saved successfully');
+        showSuccessMessage('Recipe saved successfully');
       } else {
-        throw new Error(response.error?.message || 'Failed to save workflow');
+        throw new Error(response.error?.message || 'Failed to save recipe');
       }
     } catch (err: any) {
-      showErrorMessage(err.message || 'Failed to save workflow');
+      showErrorMessage(err.message || 'Failed to save recipe');
     } finally {
       setSaving(false);
     }
@@ -176,10 +176,10 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
           setView('workflow-detail', { workflowId: newWorkflowId });
         }, 500);
       } else {
-        throw new Error(response.error?.message || 'Failed to save as new workflow');
+        throw new Error(response.error?.message || 'Failed to save as new recipe');
       }
     } catch (err: any) {
-      showErrorMessage(err.message || 'Failed to save as new workflow');
+      showErrorMessage(err.message || 'Failed to save as new recipe');
     } finally {
       setSaving(false);
     }
@@ -236,12 +236,12 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
         const newEditingStages = { ...editingStages };
         delete newEditingStages[stage];
         setEditingStages(newEditingStages);
-        showSuccessMessage(`Stage "${stage}" saved successfully`);
+        showSuccessMessage(`Step "${stage}" saved successfully`);
       } else {
-        throw new Error(response.error?.message || 'Failed to save stage');
+        throw new Error(response.error?.message || 'Failed to save step');
       }
     } catch (err: any) {
-      showErrorMessage(err.message || 'Failed to save stage');
+      showErrorMessage(err.message || 'Failed to save step');
     } finally {
       setSaving(false);
     }
@@ -256,12 +256,12 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
 
   const addStage = () => {
     if (!workflow) return;
-    const newStageName = prompt('Enter new stage name:');
+    const newStageName = prompt('Enter new step name:');
     if (!newStageName || !newStageName.trim()) return;
 
     const stageName = newStageName.trim().toLowerCase().replace(/\s+/g, '-');
     if (workflow.stages.includes(stageName)) {
-      alert(`Stage "${stageName}" already exists`);
+      alert(`Step "${stageName}" already exists`);
       return;
     }
 
@@ -282,20 +282,20 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
     window.codecafe.workflow.update(updatedWorkflow).then(response => {
       if (response.success && response.data) {
         setWorkflow(response.data);
-        showSuccessMessage(`Stage "${stageName}" added`);
+        showSuccessMessage(`Step "${stageName}" added`);
       } else {
-        showErrorMessage(response.error?.message || 'Failed to add stage');
+        showErrorMessage(response.error?.message || 'Failed to add step');
       }
       setSaving(false);
     }).catch(err => {
-      showErrorMessage(err.message || 'Failed to add stage');
+      showErrorMessage(err.message || 'Failed to add step');
       setSaving(false);
     });
   };
 
   const removeStage = (stage: string) => {
     if (!workflow) return;
-    if (!confirm(`Are you sure you want to remove stage "${stage}"?`)) return;
+    if (!confirm(`Are you sure you want to remove step "${stage}"?`)) return;
 
     const updatedWorkflow: ExtendedWorkflowInfo = {
       ...workflow,
@@ -312,13 +312,13 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
         const newEditingStages = { ...editingStages };
         delete newEditingStages[stage];
         setEditingStages(newEditingStages);
-        showSuccessMessage(`Stage "${stage}" removed`);
+        showSuccessMessage(`Step "${stage}" removed`);
       } else {
-        showErrorMessage(response.error?.message || 'Failed to remove stage');
+        showErrorMessage(response.error?.message || 'Failed to remove step');
       }
       setSaving(false);
     }).catch(err => {
-      showErrorMessage(err.message || 'Failed to remove stage');
+      showErrorMessage(err.message || 'Failed to remove step');
       setSaving(false);
     });
   };
@@ -390,7 +390,7 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
       <div className="p-6 h-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-2">
           <Loader2 className="w-8 h-8 text-coffee animate-spin" />
-          <p className="text-gray-400">Loading workflow...</p>
+          <p className="text-gray-400">Loading recipe...</p>
         </div>
       </div>
     );
@@ -400,8 +400,8 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
     return (
       <div className="p-6 h-full flex flex-col items-center justify-center text-center">
         <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-        <h3 className="text-lg font-semibold text-bone mb-2">Failed to load workflow</h3>
-        <p className="text-gray-400 mb-6">{error || 'Workflow not found'}</p>
+        <h3 className="text-lg font-semibold text-bone mb-2">Failed to load recipe</h3>
+        <p className="text-gray-400 mb-6">{error || 'Recipe not found'}</p>
         <Button onClick={handleBack} variant="secondary">
           Go Back
         </Button>
@@ -565,10 +565,10 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
         </div>
       </div>
 
-      {/* Kanban-style Stage Board */}
+      {/* Kanban-style Step Board */}
       <div className="flex-1 overflow-auto px-8 pb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-bone">Stages</h2>
+          <h2 className="text-lg font-semibold text-bone">Steps</h2>
           <Button
             variant="ghost"
             size="sm"
@@ -577,7 +577,7 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
             className="flex items-center gap-1 text-coffee hover:text-coffee/80"
           >
             <Plus className="w-4 h-4" />
-            Add Stage
+            Add Step
           </Button>
         </div>
 
@@ -641,7 +641,7 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
                             size="sm"
                             onClick={() => startEditingStage(stage)}
                             className="p-1 h-auto text-gray-400 hover:text-coffee"
-                            title="Edit stage"
+                            title="Edit step"
                           >
                             <Edit2 className="w-4 h-4" />
                           </Button>
@@ -651,7 +651,7 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
                             onClick={() => removeStage(stage)}
                             disabled={saving}
                             className="p-1 h-auto text-gray-400 hover:text-red-400"
-                            title="Remove stage"
+                            title="Remove step"
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -667,7 +667,7 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
                     <>
                       {/* Edit Mode */}
                       <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Provider</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Barista</label>
                         <select
                           value={editingConfig?.provider || 'claude-code'}
                           onChange={(e) => updateStageConfig(stage, { provider: e.target.value })}
@@ -872,7 +872,7 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
                       {/* View Mode - Display all info */}
                       <div className="space-y-3">
                         <div className="flex justify-between items-start">
-                          <span className="text-xs text-gray-500 uppercase tracking-wide">Provider</span>
+                          <span className="text-xs text-gray-500 uppercase tracking-wide">Barista</span>
                           <span className="text-coffee font-medium">{config?.provider || 'claude-code'}</span>
                         </div>
                         <div className="flex justify-between items-start">
@@ -936,22 +936,22 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
       {showSaveAsDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-card rounded-lg p-6 w-full max-w-md border border-gray-700">
-            <h3 className="text-lg font-semibold text-bone mb-4">Save as New Workflow</h3>
+            <h3 className="text-lg font-semibold text-bone mb-4">Save as New Recipe</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Workflow ID</label>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Recipe ID</label>
                 <Input
                   value={newWorkflowId}
                   onChange={(e) => setNewWorkflowId(e.target.value)}
-                  placeholder="e.g., my-custom-workflow"
+                  placeholder="e.g., my-custom-recipe"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Workflow Name</label>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Recipe Name</label>
                 <Input
                   value={newWorkflowName}
                   onChange={(e) => setNewWorkflowName(e.target.value)}
-                  placeholder="e.g., My Custom Workflow"
+                  placeholder="e.g., My Custom Recipe"
                 />
               </div>
             </div>

@@ -330,6 +330,15 @@ declare global {
         duplicate: (skillId: string, newId: string, newName?: string) => Promise<IpcResponse<Skill>>;
       };
 
+      // Skill Preset Management (프리셋 관리 - 여러 스킬을 그룹화)
+      skillPreset: {
+        list: () => Promise<IpcResponse<SkillPreset[]>>;
+        get: (presetId: string) => Promise<IpcResponse<SkillPreset | null>>;
+        create: (presetData: SkillPreset) => Promise<IpcResponse<SkillPreset>>;
+        update: (presetData: SkillPreset) => Promise<IpcResponse<SkillPreset>>;
+        delete: (presetId: string) => Promise<IpcResponse<{ success: boolean }>>;
+      };
+
       // Orchestrator (Run Management)
       run: {
         list: () => Promise<IpcResponse<RunProgress[]>>;
