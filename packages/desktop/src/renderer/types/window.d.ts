@@ -4,6 +4,7 @@ import type {
   ProviderType,
   WorktreeInfo,
   Receipt,
+  Skill,
   SkillPreset,
 } from './models';
 import type { Cafe, CreateCafeParams, UpdateCafeParams, Role } from '@codecafe/core';
@@ -319,14 +320,14 @@ declare global {
         ) => Promise<IpcResponse<{ runId: string }>>;
       };
 
-      // Skill Preset Management
+      // Skill Management (단일 스킬 관리)
       skill: {
-        list: () => Promise<IpcResponse<SkillPreset[]>>;
-        get: (presetId: string) => Promise<IpcResponse<SkillPreset | null>>;
-        create: (presetData: SkillPreset) => Promise<IpcResponse<SkillPreset>>;
-        update: (presetData: SkillPreset) => Promise<IpcResponse<SkillPreset>>;
-        delete: (presetId: string) => Promise<IpcResponse<{ success: boolean }>>;
-        duplicate: (presetId: string, newId: string, newName?: string) => Promise<IpcResponse<SkillPreset>>;
+        list: () => Promise<IpcResponse<Skill[]>>;
+        get: (skillId: string) => Promise<IpcResponse<Skill | null>>;
+        create: (skillData: Skill) => Promise<IpcResponse<Skill>>;
+        update: (skillData: Skill) => Promise<IpcResponse<Skill>>;
+        delete: (skillId: string) => Promise<IpcResponse<{ success: boolean }>>;
+        duplicate: (skillId: string, newId: string, newName?: string) => Promise<IpcResponse<Skill>>;
       };
 
       // Orchestrator (Run Management)
