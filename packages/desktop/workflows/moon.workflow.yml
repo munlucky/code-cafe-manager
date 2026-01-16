@@ -1,34 +1,40 @@
 workflow:
-  name: moon
-  description: Moon workflow with stage-specific provider configuration
+  name: moonshot-lite
+  description: Moonshot 스타일의 경량 워크플로우 - 분석 → 계획 → 구현 → 검증
   stages:
+    - analyze
     - plan
     - code
-    - test
-    - check
+    - review
   loop:
     max_iters: 5
     fallback_next_stage: plan
     stop_when: "$.done"
 
 # Stage-specific provider/role/profile configuration
-# Each stage can now specify which provider to use
+# 각 stage는 어떤 provider/role을 사용할지 지정할 수 있습니다
+# Moonshot 스타일: analyze → plan → code → review
+
+# analyze: 요구사항 분석, 문제 이해, 범위 정의
+analyze:
+  provider: claude-code
+  role: planner
+  profile: simple
+
+# plan: 상세 계획 수립, 설계, 접근 방법 결정
 plan:
   provider: claude-code
   role: planner
   profile: simple
 
+# code: 실제 구현, 코드 작성
 code:
   provider: claude-code
   role: coder
   profile: simple
 
-test:
-  provider: claude-code
-  role: tester
-  profile: simple
-
-check:
+# review: 검증, 개선점 찾기, 완료 여부 판단
+review:
   provider: claude-code
   role: checker
   profile: simple

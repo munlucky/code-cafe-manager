@@ -3,7 +3,7 @@
  */
 
 // Stage types
-export type StageType = 'plan' | 'code' | 'test' | 'check'
+export type StageType = 'analyze' | 'plan' | 'code' | 'review' | 'test' | 'check'
 
 /**
  * Single provider configuration for parallel execution

@@ -17,8 +17,10 @@ export function setProfile(stage: StageType, profile: string, orchDir?: string):
   }
 
   const defaults: Record<StageType, StageAssignment> = {
+    analyze: { provider: 'claude-code', role: 'planner', profile: 'simple' },
     plan: { provider: 'claude-code', role: 'planner', profile: 'simple' },
     code: { provider: 'claude-code', role: 'coder', profile: 'simple' },
+    review: { provider: 'claude-code', role: 'checker', profile: 'simple' },
     test: { provider: 'claude-code', role: 'tester', profile: 'simple' },
     check: { provider: 'claude-code', role: 'checker', profile: 'simple' },
   };

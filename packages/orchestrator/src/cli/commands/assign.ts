@@ -22,8 +22,10 @@ export function setAssignment(
   }
 
   const defaults: Record<StageType, StageAssignment> = {
+    analyze: { provider: 'claude-code', role: 'planner', profile: 'simple' },
     plan: { provider: 'claude-code', role: 'planner', profile: 'simple' },
     code: { provider: 'claude-code', role: 'coder', profile: 'simple' },
+    review: { provider: 'claude-code', role: 'checker', profile: 'simple' },
     test: { provider: 'claude-code', role: 'tester', profile: 'simple' },
     check: { provider: 'claude-code', role: 'checker', profile: 'simple' },
   };
@@ -63,8 +65,10 @@ export function getAssignment(stage?: StageType, orchDir?: string): void {
   );
 
   const defaults: Record<StageType, StageAssignment> = {
+    analyze: { provider: 'claude-code', role: 'planner', profile: 'simple' },
     plan: { provider: 'claude-code', role: 'planner', profile: 'simple' },
     code: { provider: 'claude-code', role: 'coder', profile: 'simple' },
+    review: { provider: 'claude-code', role: 'checker', profile: 'simple' },
     test: { provider: 'claude-code', role: 'tester', profile: 'simple' },
     check: { provider: 'claude-code', role: 'checker', profile: 'simple' },
   };
