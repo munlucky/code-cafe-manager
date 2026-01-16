@@ -412,6 +412,7 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
   }
 
   const isAnyEditing = editingWorkflowName || editingWorkflowDesc || Object.keys(editingStages).length > 0;
+  const isProtected = workflow?.id === 'moon'; // moonshot-lite is the default recipe
 
   return (
     <div className="h-full flex flex-col">
@@ -571,16 +572,18 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
       <div className="flex-1 overflow-auto px-8 pb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-bone">Steps</h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={addStage}
-            disabled={saving}
-            className="flex items-center gap-1 text-coffee hover:text-coffee/80"
-          >
-            <Plus className="w-4 h-4" />
-            Add Step
-          </Button>
+          {!isProtected && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={addStage}
+              disabled={saving}
+              className="flex items-center gap-1 text-coffee hover:text-coffee/80"
+            >
+              <Plus className="w-4 h-4" />
+              Add Step
+            </Button>
+          )}
         </div>
 
         {/* Kanban Board - Horizontal scrollable columns */}
@@ -637,27 +640,29 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
                           </Button>
                         </>
                       ) : (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => startEditingStage(stage)}
-                            className="p-1 h-auto text-gray-400 hover:text-coffee"
-                            title="Edit step"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeStage(stage)}
-                            disabled={saving}
-                            className="p-1 h-auto text-gray-400 hover:text-red-400"
-                            title="Remove step"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </>
+                        !isProtected && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => startEditingStage(stage)}
+                              className="p-1 h-auto text-gray-400 hover:text-coffee"
+                              title="Edit step"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeStage(stage)}
+                              disabled={saving}
+                              className="p-1 h-auto text-gray-400 hover:text-red-400"
+                              title="Remove step"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )
                       )}
                     </div>
                   </div>

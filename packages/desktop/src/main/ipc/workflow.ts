@@ -53,7 +53,7 @@ interface WorkflowInfo {
   description?: string;
   stages: string[];
   // Stage별 provider 설정 (workflow 내에 정의된 경우)
-  stageAssignments?: Record<string, StageAssignment>;
+  stageConfigs?: Record<string, StageAssignment>;
 }
 
 /**
@@ -111,6 +111,7 @@ function getOrchDir(): string {
  */
 function listWorkflows(orchDir: string): WorkflowInfo[] {
   const workflowsDir = path.join(orchDir, 'workflows');
+  console.log('[DEBUG] Listing workflows from:', workflowsDir);
 
   if (!fs.existsSync(workflowsDir)) {
     return [];
@@ -184,7 +185,17 @@ function updateWorkflow(orchDir: string, workflowData: WorkflowInfo): WorkflowIn
     throw new Error(`Workflow with id "${workflowData.id}" not found.`);
   }
 
+  console.log('[DEBUG] updateWorkflow received:', JSON.stringify(workflowData, null, 2));
+  
   writeWorkflowToFile(filePath, workflowData);
+  
+  // Return freshly parsed data from file to ensure consistency
+  const freshData = parseWorkflowInfo(filePath, workflowData.id);
+  if (freshData) {
+    console.log('[DEBUG] updateWorkflow returning:', JSON.stringify(freshData, null, 2));
+    return freshData;
+  }
+  
   return workflowData;
 }
 
@@ -217,11 +228,12 @@ function parseWorkflowInfo(filePath: string, id: string): WorkflowInfo | null {
       (typeof workflow?.description === 'string' && workflow.description) || `Workflow: ${id}`;
 
     // Stage별 provider/role/profile 설정 파싱 (new fields 포함)
-    const stageAssignments: Record<string, StageAssignment> = {};
+    // 주의: stage 설정은 workflow 객체 바깥(root level)에 있음
+    const stageConfigs: Record<string, StageAssignment> = {};
     for (const stage of stages) {
-      const stageConfig = workflow?.[stage];
+      const stageConfig = parsed?.[stage];
       if (stageConfig && typeof stageConfig === 'object') {
-        stageAssignments[stage] = {
+        stageConfigs[stage] = {
           provider: (stageConfig as any).provider || 'claude-code',
           role: (stageConfig as any).role,
           profile: (stageConfig as any).profile || (stageConfig as any).toString?.() || 'simple',
@@ -234,7 +246,7 @@ function parseWorkflowInfo(filePath: string, id: string): WorkflowInfo | null {
         };
       } else if (typeof stageConfig === 'string') {
         // 기존 방식: stage: profile 형식
-        stageAssignments[stage] = {
+        stageConfigs[stage] = {
           provider: 'claude-code',
           profile: stageConfig,
         };
@@ -246,7 +258,7 @@ function parseWorkflowInfo(filePath: string, id: string): WorkflowInfo | null {
       name,
       description,
       stages,
-      stageAssignments: Object.keys(stageAssignments).length > 0 ? stageAssignments : undefined,
+      stageConfigs: Object.keys(stageConfigs).length > 0 ? stageConfigs : undefined,
     };
   } catch (error) {
     return null;
@@ -257,10 +269,18 @@ function parseWorkflowInfo(filePath: string, id: string): WorkflowInfo | null {
  * Write workflow to YAML file
  */
 function writeWorkflowToFile(filePath: string, workflowData: WorkflowInfo): void {
-  const stageProfiles = workflowData.stages.reduce(
-    (acc, stage) => ({ ...acc, [stage]: 'simple' }),
-    {}
-  );
+  const assignments = workflowData.stageConfigs || {};
+
+  const stageConfigs = workflowData.stages.reduce((acc, stage) => {
+    const config = assignments[stage];
+    if (config) {
+      const cleanConfig = Object.fromEntries(
+        Object.entries(config).filter(([_, v]) => v !== undefined)
+      );
+      return { ...acc, [stage]: cleanConfig };
+    }
+    return { ...acc, [stage]: 'simple' };
+  }, {});
 
   const yamlData = {
     workflow: {
@@ -268,7 +288,7 @@ function writeWorkflowToFile(filePath: string, workflowData: WorkflowInfo): void
       description: workflowData.description,
       stages: workflowData.stages,
     },
-    ...stageProfiles,
+    ...stageConfigs,
   };
 
   const content = yaml.dump(yamlData);
@@ -280,6 +300,8 @@ function writeWorkflowToFile(filePath: string, workflowData: WorkflowInfo): void
  */
 export function registerWorkflowHandlers(): void {
   const orchDir = getOrchDir();
+  console.log('[DEBUG] orchDir resolved to:', orchDir);
+  console.log('[DEBUG] process.cwd():', process.cwd());
 
   /**
    * List all workflows

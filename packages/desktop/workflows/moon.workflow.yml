@@ -1,12 +1,46 @@
 workflow:
   name: moonshot-lite
-  description: Moonshot 스타일의 경량 워크플로우 - 분석 → 계획 → 구현 → 검증
+  description: Moonshot Orchestrator 스타일 워크플로우 - 분석 → 계획 → 구현 → 검증
   stages:
     - analyze
     - plan
     - code
     - review
-analyze: simple
-plan: simple
-code: simple
-review: simple
+
+analyze:
+  provider: claude-code
+  role: planner
+  mode: sequential
+  on_failure: stop
+  skills:
+    - classify-task
+    - evaluate-complexity
+    - detect-uncertainty
+    - decide-sequence
+
+plan:
+  provider: claude-code
+  role: planner
+  mode: sequential
+  on_failure: stop
+  skills:
+    - pre-flight-check
+    - requirements-analyzer
+    - context-builder
+
+code:
+  provider: claude-code
+  role: coder
+  mode: sequential
+  on_failure: stop
+  skills:
+    - implementation-runner
+
+review:
+  provider: claude-code
+  role: reviewer
+  mode: sequential
+  on_failure: stop
+  skills:
+    - codex-review-code
+    - codex-test-integration

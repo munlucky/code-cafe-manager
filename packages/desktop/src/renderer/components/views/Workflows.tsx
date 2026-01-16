@@ -86,14 +86,21 @@ function WorkflowCard({
         <div className="flex flex-wrap gap-1">
           {workflow.stages.map((stage) => {
             const config = workflow.stageConfigs?.[stage];
+            // Stage category color mapping
+            const stageColorClass = 
+              stage === 'analyze' ? 'bg-blue-900/30 text-blue-300 border-blue-800' :
+              stage === 'plan' ? 'bg-purple-900/30 text-purple-300 border-purple-800' :
+              stage === 'code' ? 'bg-green-900/30 text-green-300 border-green-800' :
+              stage === 'review' || stage === 'check' || stage === 'test' ? 'bg-yellow-900/30 text-yellow-300 border-yellow-800' :
+              'bg-gray-700 text-gray-200 border-gray-600';
             return (
               <span
                 key={stage}
-                className="px-2 py-0.5 bg-gray-700 text-xs text-gray-200 rounded-full flex items-center gap-1"
+                className={`px-2 py-0.5 text-xs rounded-full flex items-center gap-1 border ${stageColorClass}`}
                 title={config ? `Barista: ${config.provider}, Role: ${config.role}` : undefined}
               >
                 {stage}
-                {config && <span className="text-coffee">•{config.provider}</span>}
+                {config && <span className="opacity-70">•{config.provider}</span>}
               </span>
             );
           })}
