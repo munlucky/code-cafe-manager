@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { 
   Coffee, ChevronDown, ChevronRight, Settings, Plus,
-  LayoutDashboard, List, FolderOpen
+  LayoutDashboard, List, FolderOpen, Zap, ChefHat
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useViewStore, type ViewName } from '../../store/useViewStore';
@@ -15,8 +15,8 @@ const CAFE_NAV_ITEMS: Array<{ view: ViewName; label: string; icon: any }> = [
 
 // Global settings (always accessible, cafe-independent)
 const GLOBAL_NAV_ITEMS: Array<{ view: ViewName; label: string; icon: any }> = [
-  { view: 'workflows', label: 'Recipes', icon: FolderOpen }, // Using FolderOpen as generic icon relative to file content
-  { view: 'skills', label: 'Skills', icon: Settings }, // Using Settings for skills temporarily or maybe Zap
+  { view: 'workflows', label: 'Recipes', icon: ChefHat }, // Using ChefHat for recipes
+  { view: 'skills', label: 'Skills', icon: Zap }, // Using Zap for skills
 ];
 
 export function Sidebar() {
