@@ -24,7 +24,7 @@ export interface RunProgress {
   workflowId: string;
   currentStage: string;
   currentIter: number;
-  status: 'running' | 'completed' | 'failed' | 'paused';
+  status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
   createdAt?: string;
   updatedAt?: string;
   stages: Array<{

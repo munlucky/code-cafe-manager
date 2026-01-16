@@ -6,6 +6,41 @@
 export type StageType = 'plan' | 'code' | 'test' | 'check'
 
 /**
+ * Single provider configuration for parallel execution
+ */
+export interface ProviderConfigItem {
+  provider: ProviderType
+  role?: string
+  weight?: number // For result aggregation (default: 1)
+}
+
+/**
+ * Stage configuration in workflow
+ */
+export interface StageConfig {
+  /** Single provider (for sequential execution) */
+  provider?: ProviderType
+  /** Multiple providers (for parallel execution) */
+  providers?: ProviderConfigItem[]
+  role?: string
+  profile?: string
+  /** Execution mode: sequential (default) or parallel */
+  mode?: 'sequential' | 'parallel'
+  /** Parallel execution strategy: 'all' (run all), 'race' (first wins), 'majority' (majority wins) */
+  parallel_strategy?: 'all' | 'race' | 'majority'
+  /** Failure handling strategy */
+  on_failure?: 'stop' | 'continue' | 'retry'
+  /** Number of retries when on_failure is 'retry' */
+  retries?: number
+  /** Backoff multiplier in seconds for retries */
+  retry_backoff?: number
+  /** List of skill names to use */
+  skills?: string[]
+  /** Custom prompt template for this stage */
+  prompt?: string
+}
+
+/**
  * Workflow definition
  */
 export interface Workflow {
@@ -19,6 +54,8 @@ export interface Workflow {
     stop_when: string
   }
   source?: string
+  // Stage별 provider 설정 (workflow 내에 정의된 경우)
+  stageConfigs?: Record<StageType, StageConfig>
 }
 
 // Node types
@@ -30,21 +67,11 @@ export type ProviderType = 'claude-code' | 'codex' | 'gemini' | 'grok'
 // Execution mode
 export type ExecutionMode = 'assisted' | 'headless' | 'auto'
 
-/**
- * Workflow definition
- */
-export interface Workflow {
-  id: string
-  name: string
-  stages: StageType[]
-  loop: {
-    max_iters: number
-    fallback_next_stage: StageType
-    stop_when: string
-  }
-  source?: string
-  description?: string
-}
+// Stage execution status
+export type StageStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
+
+// Run status for workflow execution
+export type RunStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
 
 /**
  * Stage profile (graph definition)
@@ -142,7 +169,7 @@ export interface RunState {
   currentStage: StageType
   stageIter: number
   completedNodes: string[]
-  status: 'running' | 'paused' | 'completed' | 'failed'
+  status: RunStatus
   lastError?: string
   createdAt: string
   updatedAt: string
@@ -156,6 +183,83 @@ export interface EventLog {
   type: 'node_start' | 'node_end' | 'validation_fail' | 'retry' | 'fallback' | 'stage_end' | 'error'
   nodeId?: string
   stage?: StageType
+  provider?: ProviderType
   data?: any
   error?: string
+}
+
+/**
+ * Execution context shared across all stages
+ */
+export interface ExecutionContext {
+  /** Input variables provided at workflow start */
+  vars: Record<string, any>
+  /** Results from previous stages */
+  stages: Record<string, any>
+  /** Current iteration number */
+  iteration: number
+  /** Workflow run ID */
+  runId: string
+}
+
+/**
+ * Result from a single provider execution in parallel mode
+ */
+export interface ProviderResult {
+  provider: ProviderType
+  role: string
+  status: StageStatus
+  output?: any
+  error?: string
+  duration?: number // milliseconds
+}
+
+/**
+ * Result from a single stage execution
+ */
+export interface StageResult {
+  /** Stage name */
+  stage: StageType
+  /** Execution status */
+  status: StageStatus
+  /** Stage output data */
+  output?: any
+  /** Error message if failed */
+  error?: string
+  /** Number of retries attempted */
+  retries?: number
+  /** Stage start timestamp */
+  startedAt: string
+  /** Stage end timestamp */
+  completedAt?: string
+  /** Parallel execution results (if mode is parallel) */
+  providerResults?: ProviderResult[]
+  /** Aggregation method used for parallel results */
+  aggregationMethod?: 'first' | 'majority' | 'weighted' | 'all'
+}
+
+/**
+ * Workflow run details
+ */
+export interface WorkflowRun {
+  /** Unique run identifier */
+  runId: string
+  /** Workflow ID */
+  workflowId: string
+  /** Current run status */
+  status: RunStatus
+  /** Current stage being executed */
+  currentStage?: StageType
+  /** Current iteration number */
+  iteration: number
+  /** Shared execution context */
+  context: ExecutionContext
+  /** Results from completed stages */
+  stageResults: Map<StageType, StageResult>
+  /** Run start timestamp */
+  startedAt: string
+  /** Run completion timestamp */
+  completedAt?: string
+  /** Error message if failed */
+  lastError?: string
 }

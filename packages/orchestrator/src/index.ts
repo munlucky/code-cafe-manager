@@ -53,6 +53,15 @@ export type {
 export { RunStateManager } from './storage/run-state';
 export { EventLogger } from './storage/event-logger';
 
+// Export workflow execution
+export { WorkflowExecutor } from './workflow/workflow-executor';
+export { RunRegistry } from './workflow/run-registry';
+export type {
+  WorkflowExecutionOptions,
+  RunControlOptions,
+  StageExecutionOptions,
+} from './workflow/workflow-executor';
+
 // Export UI integration
 // export { renderInteractiveRunner } from './ui/InteractiveRunner';
 export { registerElectronHandlers } from './ui/electron-api';

@@ -6,7 +6,9 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js",
-    "./workflow-manager": "./dist/workflow-manager.js"
+    "./workflow-manager": "./dist/workflow-manager.js",
+    "./workflow/workflow-executor": "./dist/workflow/workflow-executor.js",
+    "./workflow/run-registry": "./dist/workflow/run-registry.js"
   },
   "scripts": {
     "clean": "powershell -Command \"Remove-Item -Recurse -Force dist, *.tsbuildinfo -ErrorAction SilentlyContinue\"",

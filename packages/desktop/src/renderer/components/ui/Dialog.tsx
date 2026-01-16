@@ -92,13 +92,20 @@ interface CustomDialogProps {
     onClose: () => void;
     title: string;
     description?: string;
+    size?: 'small' | 'medium' | 'large';
     children: React.ReactNode;
 }
 
-export function Dialog({ isOpen, onClose, title, description, children }: CustomDialogProps) {
+export function Dialog({ isOpen, onClose, title, description, size = 'medium', children }: CustomDialogProps) {
+    const sizeClass = {
+        small: 'max-w-md',
+        medium: 'max-w-lg',
+        large: 'max-w-2xl',
+    }[size];
+
     return (
         <DialogRoot open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent>
+            <DialogContent className={sizeClass}>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     {description && <DialogDescription>{description}</DialogDescription>}

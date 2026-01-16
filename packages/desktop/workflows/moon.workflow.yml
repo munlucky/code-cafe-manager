@@ -1,18 +1,18 @@
 workflow:
-  name: default
-  stages: [plan, code, test, check]
+  name: moon
+  description: Moon workflow with stage-specific provider configuration
+  stages:
+    - plan
+    - code
+    - test
+    - check
   loop:
     max_iters: 5
     fallback_next_stage: plan
     stop_when: "$.done"
 
 # Stage-specific provider/role/profile configuration
-# Each stage can specify which provider to use
-# Format:
-#   provider: claude-code | codex | gemini | grok
-#   role: <role-name>
-#   profile: <profile-name>
-# Backward compatibility: you can also use the simple format (e.g., "plan: simple")
+# Each stage can now specify which provider to use
 plan:
   provider: claude-code
   role: planner

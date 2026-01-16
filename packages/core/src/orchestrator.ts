@@ -62,19 +62,25 @@ export class Orchestrator extends EventEmitter {
 
   /**
    * 주문 생성
+   * @param provider Provider는 이제 workflow의 stageConfigs에서 결정됨
+   *                 backward compatibility를 위해 선택적으로 허용
    */
   createOrder(
     workflowId: string,
     workflowName: string,
     counter: string,
-    provider: ProviderType,
+    provider?: ProviderType,
     vars: Record<string, string> = {}
   ): Order {
-    const order = this.orderManager.createOrder(workflowId, workflowName, counter, provider, vars);
-    const idleBarista = this.baristaManager.findIdleBarista(provider);
+    // Provider가 지정되지 않으면 기본값 사용 (workflow의 stageConfigs가 우선)
+    const defaultProvider: ProviderType = provider || 'claude-code';
+    const order = this.orderManager.createOrder(workflowId, workflowName, counter, defaultProvider, vars);
+
+    // 첫 번째 stage의 provider를 사용하여 barista 생성 시도
+    const idleBarista = this.baristaManager.findIdleBarista(defaultProvider);
     if (!idleBarista) {
       try {
-        this.baristaManager.createBarista(provider);
+        this.baristaManager.createBarista(defaultProvider);
       } catch (error) {
         console.error('Failed to auto-create barista:', error);
       }

@@ -58,7 +58,7 @@ export interface CreateOrderWithWorktreeParams {
   cafeId: string;
   workflowId: string;
   workflowName: string;
-  provider: string;
+  provider?: string; // Provider는 이제 workflow의 stageConfigs에서 결정됨 (선택적)
   vars?: Record<string, string>;
   createWorktree: boolean;
   worktreeOptions?: {

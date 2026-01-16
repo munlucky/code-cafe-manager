@@ -15,6 +15,7 @@ import {
   ProviderType,
   RunState,
   StageAssignment,
+  StageConfig,
   StageProfile,
   StageType,
   Workflow,
@@ -103,7 +104,9 @@ interface ExecuteWorkflowOptions {
 async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<RunState> {
   const stateManager = new RunStateManager(options.orchDir);
   const eventLogger = new EventLogger(options.orchDir, options.runId);
-  const assignments = loadAssignments(options.orchDir);
+  // Workflow의 stageConfigs와 global assignments를 병합
+  const globalAssignments = loadAssignments(options.orchDir);
+  const assignments = mergeAssignments(globalAssignments, options.workflow);
   const providerExecutor = new ProviderExecutor(options.orchDir);
   const roleManager = new RoleManager(options.orchDir);
 
@@ -396,18 +399,75 @@ function loadAssignments(orchDir: string): Record<StageType, StageAssignment> {
   }
 }
 
+/**
+ * Workflow의 stageConfigs와 global assignments를 병합
+ * Workflow 설정이 우선 적용됨
+ */
+function mergeAssignments(
+  globalAssignments: Record<StageType, StageAssignment>,
+  workflow: Workflow
+): Record<StageType, StageAssignment> {
+  const merged = { ...globalAssignments };
+  const stageConfigs = (workflow as any).stageConfigs as Record<StageType, StageConfig> | undefined;
+
+  if (!stageConfigs) {
+    return merged;
+  }
+
+  for (const stage of workflow.stages) {
+    const config = stageConfigs[stage];
+    if (config) {
+      // Workflow 설정이 있으면 병합
+      merged[stage] = {
+        provider: config.provider || merged[stage].provider,
+        role: config.role || merged[stage].role || stage,
+        profile: config.profile || merged[stage].profile,
+      };
+    }
+  }
+
+  return merged;
+}
+
 async function loadWorkflowFile(workflowPath: string): Promise<Workflow> {
   const workflowResult = await loadWorkflow(workflowPath);
   if (!workflowResult.valid || !workflowResult.data) {
     throw new Error(formatValidationErrors(workflowResult.errors, 'workflow'));
   }
 
-  const workflowWrapper = workflowResult.data as { workflow: Workflow };
+  const workflowWrapper = workflowResult.data as { workflow: Workflow; [key: string]: any };
   if (!workflowWrapper.workflow) {
     throw new Error('Invalid workflow format: missing workflow root');
   }
 
-  return workflowWrapper.workflow;
+  const workflow = workflowWrapper.workflow;
+
+  // Stage별 설정 파싱 (workflow 내에 정의된 경우)
+  const stageConfigs: Record<string, any> = {};
+  const stages: StageType[] = ['plan', 'code', 'test', 'check'];
+
+  for (const stage of stages) {
+    const stageConfig = workflowWrapper[stage];
+    if (stageConfig && typeof stageConfig === 'object') {
+      stageConfigs[stage] = {
+        provider: stageConfig.provider,
+        role: stageConfig.role,
+        profile: stageConfig.profile || 'simple',
+      };
+    } else if (typeof stageConfig === 'string') {
+      // 기존 방식: stage: profile 형식
+      stageConfigs[stage] = {
+        profile: stageConfig,
+      };
+    }
+  }
+
+  // stageConfigs가 있으면 workflow에 추가
+  if (Object.keys(stageConfigs).length > 0) {
+    (workflow as any).stageConfigs = stageConfigs;
+  }
+
+  return workflow;
 }
 
 function resolveWorkflowPath(orchDir: string, workflowId: string): string {

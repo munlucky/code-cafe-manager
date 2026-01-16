@@ -25,7 +25,6 @@ export function NewOrderDialog({
 }: NewOrderDialogProps): ReactElement | null {
   const [workflowId, setWorkflowId] = useState('');
   const [workflowName, setWorkflowName] = useState('');
-  const [provider, setProvider] = useState('claude-code');
   const [createWorktree, setCreateWorktree] = useState(true);
   const [loading, setLoading] = useState(false);
   const [workflows, setWorkflows] = useState<WorkflowInfo[]>([]);
@@ -56,11 +55,11 @@ export function NewOrderDialog({
 
     setLoading(true);
     try {
+      // Provider는 workflow의 stageConfigs에서 결정됨
       const result = await window.codecafe.order.createWithWorktree({
         cafeId,
         workflowId,
         workflowName: workflowName || workflowId,
-        provider,
         createWorktree,
         worktreeOptions: {
           branchPrefix: 'order',
@@ -141,25 +140,6 @@ export function NewOrderDialog({
                 {workflows.find((w) => w.id === workflowId)?.description}
               </p>
             )}
-          </div>
-
-          {/* Provider */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Provider
-            </label>
-            <select
-              value={provider}
-              onChange={(e) => setProvider(e.target.value)}
-              className={cn(
-                'w-full px-3 py-2 bg-background border border-border rounded text-bone',
-                'focus:outline-none focus:ring-2 focus:ring-coffee/50'
-              )}
-            >
-              <option value="claude-code">Claude Code</option>
-              <option value="codex">Codex</option>
-              <option value="gemini">Gemini</option>
-            </select>
           </div>
 
           {/* Worktree Option */}

@@ -1,83 +1,112 @@
 import * as React from 'react';
 import { useEffect, useState, type ReactElement } from 'react';
-import { Plus, AlertCircle, MoreHorizontal, Edit, Trash2 } from 'lucide-react';
-import type { Workflow } from '../../types/models';
+import { Plus, AlertCircle, MoreHorizontal, Edit, Trash2, Play, History } from 'lucide-react';
+import type { ExtendedWorkflowInfo } from '../../types/models';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
 import { WorkflowEditorDialog } from '../workflow/WorkflowEditorDialog';
+import { WorkflowRunDialog } from '../workflow/WorkflowRunDialog';
+import { RunMonitor } from '../workflow/RunMonitor';
+
+interface WorkflowCardProps {
+  workflow: ExtendedWorkflowInfo;
+  onEdit: (workflow: ExtendedWorkflowInfo) => void;
+  onDelete: (workflow: ExtendedWorkflowInfo) => void;
+  onRun: (workflow: ExtendedWorkflowInfo) => void;
+}
 
 function WorkflowCard({
   workflow,
   onEdit,
   onDelete,
-}: {
-  workflow: Workflow;
-  onEdit: (workflow: Workflow) => void;
-  onDelete: (workflow: Workflow) => void;
-}): ReactElement {
+  onRun,
+}: WorkflowCardProps): ReactElement {
   const [showMenu, setShowMenu] = React.useState(false);
 
   return (
     <Card className="p-4 hover:border-coffee transition-colors">
       <div className="flex items-start justify-between">
-        <div>
-          <h3 className="font-semibold text-bone mb-1">{workflow.name}</h3>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-bone">{workflow.name}</h3>
+            {workflow.stageConfigs && (
+              <span className="px-1.5 py-0.5 bg-coffee/20 text-coffee text-xs rounded">
+                Configured
+              </span>
+            )}
+          </div>
           <p className="text-sm text-gray-400">ID: {workflow.id}</p>
         </div>
-        <div className="relative">
+        <div className="flex items-center gap-2">
           <Button
-            variant="ghost"
             size="sm"
-            className="p-1 h-auto"
-            onClick={() => setShowMenu(!showMenu)}
+            variant="secondary"
+            onClick={() => onRun(workflow)}
+            className="flex items-center gap-1"
           >
-            <MoreHorizontal className="w-4 h-4" />
+            <Play className="w-3 h-3" />
+            Run
           </Button>
-          {showMenu && (
-            <>
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setShowMenu(false)}
-              />
-              <div className="absolute right-0 top-8 z-50 min-w-[8rem] overflow-hidden rounded-md border border-gray-600 bg-gray-800 p-1 shadow-lg">
-                <button
-                  className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-gray-700 focus:bg-gray-700"
-                  onClick={() => {
-                    setShowMenu(false);
-                    onEdit(workflow);
-                  }}
-                >
-                  <Edit className="w-3 h-3 mr-2" />
-                  Edit
-                </button>
-                <button
-                  className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-gray-700 focus:bg-gray-700 text-red-400"
-                  onClick={() => {
-                    setShowMenu(false);
-                    onDelete(workflow);
-                  }}
-                >
-                  <Trash2 className="w-3 h-3 mr-2" />
-                  Delete
-                </button>
-              </div>
-            </>
-          )}
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="p-1 h-auto"
+              onClick={() => setShowMenu(!showMenu)}
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </Button>
+            {showMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowMenu(false)}
+                />
+                <div className="absolute right-0 top-8 z-50 min-w-[8rem] overflow-hidden rounded-md border border-gray-600 bg-gray-800 p-1 shadow-lg">
+                  <button
+                    className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-gray-700 focus:bg-gray-700"
+                    onClick={() => {
+                      setShowMenu(false);
+                      onEdit(workflow);
+                    }}
+                  >
+                    <Edit className="w-3 h-3 mr-2" />
+                    Edit
+                  </button>
+                  <button
+                    className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-gray-700 focus:bg-gray-700 text-red-400"
+                    onClick={() => {
+                      setShowMenu(false);
+                      onDelete(workflow);
+                    }}
+                  >
+                    <Trash2 className="w-3 h-3 mr-2" />
+                    Delete
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
       <p className="mt-2 text-sm text-gray-300">{workflow.description}</p>
       <div className="mt-3 flex items-center gap-2">
         <span className="text-xs text-gray-400">Stages:</span>
         <div className="flex flex-wrap gap-1">
-          {workflow.stages.map((stage) => (
-            <span
-              key={stage}
-              className="px-2 py-0.5 bg-gray-700 text-xs text-gray-200 rounded-full"
-            >
-              {stage}
-            </span>
-          ))}
+          {workflow.stages.map((stage) => {
+            const config = workflow.stageConfigs?.[stage];
+            return (
+              <span
+                key={stage}
+                className="px-2 py-0.5 bg-gray-700 text-xs text-gray-200 rounded-full flex items-center gap-1"
+                title={config ? `Provider: ${config.provider}, Role: ${config.role}` : undefined}
+              >
+                {stage}
+                {config && <span className="text-coffee">•{config.provider}</span>}
+              </span>
+            );
+          })}
         </div>
       </div>
     </Card>
@@ -85,11 +114,14 @@ function WorkflowCard({
 }
 
 export function Workflows(): ReactElement {
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [workflows, setWorkflows] = useState<ExtendedWorkflowInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
+  const [isRunDialogOpen, setIsRunDialogOpen] = useState(false);
+  const [runMonitorRunId, setRunMonitorRunId] = useState<string | null>(null);
+  const [editingWorkflow, setEditingWorkflow] = useState<ExtendedWorkflowInfo | null>(null);
+  const [runningWorkflow, setRunningWorkflow] = useState<ExtendedWorkflowInfo | null>(null);
 
   const loadWorkflows = async () => {
     try {
@@ -118,12 +150,12 @@ export function Workflows(): ReactElement {
     setIsEditorOpen(true);
   };
 
-  const handleEditWorkflow = (workflow: Workflow) => {
+  const handleEditWorkflow = (workflow: ExtendedWorkflowInfo) => {
     setEditingWorkflow(workflow);
     setIsEditorOpen(true);
   };
 
-  const handleDeleteWorkflow = async (workflow: Workflow) => {
+  const handleDeleteWorkflow = async (workflow: ExtendedWorkflowInfo) => {
     if (!confirm(`Are you sure you want to delete workflow "${workflow.name}"?`)) {
       return;
     }
@@ -137,6 +169,15 @@ export function Workflows(): ReactElement {
     } catch (err: any) {
       alert(`Error deleting workflow: ${err.message}`);
     }
+  };
+
+  const handleRunWorkflow = (workflow: ExtendedWorkflowInfo) => {
+    setRunningWorkflow(workflow);
+    setIsRunDialogOpen(true);
+  };
+
+  const handleRunSuccess = (runId: string) => {
+    setRunMonitorRunId(runId);
   };
 
   const handleSuccess = async () => {
@@ -169,45 +210,60 @@ export function Workflows(): ReactElement {
 
   return (
     <>
-      <div className="p-6 h-full overflow-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-bone">Workflows</h1>
-          <Button onClick={handleNewWorkflow} className="flex items-center gap-2">
-            <Plus className="w-4 h-4" />
-            New Workflow
-          </Button>
-        </div>
-
-        {workflows.length === 0 ? (
-          <EmptyState
-            icon={AlertCircle}
-            title="No Workflows Found"
-            description="Create your first workflow to get started."
-            action={
-              <Button onClick={handleNewWorkflow} className="flex items-center gap-2">
-                <Plus className="w-4 h-4" />
-                New Workflow
-              </Button>
-            }
-          />
-        ) : (
-          <div className="space-y-4">
-            {workflows.map((workflow) => (
-              <WorkflowCard
-                key={workflow.id}
-                workflow={workflow}
-                onEdit={handleEditWorkflow}
-                onDelete={handleDeleteWorkflow}
-              />
-            ))}
+      {runMonitorRunId ? (
+        <RunMonitor
+          runId={runMonitorRunId}
+          workflowId={runningWorkflow?.id || ''}
+          onClose={() => setRunMonitorRunId(null)}
+        />
+      ) : (
+        <div className="p-6 h-full overflow-auto">
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-2xl font-bold text-bone">Workflows</h1>
+            <Button onClick={handleNewWorkflow} className="flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              New Workflow
+            </Button>
           </div>
-        )}
-      </div>
+
+          {workflows.length === 0 ? (
+            <EmptyState
+              icon={AlertCircle}
+              title="No Workflows Found"
+              description="Create your first workflow to get started."
+              action={
+                <Button onClick={handleNewWorkflow} className="flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  New Workflow
+                </Button>
+              }
+            />
+          ) : (
+            <div className="space-y-4">
+              {workflows.map((workflow) => (
+                <WorkflowCard
+                  key={workflow.id}
+                  workflow={workflow}
+                  onEdit={handleEditWorkflow}
+                  onDelete={handleDeleteWorkflow}
+                  onRun={handleRunWorkflow}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <WorkflowEditorDialog
         isOpen={isEditorOpen}
         onClose={() => setIsEditorOpen(false)}
         onSuccess={handleSuccess}
         workflow={editingWorkflow}
+      />
+      <WorkflowRunDialog
+        isOpen={isRunDialogOpen}
+        onClose={() => setIsRunDialogOpen(false)}
+        onSuccess={handleRunSuccess}
+        workflow={runningWorkflow}
       />
     </>
   );

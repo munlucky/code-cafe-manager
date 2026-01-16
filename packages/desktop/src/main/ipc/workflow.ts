@@ -7,6 +7,8 @@ import { ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as yaml from 'js-yaml';
+import { WorkflowExecutor, WorkflowRun } from '@codecafe/orchestrator';
+import type { WorkflowExecutionOptions } from '@codecafe/orchestrator';
 
 /**
  * IPC Response 타입
@@ -22,6 +24,27 @@ interface IpcResponse<T = void> {
 }
 
 /**
+ * Stage Assignment 타입
+ */
+interface StageAssignment {
+  provider: string;
+  role?: string;
+  profile?: string;
+  /** Execution mode: sequential (default) or parallel */
+  mode?: 'sequential' | 'parallel';
+  /** Failure handling strategy */
+  on_failure?: 'stop' | 'continue' | 'retry';
+  /** Number of retries when on_failure is 'retry' */
+  retries?: number;
+  /** Backoff multiplier in seconds for retries */
+  retry_backoff?: number;
+  /** List of skill names to use */
+  skills?: string[];
+  /** Custom prompt template for this stage */
+  prompt?: string;
+}
+
+/**
  * Workflow Info 타입
  */
 interface WorkflowInfo {
@@ -29,6 +52,8 @@ interface WorkflowInfo {
   name: string;
   description?: string;
   stages: string[];
+  // Stage별 provider 설정 (workflow 내에 정의된 경우)
+  stageAssignments?: Record<string, StageAssignment>;
 }
 
 /**
@@ -191,11 +216,37 @@ function parseWorkflowInfo(filePath: string, id: string): WorkflowInfo | null {
     const description =
       (typeof workflow?.description === 'string' && workflow.description) || `Workflow: ${id}`;
 
+    // Stage별 provider/role/profile 설정 파싱 (new fields 포함)
+    const stageAssignments: Record<string, StageAssignment> = {};
+    for (const stage of stages) {
+      const stageConfig = workflow?.[stage];
+      if (stageConfig && typeof stageConfig === 'object') {
+        stageAssignments[stage] = {
+          provider: (stageConfig as any).provider || 'claude-code',
+          role: (stageConfig as any).role,
+          profile: (stageConfig as any).profile || (stageConfig as any).toString?.() || 'simple',
+          mode: (stageConfig as any).mode,
+          on_failure: (stageConfig as any).on_failure,
+          retries: (stageConfig as any).retries,
+          retry_backoff: (stageConfig as any).retry_backoff,
+          skills: (stageConfig as any).skills,
+          prompt: (stageConfig as any).prompt,
+        };
+      } else if (typeof stageConfig === 'string') {
+        // 기존 방식: stage: profile 형식
+        stageAssignments[stage] = {
+          provider: 'claude-code',
+          profile: stageConfig,
+        };
+      }
+    }
+
     return {
       id,
       name,
       description,
       stages,
+      stageAssignments: Object.keys(stageAssignments).length > 0 ? stageAssignments : undefined,
     };
   } catch (error) {
     return null;
@@ -278,6 +329,239 @@ export function registerWorkflowHandlers(): void {
       return deleteWorkflow(orchDir, id);
     }, 'workflow:delete')
   );
+
+  // =============================================
+  // Run Management Handlers
+  // =============================================
+
+  // Create a shared executor instance
+  let executorInstance: WorkflowExecutor | null = null;
+
+  function getExecutor(): WorkflowExecutor {
+    if (!executorInstance) {
+      executorInstance = new WorkflowExecutor(orchDir);
+    }
+    return executorInstance;
+  }
+
+  // Event listeners for run state changes
+  const runEventListeners: Set<(event: { type: string; run?: WorkflowRun; [key: string]: any }) => void> = new Set();
+
+  /**
+   * Run a workflow
+   */
+  ipcMain.handle('workflow:run', async (_, workflowId: string, options?: any) =>
+    handleIpc(async () => {
+      const executor = getExecutor();
+      const runId = await executor.start(workflowId, {
+        orchDir,
+        mode: options?.mode,
+        vars: options?.vars || {},
+        onStateChange: (run: WorkflowRun) => {
+          // Notify all listeners
+          for (const listener of runEventListeners) {
+            try {
+              listener({ type: 'stateChange', run });
+            } catch (e) {
+              console.error('Error notifying run event listener:', e);
+            }
+          }
+        },
+        onEvent: (event: any) => {
+          // Notify all listeners
+          for (const listener of runEventListeners) {
+            try {
+              listener(event);
+            } catch (e) {
+              console.error('Error notifying run event listener:', e);
+            }
+          }
+        },
+      });
+      return { runId };
+    }, 'workflow:run')
+  );
+
+  /**
+   * List all active runs
+   */
+  ipcMain.handle('run:list', async () =>
+    handleIpc(async () => {
+      const executor = getExecutor();
+      const runs = executor.listRuns();
+      return runs.map((run: WorkflowRun) => ({
+        runId: run.runId,
+        workflowId: run.workflowId,
+        currentStage: run.currentStage,
+        currentIter: run.iteration,
+        status: run.status,
+        createdAt: run.startedAt,
+        updatedAt: run.completedAt || run.startedAt,
+        completedNodes: [],
+        lastError: run.lastError,
+      }));
+    }, 'run:list')
+  );
+
+  /**
+   * Get run status
+   */
+  ipcMain.handle('run:getStatus', async (_, runId: string) =>
+    handleIpc(async () => {
+      const executor = getExecutor();
+      const run = executor.getRun(runId);
+      if (!run) {
+        return null;
+      }
+      return {
+        runId: run.runId,
+        workflowId: run.workflowId,
+        currentStage: run.currentStage,
+        currentIter: run.iteration,
+        status: run.status,
+        createdAt: run.startedAt,
+        updatedAt: run.completedAt || run.startedAt,
+        completedNodes: [],
+        lastError: run.lastError,
+      };
+    }, 'run:getStatus')
+  );
+
+  /**
+   * Get run detail
+   */
+  ipcMain.handle('run:getDetail', async (_, runId: string) =>
+    handleIpc(async () => {
+      const executor = getExecutor();
+      const run = executor.getRun(runId);
+      if (!run) {
+        return null;
+      }
+      return {
+        runId: run.runId,
+        workflowId: run.workflowId,
+        status: run.status,
+        currentStage: run.currentStage,
+        iteration: run.iteration,
+        context: run.context,
+        stageResults: Object.fromEntries(run.stageResults),
+        startedAt: run.startedAt,
+        completedAt: run.completedAt,
+        lastError: run.lastError,
+      };
+    }, 'run:getDetail')
+  );
+
+  /**
+   * Pause a run
+   */
+  ipcMain.handle('run:pause', async (_, runId: string) =>
+    handleIpc(async () => {
+      const executor = getExecutor();
+      const success = executor.pause(runId);
+      if (!success) {
+        throw new Error(`Failed to pause run: ${runId}`);
+      }
+    }, 'run:pause')
+  );
+
+  /**
+   * Resume a run
+   */
+  ipcMain.handle('run:resume', async (_, runId: string) =>
+    handleIpc(async () => {
+      const executor = getExecutor();
+      const success = executor.resume(runId, {
+        orchDir,
+        onStateChange: (run: WorkflowRun) => {
+          for (const listener of runEventListeners) {
+            try {
+              listener({ type: 'stateChange', run });
+            } catch (e) {
+              console.error('Error notifying run event listener:', e);
+            }
+          }
+        },
+        onEvent: (event: any) => {
+          for (const listener of runEventListeners) {
+            try {
+              listener(event);
+            } catch (e) {
+              console.error('Error notifying run event listener:', e);
+            }
+          }
+        },
+      });
+      if (!success) {
+        throw new Error(`Failed to resume run: ${runId}`);
+      }
+    }, 'run:resume')
+  );
+
+  /**
+   * Cancel a run
+   */
+  ipcMain.handle('run:cancel', async (_, runId: string) =>
+    handleIpc(async () => {
+      const executor = getExecutor();
+      const success = executor.cancel(runId);
+      if (!success) {
+        throw new Error(`Failed to cancel run: ${runId}`);
+      }
+    }, 'run:cancel')
+  );
+
+  /**
+   * Get run logs
+   */
+  ipcMain.handle('run:getLogs', async (_, runId: string) =>
+    handleIpc(async () => {
+      const runEventsPath = path.join(orchDir, 'runs', runId, 'events.jsonl');
+      if (!fs.existsSync(runEventsPath)) {
+        return [];
+      }
+
+      const content = fs.readFileSync(runEventsPath, 'utf-8');
+      return content
+        .split('\n')
+        .filter((line) => line.trim().length > 0)
+        .map((line) => {
+          try {
+            return JSON.parse(line);
+          } catch {
+            return null;
+          }
+        })
+        .filter((event): event is any => event !== null)
+        .map((event) => ({
+          type: event.type,
+          message: event.error || `${event.type}${event.nodeId ? `: ${event.nodeId}` : ''}${event.stage ? ` (${event.stage})` : ''}`,
+          timestamp: event.timestamp,
+          stage: event.stage,
+          nodeId: event.nodeId,
+        }));
+    }, 'run:getLogs')
+  );
+
+  /**
+   * Subscribe to run events
+   */
+  ipcMain.on('run:subscribe', (event) => {
+    const webContents = event.sender;
+    const listener = (data: any) => {
+      try {
+        webContents.send('run:event', data);
+      } catch (e) {
+        // WebContents might be destroyed
+      }
+    };
+    runEventListeners.add(listener);
+
+    // Remove listener when webContents is destroyed
+    webContents.once('destroyed', () => {
+      runEventListeners.delete(listener);
+    });
+  });
 
   console.log('[IPC] Workflow handlers registered');
 }
