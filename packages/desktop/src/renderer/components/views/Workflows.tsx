@@ -1,12 +1,15 @@
 import * as React from 'react';
 import { useEffect, useState, type ReactElement } from 'react';
-import { Plus, AlertCircle, Edit, Trash2, ChevronRight } from 'lucide-react';
+import { Plus, AlertCircle, Edit, Trash2, ChevronRight, Lock } from 'lucide-react';
 import type { ExtendedWorkflowInfo } from '../../types/models';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
 import { WorkflowEditorDialog } from '../workflow/WorkflowEditorDialog';
 import { useViewStore } from '../../store/useViewStore';
+
+// Built-in recipes that cannot be deleted
+const PROTECTED_RECIPES = ['moonshot-lite'];
 
 interface WorkflowCardProps {
   workflow: ExtendedWorkflowInfo;
@@ -45,24 +48,35 @@ function WorkflowCard({
           <p className="text-sm text-gray-400 truncate">ID: {workflow.id}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={(e) => onEdit(workflow, e)}
-            className="p-1.5 h-auto hover:bg-gray-700"
-            title="Edit recipe"
-          >
-            <Edit className="w-4 h-4 text-gray-400 group-hover:text-bone" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={(e) => onDelete(workflow, e)}
-            className="p-1.5 h-auto hover:bg-red-900/30"
-            title="Delete recipe"
-          >
-            <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-400" />
-          </Button>
+          {PROTECTED_RECIPES.includes(workflow.name) ? (
+            <div
+              className="p-1.5 text-gray-500 flex items-center gap-1"
+              title="Built-in recipe (read-only)"
+            >
+              <Lock className="w-4 h-4" />
+            </div>
+          ) : (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => onEdit(workflow, e)}
+                className="p-1.5 h-auto hover:bg-gray-700"
+                title="Edit recipe"
+              >
+                <Edit className="w-4 h-4 text-gray-400 group-hover:text-bone" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => onDelete(workflow, e)}
+                className="p-1.5 h-auto hover:bg-red-900/30"
+                title="Delete recipe"
+              >
+                <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-400" />
+              </Button>
+            </>
+          )}
           <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-bone" />
         </div>
       </div>
@@ -133,6 +147,13 @@ export function Workflows(): ReactElement {
   const handleDeleteWorkflow = async (workflow: ExtendedWorkflowInfo, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    // Prevent deletion of protected recipes
+    if (PROTECTED_RECIPES.includes(workflow.name)) {
+      alert(`"${workflow.name}" is a built-in recipe and cannot be deleted.`);
+      return;
+    }
+    
     if (!confirm(`Are you sure you want to delete recipe "${workflow.name}"?`)) {
       return;
     }

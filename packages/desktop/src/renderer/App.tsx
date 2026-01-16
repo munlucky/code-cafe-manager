@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Layout } from './components/layout/Layout';
 import { useViewStore } from './store/useViewStore';
 import { useCafeStore } from './store/useCafeStore';
@@ -43,10 +44,37 @@ function isWorkflowParams(params: any): params is { workflowId: string } {
 }
 
 export function App(): JSX.Element {
-  const { currentView, viewParams } = useViewStore();
-  const currentCafeId = useCafeStore((s) => s.currentCafeId);
+  const { currentView, viewParams, setView } = useViewStore();
+  const { cafes, currentCafeId, loadCafes, selectCafe } = useCafeStore();
 
   useIpcEffect();
+
+  // App start logic: auto-route based on cafe state
+  useEffect(() => {
+    const initializeApp = async () => {
+      // Load cafes first
+      await loadCafes();
+    };
+    initializeApp();
+  }, [loadCafes]);
+
+  // After cafes loaded, handle routing
+  useEffect(() => {
+    // If no cafes exist → show GlobalLobby (onboarding)
+    if (cafes.length === 0) {
+      if (currentView !== 'cafes') {
+        setView('cafes');
+      }
+      return;
+    }
+
+    // If cafes exist but none selected → auto-select first/last accessed
+    if (!currentCafeId && cafes.length > 0) {
+      // Select first cafe and go to dashboard
+      selectCafe(cafes[0].id);
+      setView('dashboard');
+    }
+  }, [cafes, currentCafeId, currentView, setView, selectCafe]);
 
   // Special handling for views with required props
   if (currentView === 'workflow-detail' && isWorkflowParams(viewParams)) {
@@ -65,3 +93,4 @@ export function App(): JSX.Element {
     </Layout>
   );
 }
+
