@@ -9,6 +9,7 @@ interface SkillEditorDialogProps {
   onClose: () => void;
   onSuccess: (skill: Skill) => void;
   skill?: Skill | null;
+  readOnly?: boolean;
 }
 
 // Available skill command options
@@ -42,6 +43,7 @@ export function SkillEditorDialog({
   onClose,
   onSuccess,
   skill,
+  readOnly = false,
 }: SkillEditorDialogProps): ReactElement {
   const [id, setId] = useState('');
   const [name, setName] = useState('');
@@ -129,9 +131,16 @@ export function SkillEditorDialog({
     <Dialog
       isOpen={isOpen}
       onClose={onClose}
-      title={isEditing ? 'Edit Skill' : 'New Skill'}
+      title={readOnly ? 'Skill Details' : isEditing ? 'Edit Skill' : 'New Skill'}
       size="medium"
     >
+      {readOnly && (
+        <div className="mb-4 p-3 bg-coffee/10 border border-coffee/30 rounded-lg flex items-center gap-2">
+          <span className="text-coffee text-sm">
+            This is a built-in skill. To modify it, duplicate it first.
+          </span>
+        </div>
+      )}
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -143,7 +152,7 @@ export function SkillEditorDialog({
               value={id}
               onChange={(e) => setId(e.target.value)}
               placeholder="e.g., my-custom-skill"
-              disabled={isEditing}
+              disabled={isEditing || readOnly}
             />
             <p className="text-xs text-gray-500 mt-1">
               Workflow stage에서 이 ID로 스킬을 참조합니다
@@ -158,6 +167,7 @@ export function SkillEditorDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., My Custom Skill"
+              disabled={readOnly}
             />
           </div>
         </div>
@@ -171,6 +181,7 @@ export function SkillEditorDialog({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="A brief description of what this skill does"
+            disabled={readOnly}
           />
         </div>
 
@@ -183,7 +194,8 @@ export function SkillEditorDialog({
               id="skill-category"
               value={category}
               onChange={(e) => setCategory(e.target.value as SkillCategory)}
-              className="w-full px-3 py-2 bg-background border border-border rounded text-bone focus:outline-none focus:ring-2 focus:ring-coffee/50"
+              disabled={readOnly}
+              className="w-full px-3 py-2 bg-background border border-border rounded text-bone focus:outline-none focus:ring-2 focus:ring-coffee/50 disabled:opacity-50"
             >
               {CATEGORIES.map((cat) => (
                 <option key={cat.value} value={cat.value}>
@@ -200,7 +212,8 @@ export function SkillEditorDialog({
               id="skill-context"
               value={context}
               onChange={(e) => setContext(e.target.value as 'fork' | 'inherit')}
-              className="w-full px-3 py-2 bg-background border border-border rounded text-bone focus:outline-none focus:ring-2 focus:ring-coffee/50"
+              disabled={readOnly}
+              className="w-full px-3 py-2 bg-background border border-border rounded text-bone focus:outline-none focus:ring-2 focus:ring-coffee/50 disabled:opacity-50"
             >
               <option value="fork">Fork (new context)</option>
               <option value="inherit">Inherit (shared context)</option>
@@ -219,7 +232,8 @@ export function SkillEditorDialog({
             id="skill-command"
             value={skillCommand}
             onChange={(e) => setSkillCommand(e.target.value)}
-            className="w-full px-3 py-2 bg-background border border-border rounded text-bone focus:outline-none focus:ring-2 focus:ring-coffee/50"
+            disabled={readOnly}
+            className="w-full px-3 py-2 bg-background border border-border rounded text-bone focus:outline-none focus:ring-2 focus:ring-coffee/50 disabled:opacity-50"
           >
             <option value="">Select a command...</option>
             {AVAILABLE_SKILL_COMMANDS.map((cmd) => (
@@ -236,6 +250,7 @@ export function SkillEditorDialog({
             onChange={(e) => setSkillCommand(e.target.value)}
             placeholder="e.g., /my-custom-command or custom-agent"
             className="mt-1"
+            disabled={readOnly}
           />
         </div>
 
@@ -244,11 +259,13 @@ export function SkillEditorDialog({
 
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>
-          Cancel
+          {readOnly ? 'Close' : 'Cancel'}
         </Button>
-        <Button onClick={handleSubmit} disabled={isSubmitting}>
-          {isSubmitting ? 'Saving...' : 'Save Skill'}
-        </Button>
+        {!readOnly && (
+          <Button onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting ? 'Saving...' : 'Save Skill'}
+          </Button>
+        )}
       </div>
     </Dialog>
   );

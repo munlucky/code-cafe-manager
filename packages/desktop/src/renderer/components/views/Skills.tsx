@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useEffect, useState, type ReactElement } from 'react';
-import { Plus, AlertCircle, Edit, Trash2, Copy, Filter, Terminal } from 'lucide-react';
+import { Plus, AlertCircle, Edit, Trash2, Copy, Filter, Terminal, Eye } from 'lucide-react';
 import type { Skill, SkillCategory } from '../../types/models';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -30,6 +30,7 @@ interface SkillCardProps {
   onEdit: (skill: Skill, e: React.MouseEvent) => void;
   onDelete: (skill: Skill, e: React.MouseEvent) => void;
   onDuplicate: (skill: Skill, e: React.MouseEvent) => void;
+  onView: (skill: Skill, e: React.MouseEvent) => void;
 }
 
 function SkillCard({
@@ -37,6 +38,7 @@ function SkillCard({
   onEdit,
   onDelete,
   onDuplicate,
+  onView,
 }: SkillCardProps): ReactElement {
   return (
     <Card className="p-4 hover:border-coffee transition-colors group">
@@ -58,6 +60,27 @@ function SkillCard({
           <p className="text-sm text-gray-400 truncate">ID: {skill.id}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+          {skill.isBuiltIn ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => onView(skill, e)}
+              className="p-1.5 h-auto hover:bg-gray-700"
+              title="View skill details"
+            >
+              <Eye className="w-4 h-4 text-gray-400 group-hover:text-bone" />
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => onEdit(skill, e)}
+              className="p-1.5 h-auto hover:bg-gray-700"
+              title="Edit skill"
+            >
+              <Edit className="w-4 h-4 text-gray-400 group-hover:text-bone" />
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"
@@ -68,26 +91,15 @@ function SkillCard({
             <Copy className="w-4 h-4 text-gray-400 group-hover:text-bone" />
           </Button>
           {!skill.isBuiltIn && (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={(e) => onEdit(skill, e)}
-                className="p-1.5 h-auto hover:bg-gray-700"
-                title="Edit skill"
-              >
-                <Edit className="w-4 h-4 text-gray-400 group-hover:text-bone" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={(e) => onDelete(skill, e)}
-                className="p-1.5 h-auto hover:bg-red-900/30"
-                title="Delete skill"
-              >
-                <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-400" />
-              </Button>
-            </>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => onDelete(skill, e)}
+              className="p-1.5 h-auto hover:bg-red-900/30"
+              title="Delete skill"
+            >
+              <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-400" />
+            </Button>
           )}
         </div>
       </div>
@@ -115,6 +127,7 @@ export function Skills(): ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
+  const [isViewMode, setIsViewMode] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<SkillCategory | 'all'>('all');
 
   const loadSkills = async () => {
@@ -141,17 +154,23 @@ export function Skills(): ReactElement {
 
   const handleNewSkill = () => {
     setEditingSkill(null);
+    setIsViewMode(false);
     setIsEditorOpen(true);
   };
 
   const handleEditSkill = (skill: Skill, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (skill.isBuiltIn) {
-      alert('Built-in skills cannot be edited directly. Please duplicate it first to create a custom version.');
-      return;
-    }
     setEditingSkill(skill);
+    setIsViewMode(false);
+    setIsEditorOpen(true);
+  };
+
+  const handleViewSkill = (skill: Skill, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingSkill(skill);
+    setIsViewMode(true);
     setIsEditorOpen(true);
   };
 
@@ -331,6 +350,7 @@ export function Skills(): ReactElement {
                       onEdit={handleEditSkill}
                       onDelete={handleDeleteSkill}
                       onDuplicate={handleDuplicateSkill}
+                      onView={handleViewSkill}
                     />
                   ))}
                 </div>
@@ -347,6 +367,7 @@ export function Skills(): ReactElement {
                 onEdit={handleEditSkill}
                 onDelete={handleDeleteSkill}
                 onDuplicate={handleDuplicateSkill}
+                onView={handleViewSkill}
               />
             ))}
           </div>
@@ -357,6 +378,7 @@ export function Skills(): ReactElement {
         onClose={() => setIsEditorOpen(false)}
         onSuccess={handleSuccess}
         skill={editingSkill}
+        readOnly={isViewMode}
       />
     </>
   );
