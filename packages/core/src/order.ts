@@ -132,6 +132,20 @@ export class OrderManager extends EventEmitter {
   }
 
   /**
+   * 주문 프롬프트 및 변수 업데이트
+   */
+  updateOrderPrompt(orderId: string, prompt: string, vars: Record<string, string> = {}): void {
+    const order = this.orders.get(orderId);
+    if (!order) {
+      throw new Error(`Order ${orderId} not found`);
+    }
+
+    order.prompt = prompt;
+    // 기존 vars와 병합
+    order.vars = { ...order.vars, ...vars };
+  }
+
+  /**
    * 주문 조회
    */
   getOrder(orderId: string): Order | undefined {

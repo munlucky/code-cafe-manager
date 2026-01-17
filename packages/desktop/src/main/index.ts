@@ -14,6 +14,7 @@ import { registerOrchestratorHandlers } from './ipc/orchestrator.js';
 import { registerOrderHandlers, cleanupOrderHandlers } from './ipc/order.js';
 import { registerWorkflowHandlers } from './ipc/workflow.js';
 import { registerSkillHandlers } from './ipc/skill.js';
+import { initExecutionManager, cleanupExecutionManager, getExecutionManager } from './execution-manager.js';
 
 import { existsSync } from 'fs';
 
@@ -124,13 +125,22 @@ async function initOrchestrator(): Promise<void> {
   orchestrator.start();
 
   // Forward Orchestrator events to the renderer
-  const events = ['barista:event', 'order:event', 'order:assigned', 'order:completed'];
+  const events = ['barista:event', 'order:event', 'order:assigned', 'order:completed', 'order:execution-started'];
   for (const event of events) {
     orchestrator.on(event, (data) => {
       mainWindow?.webContents.send(event, data);
     });
   }
   console.log('[Main] Orchestrator initialized.');
+
+  // ExecutionManager 초기화 (BaristaEngineV2 연동)
+  try {
+    await initExecutionManager(orchestrator, mainWindow);
+    console.log('[Main] ExecutionManager initialized.');
+  } catch (error) {
+    console.error('[Main] Failed to initialize ExecutionManager:', error);
+    // ExecutionManager 초기화 실패해도 앱은 계속 실행
+  }
 }
 
 /**
@@ -167,6 +177,12 @@ app.whenReady().then(async () => {
   await createWindow();
   console.log('[Main] Window created.');
 
+  // ExecutionManager에 mainWindow 참조 업데이트
+  const execManager = getExecutionManager();
+  if (execManager) {
+    execManager.setMainWindow(mainWindow);
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -190,6 +206,7 @@ app.on('will-quit', async (event) => {
   event.preventDefault();
   isQuitting = true;
   cleanupOrderHandlers();
+  await cleanupExecutionManager();
   if (orchestrator) {
     await orchestrator.stop();
   }

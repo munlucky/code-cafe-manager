@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useOrders } from '../../hooks/useOrders';
 import { useViewStore } from '../../store/useViewStore';
 import { Card } from '../ui/Card';
@@ -8,17 +8,21 @@ import { EmptyState } from '../ui/EmptyState';
 import { formatRelativeTime } from '../../utils/formatters';
 import type { Order } from '../../types/models';
 import { OrderStatus } from '@codecafe/core';
+import { OrderExecuteDialog } from '../order/OrderExecuteDialog';
+import { OrderDetailView } from '../order/OrderDetailView';
 
 interface OrderItemProps {
   order: Order;
   onViewLog: (orderId: string) => void;
   onCancel: (orderId: string) => void;
-  onViewTerminal: (orderId: string) => void;
+  onViewDetail: (order: Order) => void;
+  onExecute: (order: Order) => void;
 }
 
-function OrderItem({ order, onViewLog, onCancel, onViewTerminal }: OrderItemProps): JSX.Element {
+function OrderItem({ order, onViewLog, onCancel, onViewDetail, onExecute }: OrderItemProps): JSX.Element {
   const isCancellable = order.status === OrderStatus.PENDING || order.status === OrderStatus.RUNNING;
   const isRunning = order.status === OrderStatus.RUNNING;
+  const isPending = order.status === OrderStatus.PENDING;
 
   return (
     <div className="p-3 sm:p-4 bg-background rounded border border-border">
@@ -46,9 +50,19 @@ function OrderItem({ order, onViewLog, onCancel, onViewTerminal }: OrderItemProp
           </div>
         </div>
         <div className="flex flex-row sm:flex-col gap-2 flex-wrap">
+          {isPending && (
+            <Button variant="primary" onClick={() => onExecute(order)} className="text-sm">
+              ▶ Execute
+            </Button>
+          )}
           {isRunning && (
-            <Button variant="primary" onClick={() => onViewTerminal(order.id)} className="text-sm">
+            <Button variant="primary" onClick={() => onViewDetail(order)} className="text-sm">
               View Terminal
+            </Button>
+          )}
+          {!isPending && !isRunning && (
+            <Button variant="secondary" onClick={() => onViewDetail(order)} className="text-sm">
+              View Details
             </Button>
           )}
           <Button variant="secondary" onClick={() => onViewLog(order.id)} className="text-sm">
@@ -70,11 +84,20 @@ function OrderItem({ order, onViewLog, onCancel, onViewTerminal }: OrderItemProp
 }
 
 export function Orders(): JSX.Element {
-  const { orders, fetchOrders, getOrderLog, cancelOrder } = useOrders();
-  const setView = useViewStore((s) => s.setView);
+  const { orders, fetchOrders, getOrderLog, cancelOrder, executeOrder } = useOrders();
+  const [executeDialogOrder, setExecuteDialogOrder] = useState<Order | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   useEffect(() => {
     fetchOrders();
+  }, [fetchOrders]);
+
+  // 주기적으로 갱신
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchOrders();
+    }, 5000);
+    return () => clearInterval(interval);
   }, [fetchOrders]);
 
   const sortedOrders = useMemo(() => {
@@ -93,13 +116,39 @@ export function Orders(): JSX.Element {
 
     try {
       await cancelOrder(orderId);
+      setSelectedOrder(null);
     } catch (error) {
       alert(`Failed to cancel order: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  function handleViewTerminal(orderId: string): void {
-    setView('terminals');
+  function handleViewDetail(order: Order): void {
+    setSelectedOrder(order);
+  }
+
+  function handleOpenExecuteDialog(order: Order): void {
+    setExecuteDialogOrder(order);
+  }
+
+  async function handleExecuteOrder(orderId: string, prompt: string, vars: Record<string, string>): Promise<void> {
+    await executeOrder(orderId, prompt, vars);
+    await fetchOrders();
+    // 실행 시작 후 상세 화면으로 이동
+    const updatedOrder = orders.find(o => o.id === orderId);
+    if (updatedOrder) {
+      setSelectedOrder(updatedOrder);
+    }
+  }
+
+  // Order 상세 뷰 표시
+  if (selectedOrder) {
+    return (
+      <OrderDetailView
+        order={selectedOrder}
+        onBack={() => setSelectedOrder(null)}
+        onCancel={handleCancel}
+      />
+    );
   }
 
   if (orders.length === 0) {
@@ -111,19 +160,29 @@ export function Orders(): JSX.Element {
   }
 
   return (
-    <Card className="p-3 sm:p-4">
-      <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-coffee">All Orders</h3>
-      <div className="space-y-2 sm:space-y-3">
-        {sortedOrders.map((order) => (
-          <OrderItem
-            key={order.id}
-            order={order}
-            onViewLog={handleViewLog}
-            onCancel={handleCancel}
-            onViewTerminal={handleViewTerminal}
-          />
-        ))}
-      </div>
-    </Card>
+    <>
+      <Card className="p-3 sm:p-4">
+        <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-coffee">All Orders</h3>
+        <div className="space-y-2 sm:space-y-3">
+          {sortedOrders.map((order) => (
+            <OrderItem
+              key={order.id}
+              order={order}
+              onViewLog={handleViewLog}
+              onCancel={handleCancel}
+              onViewDetail={handleViewDetail}
+              onExecute={handleOpenExecuteDialog}
+            />
+          ))}
+        </div>
+      </Card>
+
+      <OrderExecuteDialog
+        isOpen={executeDialogOrder !== null}
+        onClose={() => setExecuteDialogOrder(null)}
+        onExecute={handleExecuteOrder}
+        order={executeDialogOrder}
+      />
+    </>
   );
 }

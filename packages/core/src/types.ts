@@ -56,6 +56,7 @@ export interface Order {
   counter: string; // 실행 대상 프로젝트 경로 (worktree 모드 시 worktree 경로)
   provider: ProviderType;
   vars: Record<string, string>;
+  prompt?: string; // 사용자 입력 프롬프트 (실행 시 설정)
   createdAt: Date;
   startedAt: Date | null;
   endedAt: Date | null;

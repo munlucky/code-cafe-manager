@@ -210,6 +210,37 @@ class OrderManager {
     );
 
     /**
+     * 오더 실행
+     */
+    ipcMain.handle(
+      'order:execute',
+      async (_, orderId: string, prompt: string, vars?: Record<string, string>) =>
+        handleIpc(async () => {
+          console.log('[Order IPC] Executing order:', orderId);
+          console.log('[Order IPC] Prompt:', prompt);
+          console.log('[Order IPC] Vars:', vars);
+
+          await orchestrator.executeOrder(orderId, prompt, vars || {});
+          return { started: true };
+        }, 'order:execute')
+    );
+
+    /**
+     * 오더에 사용자 입력 전달
+     */
+    ipcMain.handle(
+      'order:sendInput',
+      async (_, orderId: string, message: string) =>
+        handleIpc(async () => {
+          console.log('[Order IPC] Sending input to order:', orderId);
+          console.log('[Order IPC] Message:', message);
+
+          await orchestrator.sendInput(orderId, message);
+          return { sent: true };
+        }, 'order:sendInput')
+    );
+
+    /**
      * 오더 로그 조회
      */
     ipcMain.handle('order:getLog', async (_, orderId: string) =>
