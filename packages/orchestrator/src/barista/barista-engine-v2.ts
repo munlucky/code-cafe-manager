@@ -1,6 +1,7 @@
 /**
  * Barista Engine V2
  * Phase 2: Terminal Pool based execution engine with Role support
+ * Phase 3: Session-based multi-terminal orchestration
  */
 
 import { Barista, Order, Step } from '@codecafe/core';
@@ -8,38 +9,80 @@ import { TerminalPool, TerminalLease } from '../terminal/terminal-pool';
 import { ProviderAdapterFactory } from '../terminal/provider-adapter';
 import { RoleManager } from '../role/role-manager';
 import { Role } from '../types';
-
-interface ActiveExecution {
-  baristaId: string;
-  lease: TerminalLease;
-}
+import { OrderSession, CafeSessionManager, WorkflowConfig, StageConfig } from '../session';
 
 import { EventEmitter } from 'events';
 
+interface ActiveExecution {
+  baristaId: string;
+  lease?: TerminalLease;
+  session?: OrderSession;
+}
+
 /**
- * Barista Engine V2 - Terminal Pool based execution
+ * Barista Engine V2 - Terminal Pool based execution with Session support
  */
 export class BaristaEngineV2 extends EventEmitter {
   private readonly terminalPool: TerminalPool;
   private readonly roleManager: RoleManager;
+  private readonly sessionManager: CafeSessionManager;
   private readonly activeExecutions = new Map<string, ActiveExecution>();
 
   constructor(terminalPool: TerminalPool, roleManager?: RoleManager) {
     super();
     this.terminalPool = terminalPool;
     this.roleManager = roleManager || new RoleManager();
+
+    // Session Manager 초기화
+    this.sessionManager = new CafeSessionManager({
+      terminalPool: this.terminalPool,
+      maxConcurrentOrdersPerCafe: 5,
+    });
+
+    // Session Manager 이벤트 전파
+    this.sessionManager.on('output', (data) => {
+      this.emit('order:output', { orderId: data.orderId, data: data.data });
+    });
+    this.sessionManager.on('session:started', (data) => {
+      this.emit('order:started', data);
+    });
+    this.sessionManager.on('session:completed', (data) => {
+      this.emit('order:completed', data);
+    });
+    this.sessionManager.on('session:failed', (data) => {
+      this.emit('order:failed', data);
+    });
+    this.sessionManager.on('stage:started', (data) => {
+      this.emit('stage:started', data);
+    });
+    this.sessionManager.on('stage:completed', (data) => {
+      this.emit('stage:completed', data);
+    });
+    this.sessionManager.on('stage:failed', (data) => {
+      this.emit('stage:failed', data);
+    });
   }
 
   /**
-   * Execute an order using Terminal Pool
+   * Execute an order using Terminal Pool or Session (for workflows)
    */
   async executeOrder(order: Order, barista: Barista): Promise<void> {
     console.log(`BaristaEngineV2: Executing order ${order.id} with barista ${barista.id}`);
 
-    const role = this.getRoleForBarista(barista);
-    
     // Extract CWD from order variables if available
-    const cwd = order.vars?.['PROJECT_ROOT'];
+    const cwd = order.vars?.['PROJECT_ROOT'] || process.cwd();
+    const cafeId = (order as any).cafeId || 'default';
+
+    // 워크플로우 설정이 있는 경우 Session 사용
+    const workflowConfig = (order as any).workflowConfig as WorkflowConfig | undefined;
+    if (workflowConfig && workflowConfig.stages && workflowConfig.stages.length > 0) {
+      await this.executeWithSession(order, barista, cafeId, cwd, workflowConfig);
+      return;
+    }
+
+    // 기존 방식 (Legacy 또는 Steps)
+    const role = this.getRoleForBarista(barista);
+
     if (cwd) {
       console.log(`[BaristaEngineV2] Using requested CWD for order ${order.id}: ${cwd}`);
     }
@@ -65,6 +108,73 @@ export class BaristaEngineV2 extends EventEmitter {
   }
 
   /**
+   * Execute order using Session (multi-terminal support)
+   */
+  private async executeWithSession(
+    order: Order,
+    barista: Barista,
+    cafeId: string,
+    cwd: string,
+    workflowConfig: WorkflowConfig
+  ): Promise<void> {
+    console.log(`BaristaEngineV2: Executing order ${order.id} with Session (workflow mode)`);
+
+    // Session 생성
+    const session = this.sessionManager.createSessionWithWorkflow(
+      order,
+      barista,
+      cafeId,
+      cwd,
+      workflowConfig
+    );
+
+    // Active execution 등록
+    this.activeExecutions.set(order.id, { baristaId: barista.id, session });
+
+    try {
+      // 워크플로우 실행
+      await session.execute(cwd);
+      console.log(`BaristaEngineV2: Order ${order.id} completed via Session`);
+    } catch (error) {
+      console.error(`BaristaEngineV2: Order ${order.id} failed via Session:`, error);
+      throw error;
+    } finally {
+      this.activeExecutions.delete(order.id);
+    }
+  }
+
+  /**
+   * Execute order with simple prompt using Session
+   */
+  async executeOrderWithSession(
+    order: Order,
+    barista: Barista,
+    cafeId: string,
+    prompt: string
+  ): Promise<void> {
+    const cwd = order.vars?.['PROJECT_ROOT'] || process.cwd();
+
+    console.log(`BaristaEngineV2: Executing order ${order.id} with Session (prompt mode)`);
+
+    // Session 생성
+    const session = this.sessionManager.createSession(order, barista, cafeId, cwd);
+
+    // Active execution 등록
+    this.activeExecutions.set(order.id, { baristaId: barista.id, session });
+
+    try {
+      // 프롬프트 실행
+      await session.executePrompt(prompt, cwd);
+      console.log(`BaristaEngineV2: Order ${order.id} completed via Session`);
+    } catch (error) {
+      console.error(`BaristaEngineV2: Order ${order.id} failed via Session:`, error);
+      throw error;
+    } finally {
+      this.activeExecutions.delete(order.id);
+    }
+  }
+
+  /**
    * Cancel order execution
    */
   async cancelOrder(orderId: string): Promise<boolean> {
@@ -74,14 +184,24 @@ export class BaristaEngineV2 extends EventEmitter {
     }
 
     try {
-      const { lease } = execution;
-      const adapter = ProviderAdapterFactory.get(lease.terminal.provider);
+      // Session 기반 실행인 경우
+      if (execution.session) {
+        await execution.session.cancel();
+        this.activeExecutions.delete(orderId);
+        console.log(`BaristaEngineV2: Order ${orderId} cancelled (session)`);
+        return true;
+      }
 
-      await adapter.kill(lease.terminal.process);
-      await this.releaseLease(orderId, lease);
+      // Legacy 실행인 경우
+      if (execution.lease) {
+        const adapter = ProviderAdapterFactory.get(execution.lease.terminal.provider);
+        await adapter.kill(execution.lease.terminal.process);
+        await this.releaseLease(orderId, execution.lease);
+        console.log(`BaristaEngineV2: Order ${orderId} cancelled (legacy)`);
+        return true;
+      }
 
-      console.log(`BaristaEngineV2: Order ${orderId} cancelled`);
-      return true;
+      return false;
     } catch (error) {
       console.error(`BaristaEngineV2: Failed to cancel order ${orderId}:`, error);
       return false;
@@ -100,15 +220,28 @@ export class BaristaEngineV2 extends EventEmitter {
    */
   public async sendInput(orderId: string, message: string): Promise<void> {
     const execution = this.activeExecutions.get(orderId);
-    if (execution && execution.lease) {
-      try {
-        execution.lease.terminal.process.write(message + '\n');
-      } catch (error) {
-        console.error(`[BaristaEngineV2] Failed to send input to order ${orderId}:`, error);
-        throw error;
+    if (!execution) {
+      console.warn(`[BaristaEngineV2] No active execution for order to send input: ${orderId}`);
+      return;
+    }
+
+    try {
+      // Session 기반 실행인 경우
+      if (execution.session) {
+        await execution.session.sendInput(message);
+        return;
       }
-    } else {
-      console.warn(`[BaristaEngineV2] No active lease for order to send input: ${orderId}`);
+
+      // Legacy 실행인 경우
+      if (execution.lease) {
+        execution.lease.terminal.process.write(message + '\n');
+        return;
+      }
+
+      console.warn(`[BaristaEngineV2] No active terminal for order: ${orderId}`);
+    } catch (error) {
+      console.error(`[BaristaEngineV2] Failed to send input to order ${orderId}:`, error);
+      throw error;
     }
   }
 
@@ -116,9 +249,27 @@ export class BaristaEngineV2 extends EventEmitter {
    * Clean up resources
    */
   async dispose(): Promise<void> {
+    // Active executions 취소
     const cancellations = Array.from(this.activeExecutions.keys()).map(id => this.cancelOrder(id));
     await Promise.all(cancellations);
     this.activeExecutions.clear();
+
+    // Session Manager 정리
+    await this.sessionManager.dispose();
+  }
+
+  /**
+   * Get Session Manager for external access
+   */
+  getSessionManager(): CafeSessionManager {
+    return this.sessionManager;
+  }
+
+  /**
+   * Get session status summary
+   */
+  getSessionStatus(): ReturnType<CafeSessionManager['getStatusSummary']> {
+    return this.sessionManager.getStatusSummary();
   }
 
   private getRoleForBarista(barista: Barista): Role | null {

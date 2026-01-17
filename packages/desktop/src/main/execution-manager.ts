@@ -40,22 +40,9 @@ export class ExecutionManager {
 
     // Barista Engine 초기화
     this.baristaEngine = new BaristaEngineV2(this.terminalPool!);
-    
-    // Barista Engine 이벤트 리스너 설정
-    this.baristaEngine.on('order:output', (data: { orderId: string; data: string }) => {
-      // 1. UI 전송 (실시간 보기용) - order:output 형식으로 전송
-      this.sendToRenderer('order:output', {
-        orderId: data.orderId,
-        timestamp: new Date().toISOString(),
-        type: 'stdout',
-        content: data.data,
-      });
 
-      // 2. 로그 저장 (지속성용)
-      this.orchestrator.appendOrderLog(data.orderId, data.data).catch((err: Error) => {
-        console.error(`[ExecutionManager] Failed to append log for order ${data.orderId}:`, err);
-      });
-    });
+    // Barista Engine 이벤트 리스너 설정
+    this.setupBaristaEngineEvents();
 
     // Orchestrator 이벤트 리스너 설정
     this.setupEventListeners();
@@ -109,6 +96,74 @@ export class ExecutionManager {
 
     this.terminalPool = new TerminalPool(poolConfig);
     console.log('[ExecutionManager] Terminal pool initialized');
+  }
+
+  /**
+   * Barista Engine 이벤트 리스너 설정
+   */
+  private setupBaristaEngineEvents(): void {
+    if (!this.baristaEngine) return;
+
+    // order:output - 터미널 출력
+    this.baristaEngine.on('order:output', (data: { orderId: string; data: string }) => {
+      // 1. UI 전송 (실시간 보기용) - order:output 형식으로 전송
+      this.sendToRenderer('order:output', {
+        orderId: data.orderId,
+        timestamp: new Date().toISOString(),
+        type: 'stdout',
+        content: data.data,
+      });
+
+      // 2. 로그 저장 (지속성용)
+      this.orchestrator.appendOrderLog(data.orderId, data.data).catch((err: Error) => {
+        console.error(`[ExecutionManager] Failed to append log for order ${data.orderId}:`, err);
+      });
+    });
+
+    // Session 관련 이벤트들
+    this.baristaEngine.on('order:started', (data: any) => {
+      console.log('[ExecutionManager] Order started (session):', data.orderId);
+      this.sendToRenderer('order:session-started', data);
+    });
+
+    this.baristaEngine.on('order:completed', (data: any) => {
+      console.log('[ExecutionManager] Order completed (session):', data.orderId);
+      this.sendToRenderer('order:session-completed', data);
+    });
+
+    this.baristaEngine.on('order:failed', (data: any) => {
+      console.log('[ExecutionManager] Order failed (session):', data.orderId);
+      this.sendToRenderer('order:session-failed', data);
+    });
+
+    // Stage 이벤트들
+    this.baristaEngine.on('stage:started', (data: any) => {
+      console.log('[ExecutionManager] Stage started:', data.stageId);
+      this.sendToRenderer('order:stage-started', {
+        orderId: data.orderId,
+        stageId: data.stageId,
+        provider: data.provider,
+      });
+    });
+
+    this.baristaEngine.on('stage:completed', (data: any) => {
+      console.log('[ExecutionManager] Stage completed:', data.stageId);
+      this.sendToRenderer('order:stage-completed', {
+        orderId: data.orderId,
+        stageId: data.stageId,
+        output: data.output,
+        duration: data.duration,
+      });
+    });
+
+    this.baristaEngine.on('stage:failed', (data: any) => {
+      console.log('[ExecutionManager] Stage failed:', data.stageId);
+      this.sendToRenderer('order:stage-failed', {
+        orderId: data.orderId,
+        stageId: data.stageId,
+        error: data.error,
+      });
+    });
   }
 
   /**
@@ -229,6 +284,23 @@ export class ExecutionManager {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, data);
     }
+  }
+
+  /**
+   * Session 상태 조회
+   */
+  getSessionStatus(): any {
+    if (!this.baristaEngine) {
+      return { error: 'Engine not initialized' };
+    }
+    return this.baristaEngine.getSessionStatus();
+  }
+
+  /**
+   * BaristaEngine 조회
+   */
+  getBaristaEngine(): BaristaEngineV2 | null {
+    return this.baristaEngine;
   }
 }
 
