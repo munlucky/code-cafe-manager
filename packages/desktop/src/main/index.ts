@@ -125,7 +125,7 @@ async function initOrchestrator(): Promise<void> {
   orchestrator.start();
 
   // Forward Orchestrator events to the renderer
-  const events = ['barista:event', 'order:event', 'order:assigned', 'order:completed', 'order:execution-started'];
+  const events = ['barista:event', 'order:event', 'order:assigned', 'order:completed'];
   for (const event of events) {
     orchestrator.on(event, (data) => {
       mainWindow?.webContents.send(event, data);

@@ -14,6 +14,9 @@ import { formatRelativeTime } from '../../utils/formatters';
 import type { Order, ExtendedWorkflowInfo } from '../../types/models';
 import { OrderStatus } from '../../types/models';
 
+/** Polling interval for refreshing order status */
+const ORDER_REFRESH_INTERVAL_MS = 3000;
+
 interface OrderDetailViewProps {
   order: Order;
   onBack: () => void;
@@ -59,7 +62,7 @@ export function OrderDetailView({
       } catch (error) {
         console.error('Failed to refresh order:', error);
       }
-    }, 3000);
+    }, ORDER_REFRESH_INTERVAL_MS);
 
     return () => clearInterval(interval);
   }, [order.id]);
@@ -68,7 +71,8 @@ export function OrderDetailView({
   useEffect(() => {
     const cleanup = window.codecafe.order.onOutput((event: any) => {
       if (event.orderId === order.id && event.type === 'system') {
-        // Stage 변경 감지 (예: "[STAGE] code" 형식의 메시지)
+        // TODO: Replace with structured event (e.g., order:stage-changed) when backend supports it
+        // Stage detection via string matching (fragile, depends on log format)
         const stageMatch = event.content?.match(/\[STAGE\]\s*(\w+)/i);
         if (stageMatch && workflow) {
           const stageName = stageMatch[1].toLowerCase();

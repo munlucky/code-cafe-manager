@@ -132,11 +132,10 @@ export function Orders(): JSX.Element {
 
   async function handleExecuteOrder(orderId: string, prompt: string, vars: Record<string, string>): Promise<void> {
     await executeOrder(orderId, prompt, vars);
-    await fetchOrders();
-    // 실행 시작 후 상세 화면으로 이동
-    const updatedOrder = orders.find(o => o.id === orderId);
-    if (updatedOrder) {
-      setSelectedOrder(updatedOrder);
+    // To avoid a race condition, fetch the specific order directly
+    const response = await window.codecafe.order.get(orderId);
+    if (response.success && response.data) {
+      setSelectedOrder(response.data);
     }
   }
 

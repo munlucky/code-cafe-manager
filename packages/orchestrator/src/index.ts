@@ -14,6 +14,10 @@ export { TemplateEngine, templateEngine } from './role/template';
 
 // Export terminal management (Phase 2)
 export * from './terminal';
+export type { TerminalPoolConfig, ProviderTerminalConfig, PoolStatus, PoolMetrics, Terminal, LeaseToken } from '@codecafe/core';
+
+// Export barista engine
+export { BaristaEngineV2 } from './barista/barista-engine-v2.js';
 
 // Export schema validation
 export * from './schema/validator';

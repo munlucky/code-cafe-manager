@@ -5,7 +5,8 @@
 
 import { BrowserWindow } from 'electron';
 import { Orchestrator, Order, Barista } from '@codecafe/core';
-import { BaristaEngineV2, TerminalPool, TerminalPoolConfig } from '@codecafe/orchestrator';
+import { BaristaEngineV2, TerminalPool } from '@codecafe/orchestrator';
+import { DEFAULT_TERMINAL_POOL_CONFIG } from './config/terminal-pool.config.js';
 
 interface ExecutionManagerConfig {
   orchestrator: Orchestrator;
@@ -75,22 +76,7 @@ export class ExecutionManager {
    * Terminal Pool 초기화
    */
   private async initTerminalPool(): Promise<void> {
-    const config: TerminalPoolConfig = {
-      perProvider: {
-        'claude-code': {
-          size: 4,
-          timeout: 300000, // 5 minutes
-          maxRetries: 3,
-        },
-        codex: {
-          size: 2,
-          timeout: 300000,
-          maxRetries: 3,
-        },
-      },
-    };
-
-    this.terminalPool = new TerminalPool(config);
+    this.terminalPool = new TerminalPool(DEFAULT_TERMINAL_POOL_CONFIG);
     console.log('[ExecutionManager] Terminal pool initialized');
   }
 
@@ -190,27 +176,18 @@ export class ExecutionManager {
       return;
     }
 
-    // BaristaEngineV2의 activeExecutions에서 lease를 찾아 입력 전달
-    const activeExecs = this.baristaEngine.getActiveExecutions();
-    const exec = activeExecs.get(orderId);
+    try {
+      await this.baristaEngine.sendInput(orderId, message);
+      console.log('[ExecutionManager] Input sent to order:', orderId);
 
-    if (exec && exec.lease) {
-      try {
-        // PTY에 입력 전송
-        exec.lease.terminal.process.write(message + '\n');
-        console.log('[ExecutionManager] Input sent to order:', orderId);
-
-        // UI에 입력 전송 알림
-        this.sendToRenderer('order:execution-progress', {
-          orderId,
-          stage: 'input-sent',
-          message: `Input sent: ${message.substring(0, 50)}...`,
-        });
-      } catch (error: any) {
-        console.error('[ExecutionManager] Failed to send input:', error);
-      }
-    } else {
-      console.warn('[ExecutionManager] No active lease for order:', orderId);
+      // UI에 입력 전송 알림
+      this.sendToRenderer('order:execution-progress', {
+        orderId,
+        stage: 'input-sent',
+        message: `Input sent: ${message.substring(0, 50)}...`,
+      });
+    } catch (error: any) {
+      console.error('[ExecutionManager] Failed to send input:', error);
     }
   }
 

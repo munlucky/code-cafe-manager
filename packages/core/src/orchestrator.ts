@@ -266,7 +266,7 @@ export class Orchestrator extends EventEmitter {
       try {
         barista = this.baristaManager.createBarista(order.provider);
       } catch (error) {
-        throw new Error(`Failed to create barista for order ${orderId}: ${error}`);
+        throw new Error(`Failed to create barista for order ${orderId}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 

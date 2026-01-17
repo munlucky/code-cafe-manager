@@ -86,6 +86,23 @@ export class BaristaEngineV2 {
   }
 
   /**
+   * Send input to an active order's terminal
+   */
+  public async sendInput(orderId: string, message: string): Promise<void> {
+    const execution = this.activeExecutions.get(orderId);
+    if (execution && execution.lease) {
+      try {
+        execution.lease.terminal.process.write(message + '\n');
+      } catch (error) {
+        console.error(`[BaristaEngineV2] Failed to send input to order ${orderId}:`, error);
+        throw error;
+      }
+    } else {
+      console.warn(`[BaristaEngineV2] No active lease for order to send input: ${orderId}`);
+    }
+  }
+
+  /**
    * Clean up resources
    */
   async dispose(): Promise<void> {
