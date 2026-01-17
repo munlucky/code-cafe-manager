@@ -1,0 +1,8 @@
+complexity: complex
+estimates:
+  estimatedFiles: 10
+  estimatedLines: 400
+  estimatedTime: 4h
+notes:
+  - "Moving Provider selection to Stage level implies schema changes, API updates, and UI changes in Workflow Editor."
+  - "Impacts Order processing logic."

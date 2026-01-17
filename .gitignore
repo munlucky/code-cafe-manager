@@ -1,5 +1,4 @@
 .history/
-.claude/
 node_modules/
 dist/
 *.log
@@ -13,6 +12,7 @@ coverage/
 .codex/
 .claude.backup-*
 .codex.backup-*
+.gemini.backup-*
 .orch/runs/
 packages/orchestrator/src/**/*.js
 packages/orchestrator/src/**/*.d.ts
