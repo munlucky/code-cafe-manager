@@ -43,9 +43,14 @@ export class ExecutionManager {
     
     // Barista Engine 이벤트 리스너 설정
     this.baristaEngine.on('order:output', (data: { orderId: string; data: string }) => {
-      // 1. UI 전송 (실시간 보기용)
-      this.sendToRenderer('terminal:data', data);
-      
+      // 1. UI 전송 (실시간 보기용) - order:output 형식으로 전송
+      this.sendToRenderer('order:output', {
+        orderId: data.orderId,
+        timestamp: new Date().toISOString(),
+        type: 'stdout',
+        content: data.data,
+      });
+
       // 2. 로그 저장 (지속성용)
       this.orchestrator.appendOrderLog(data.orderId, data.data).catch((err: Error) => {
         console.error(`[ExecutionManager] Failed to append log for order ${data.orderId}:`, err);
