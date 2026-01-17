@@ -41,16 +41,20 @@ interface OrderCardProps {
   order: Order;
   onViewTerminal?: (orderId: string) => void;
   onCancelOrder?: (orderId: string) => void;
+  onClick?: (orderId: string) => void;
 }
 
-function OrderCard({ order, onViewTerminal, onCancelOrder }: OrderCardProps): ReactElement {
+function OrderCard({ order, onViewTerminal, onCancelOrder, onClick }: OrderCardProps): ReactElement {
   const config = STATUS_CONFIG[order.status];
   const Icon = config.icon;
   const isRunning = order.status === OrderStatus.RUNNING;
   const isCancellable = order.status === OrderStatus.RUNNING || order.status === OrderStatus.PENDING;
 
   return (
-    <Card className="p-4 hover:border-coffee transition-colors">
+    <Card 
+      className="p-4 hover:border-coffee transition-colors cursor-pointer"
+      onClick={() => onClick?.(order.id)}
+    >
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1">
           <h3 className="font-semibold text-bone mb-1">{order.workflowName}</h3>
@@ -119,6 +123,7 @@ interface OrderListProps {
   onNewOrder: () => void;
   onViewTerminal: (orderId: string) => void;
   onCancelOrder: (orderId: string) => void;
+  onClick: (orderId: string) => void;
 }
 
 function OrderList({
@@ -126,6 +131,7 @@ function OrderList({
   onNewOrder,
   onViewTerminal,
   onCancelOrder,
+  onClick,
 }: OrderListProps): ReactElement {
   if (orders.length === 0) {
     return (
@@ -151,6 +157,7 @@ function OrderList({
           order={order}
           onViewTerminal={onViewTerminal}
           onCancelOrder={onCancelOrder}
+          onClick={onClick}
         />
       ))}
     </div>
@@ -161,9 +168,10 @@ interface OrderKanbanProps {
   orders: Order[];
   onViewTerminal: (orderId: string) => void;
   onCancelOrder: (orderId: string) => void;
+  onClick: (orderId: string) => void;
 }
 
-function OrderKanban({ orders, onViewTerminal, onCancelOrder }: OrderKanbanProps): ReactElement {
+function OrderKanban({ orders, onViewTerminal, onCancelOrder, onClick }: OrderKanbanProps): ReactElement {
   const columns = useMemo(() => {
     const cols: Record<OrderStatus, Order[]> = {
       [OrderStatus.PENDING]: [],
@@ -198,6 +206,7 @@ function OrderKanban({ orders, onViewTerminal, onCancelOrder }: OrderKanbanProps
                   order={order}
                   onViewTerminal={onViewTerminal}
                   onCancelOrder={onCancelOrder}
+                  onClick={onClick}
                 />
               ))}
             </div>
@@ -227,7 +236,7 @@ export function CafeDashboard(): ReactElement {
   const setView = useViewStore((s) => s.setView);
   const currentCafe = getCurrentCafe();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNewOrderDialog, setShowNewOrderDialog] = useState(false);
@@ -349,6 +358,10 @@ export function CafeDashboard(): ReactElement {
     setView('terminals');
   };
 
+  const handleOrderClick = (orderId: string): void => {
+    setView('orders');
+  };
+
   const handleCancelOrder = async (orderId: string) => {
     if (!confirm('Are you sure you want to cancel this order?')) {
       return;
@@ -430,12 +443,14 @@ export function CafeDashboard(): ReactElement {
             onNewOrder={handleNewOrder}
             onViewTerminal={handleViewTerminal}
             onCancelOrder={handleCancelOrder}
+            onClick={handleOrderClick}
           />
         ) : (
           <OrderKanban
             orders={orders}
             onViewTerminal={handleViewTerminal}
             onCancelOrder={handleCancelOrder}
+            onClick={handleOrderClick}
           />
         )}
       </div>

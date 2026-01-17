@@ -75,8 +75,8 @@ async function waitForDevServer(url: string, maxAttempts = 30): Promise<void> {
  */
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: 1600,
+    height: 900,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
