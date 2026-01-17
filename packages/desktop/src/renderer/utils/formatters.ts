@@ -25,3 +25,16 @@ export function truncate(str: string, maxLength: number): string {
   if (str.length <= maxLength) return str;
   return str.slice(0, maxLength) + '...';
 }
+
+/**
+ * ANSI escape 코드 제거
+ * 터미널 출력에서 색상/스타일 코드를 제거하여 깔끔하게 표시
+ *
+ * 예: "\x1b[38;2;153;153;153mHello\x1b[0m" → "Hello"
+ */
+export function stripAnsiCodes(text: string): string {
+  // ANSI escape 시퀀스 패턴: ESC[ ... (문자) 또는 [ ... (문자)
+  // \x1b\[ 또는 \[ 로 시작하여 [0-9;?]* 뒤에 [a-zA-Z]가 오는 패턴
+  const ansiRegex = /(\x1b\[|\[)[0-9;?]*[a-zA-Z]/g;
+  return text.replace(ansiRegex, '');
+}

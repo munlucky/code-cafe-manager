@@ -12,6 +12,84 @@ import { homedir } from 'os';
 import { promises as fs } from 'fs';
 
 /**
+ * ANSI escape 코드를 HTML로 변환
+ * 터미널 출력의 색상/스타일을 유지
+ */
+function convertAnsiToHtml(text: string): string {
+  // ANSI escape 시퀀스 패턴 매칭 및 스타일 적용
+  const ansiRegex = /\x1b\[([0-9;?]*)m/g;
+
+  let result = '';
+  let lastIndex = 0;
+  let currentStyles: string[] = [];
+
+  const styleMap: Record<string, string> = {
+    '0': '',           // Reset
+    '1': 'font-weight:bold',  // Bold
+    '2': 'opacity:0.7',  // Dim
+    '3': 'font-style:italic',  // Italic
+    '4': 'text-decoration:underline',  // Underline
+    '30': 'color:black',
+    '31': 'color:#ef5350',  // Red
+    '32': 'color:#a5d6a7',  // Green
+    '33': 'color:#ffca28',  // Yellow
+    '34': 'color:#42a5f5',  // Blue
+    '35': 'color:#ab47bc',  // Magenta
+    '36': 'color:#26c6da',  // Cyan
+    '37': 'color:#ffffff',  // White
+    '90': 'color:#616161',  // Bright Black (Dark Gray)
+    '91': 'color:#ef5350',  // Bright Red
+    '92': 'color:#a5d6a7',  // Bright Green
+    '93': 'color:#ffca28',  // Bright Yellow
+    '94': 'color:#42a5f5',  // Bright Blue
+    '95': 'color:#ab47bc',  // Bright Magenta
+    '96': 'color:#26c6da',  // Bright Cyan
+    '97': 'color:#ffffff',  // Bright White
+    // RGB colors like 38;2;R;G;B
+  };
+
+  text.replace(ansiRegex, (match, codes, offset) => {
+    // 이전 텍스트 추가
+    result += text.slice(lastIndex, offset);
+
+    // 스타일 처리
+    const codeList = codes.split(';');
+    for (const code of codeList) {
+      if (code === '0') {
+        // Reset - close all open spans
+        while (currentStyles.length > 0) {
+          result += '</span>';
+          currentStyles.pop();
+        }
+      } else if (code.startsWith('38') || code.startsWith('48')) {
+        // RGB foreground/background - 스킵
+        continue;
+      } else if (styleMap[code]) {
+        const style = styleMap[code];
+        if (style && !currentStyles.includes(style)) {
+          result += `<span style="${style}">`;
+          currentStyles.push(style);
+        }
+      }
+    }
+
+    lastIndex = offset + match.length;
+    return '';
+  });
+
+  // 남은 텍스트 추가
+  result += text.slice(lastIndex);
+
+  // 열린 스타일 모두 닫기
+  while (currentStyles.length > 0) {
+    result += '</span>';
+    currentStyles.pop();
+  }
+
+  return result;
+}
+
+/**
  * Cafe Registry 타입 (간소화)
  */
 interface Cafe {
@@ -398,7 +476,7 @@ class OrderManager {
                 orderId,
                 timestamp: chunk.timestamp,
                 type: 'stdout',
-                content: chunk.message,
+                content: convertAnsiToHtml(chunk.message),  // ANSI를 HTML로 변환
               });
             }
 

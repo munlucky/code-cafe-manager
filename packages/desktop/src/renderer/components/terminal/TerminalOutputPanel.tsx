@@ -3,7 +3,8 @@
  * 개별 오더의 터미널 출력을 표시하는 패널
  */
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import Ansi from 'ansi-to-html';
 
 interface OrderOutputEvent {
   orderId: string;
@@ -22,12 +23,29 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
   const [loading, setLoading] = useState(true);
   const outputRef = useRef<HTMLPreElement>(null);
 
-  useEffect(() => {
-    setLoading(true);
-    setOutput([]);
+  // 출력 이벤트 핸들러 (useCallback으로 안정적인 참조 유지)
+  const handleOutput = useCallback((event: OrderOutputEvent) => {
+    if (event.orderId === orderId) {
+      setOutput((prev) => [...prev, event]);
+    }
+  }, [orderId]);
 
-    // 구독 시작
-    window.codecafe.order.subscribeOutput(orderId).then((result: any) => {
+  useEffect(() => {
+    // 컴포넌트 마운트 상태 추적 (Strict Mode 대응)
+    let isMounted = true;
+    let cleanupCalled = false;
+
+    const subscribe = async () => {
+      if (!isMounted || cleanupCalled) return;
+
+      setLoading(true);
+      setOutput([]);
+
+      // 구독 시작
+      const result = await window.codecafe.order.subscribeOutput(orderId);
+
+      if (!isMounted || cleanupCalled) return;
+
       if (result.success) {
         console.log('[TerminalOutputPanel] Subscribed to order:', orderId);
         setLoading(false);
@@ -35,21 +53,22 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
         console.error('[TerminalOutputPanel] Failed to subscribe:', result.error);
         setLoading(false);
       }
-    });
+    };
+
+    // 비동기 구독
+    subscribe();
 
     // 출력 이벤트 리스너
-    const cleanup = window.codecafe.order.onOutput((event: OrderOutputEvent) => {
-      if (event.orderId === orderId) {
-        setOutput((prev) => [...prev, event]);
-      }
-    });
+    const cleanupListener = window.codecafe.order.onOutput(handleOutput);
 
     return () => {
+      cleanupCalled = true;
       // 구독 해제
       window.codecafe.order.unsubscribeOutput(orderId);
-      if (cleanup) cleanup();
+      if (cleanupListener) cleanupListener();
+      console.log('[TerminalOutputPanel] Cleanup for order:', orderId);
     };
-  }, [orderId]);
+  }, [orderId, handleOutput]);
 
   // Auto-scroll
   useEffect(() => {
@@ -112,7 +131,7 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
         {output.map((e, i) => (
           <div key={i} className="mb-1">
             <span className="text-gray-600 mr-2">[{formatTimestamp(e.timestamp)}]</span>
-            <span className={getTypeColor(e.type)}>{e.content}</span>
+            <span className={getTypeColor(e.type)}>{stripAnsiCodes(e.content)}</span>
           </div>
         ))}
       </pre>

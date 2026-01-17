@@ -96,7 +96,9 @@ export function OrderTerminals(): JSX.Element {
 
       {/* Terminal Output */}
       <div className="flex-1 overflow-hidden p-4">
-        {activeOrderId && <TerminalOutputPanel orderId={activeOrderId} />}
+        {activeOrderId && (
+          <TerminalOutputPanel key={activeOrderId} orderId={activeOrderId} />
+        )}
       </div>
     </div>
   );

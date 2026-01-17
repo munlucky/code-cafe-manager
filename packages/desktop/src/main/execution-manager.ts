@@ -18,6 +18,77 @@ import type {
 } from '@codecafe/orchestrator/session';
 import { DEFAULT_TERMINAL_POOL_CONFIG } from './config/terminal-pool.config.js';
 
+/**
+ * ANSI escape 코드를 HTML로 변환
+ * 터미널 출력의 색상/스타일을 유지
+ */
+function convertAnsiToHtml(text: string): string {
+  // ANSI escape 시퀀스 패턴 매칭 및 스타일 적용
+  const ansiRegex = /\x1b\[([0-9;?]*)m/g;
+
+  let result = '';
+  let lastIndex = 0;
+  let currentStyles: string[] = [];
+
+  const styleMap: Record<string, string> = {
+    '0': '',           // Reset
+    '1': 'font-weight:bold',  // Bold
+    '2': 'opacity:0.7',  // Dim
+    '3': 'font-style:italic',  // Italic
+    '4': 'text-decoration:underline',  // Underline
+    '30': 'color:black',
+    '31': 'color:#ef5350',  // Red
+    '32': 'color:#a5d6a7',  // Green
+    '33': 'color:#ffca28',  // Yellow
+    '34': 'color:#42a5f5',  // Blue
+    '35': 'color:#ab47bc',  // Magenta
+    '36': 'color:#26c6da',  // Cyan
+    '37': 'color:#ffffff',  // White
+    '90': 'color:#616161',  // Bright Black (Dark Gray)
+    '91': 'color:#ef5350',  // Bright Red
+    '92': 'color:#a5d6a7',  // Bright Green
+    '93': 'color:#ffca28',  // Bright Yellow
+    '94': 'color:#42a5f5',  // Bright Blue
+    '95': 'color:#ab47bc',  // Bright Magenta
+    '96': 'color:#26c6da',  // Bright Cyan
+    '97': 'color:#ffffff',  // Bright White
+  };
+
+  text.replace(ansiRegex, (match, codes, offset) => {
+    result += text.slice(lastIndex, offset);
+
+    const codeList = codes.split(';');
+    for (const code of codeList) {
+      if (code === '0') {
+        while (currentStyles.length > 0) {
+          result += '</span>';
+          currentStyles.pop();
+        }
+      } else if (code.startsWith('38') || code.startsWith('48')) {
+        continue;
+      } else if (styleMap[code]) {
+        const style = styleMap[code];
+        if (style && !currentStyles.includes(style)) {
+          result += `<span style="${style}">`;
+          currentStyles.push(style);
+        }
+      }
+    }
+
+    lastIndex = offset + match.length;
+    return '';
+  });
+
+  result += text.slice(lastIndex);
+
+  while (currentStyles.length > 0) {
+    result += '</span>';
+    currentStyles.pop();
+  }
+
+  return result;
+}
+
 interface ExecutionManagerConfig {
   orchestrator: Orchestrator;
   mainWindow: BrowserWindow | null;
@@ -32,6 +103,8 @@ export class ExecutionManager {
   private terminalPool: TerminalPool | null = null;
   private baristaEngine: BaristaEngineV2 | null = null;
   private activeExecutions = new Map<string, { baristaId: string }>();
+  // 이벤트 리스너 중복 등록 방지용 플래그
+  private eventListenersRegistered = false;
 
   constructor(config: ExecutionManagerConfig) {
     this.orchestrator = config.orchestrator;
@@ -43,6 +116,13 @@ export class ExecutionManager {
    */
   async start(): Promise<void> {
     console.log('[ExecutionManager] Starting...');
+
+    // 기존 Barista Engine 정리 (이벤트 리스너 중복 등록 방지)
+    if (this.baristaEngine) {
+      this.baristaEngine.removeAllListeners();
+      await this.baristaEngine.dispose();
+      this.baristaEngine = null;
+    }
 
     // Terminal Pool 초기화
     await this.initTerminalPool();
@@ -65,15 +145,25 @@ export class ExecutionManager {
   async stop(): Promise<void> {
     console.log('[ExecutionManager] Stopping...');
 
+    // Barista Engine 이벤트 리스너 제거
     if (this.baristaEngine) {
+      this.baristaEngine.removeAllListeners();
       await this.baristaEngine.dispose();
       this.baristaEngine = null;
     }
 
+    // Orchestrator 이벤트 리스너 제거 (중복 등록 방지)
+    this.orchestrator.removeAllListeners('order:execution-started');
+    this.orchestrator.removeAllListeners('order:input');
+
+    // Terminal Pool 정리
     if (this.terminalPool) {
       await this.terminalPool.dispose();
       this.terminalPool = null;
     }
+
+    // 플래그 초기화
+    this.eventListenersRegistered = false;
 
     console.log('[ExecutionManager] Stopped');
   }
@@ -109,21 +199,33 @@ export class ExecutionManager {
 
   /**
    * Barista Engine 이벤트 리스너 설정
+   * 중복 등록 방지: 이미 등록된 경우 리스너를 제거 후 다시 등록
    */
   private setupBaristaEngineEvents(): void {
     if (!this.baristaEngine) return;
 
+    // 기존 리스너 제거 (중복 등록 방지)
+    if (this.eventListenersRegistered) {
+      this.baristaEngine.removeAllListeners('order:output');
+      this.baristaEngine.removeAllListeners('order:started');
+      this.baristaEngine.removeAllListeners('order:completed');
+      this.baristaEngine.removeAllListeners('order:failed');
+      this.baristaEngine.removeAllListeners('stage:started');
+      this.baristaEngine.removeAllListeners('stage:completed');
+      this.baristaEngine.removeAllListeners('stage:failed');
+    }
+
     // order:output - 터미널 출력
     this.baristaEngine.on('order:output', (data: { orderId: string; data: string }) => {
-      // 1. UI 전송 (실시간 보기용) - order:output 형식으로 전송
+      // 1. UI 전송 (실시간 보기용) - order:output 형식으로 전송 (ANSI를 HTML로 변환)
       this.sendToRenderer('order:output', {
         orderId: data.orderId,
         timestamp: new Date().toISOString(),
         type: 'stdout',
-        content: data.data,
+        content: convertAnsiToHtml(data.data),
       });
 
-      // 2. 로그 저장 (지속성용)
+      // 2. 로그 저장 (지속성용) - 원본 그대로 저장
       this.orchestrator.appendOrderLog(data.orderId, data.data).catch((err: Error) => {
         console.error(`[ExecutionManager] Failed to append log for order ${data.orderId}:`, err);
       });
@@ -173,12 +275,22 @@ export class ExecutionManager {
         error: data.error,
       });
     });
+
+    // 이벤트 리스너 등록 완료 표시
+    this.eventListenersRegistered = true;
   }
 
   /**
    * Orchestrator 이벤트 리스너 설정
+   * 중복 등록 방지: 이미 등록된 경우 리스너를 제거 후 다시 등록
    */
   private setupEventListeners(): void {
+    // 기존 리스너 제거 (중복 등록 방지)
+    if (this.eventListenersRegistered) {
+      this.orchestrator.removeAllListeners('order:execution-started');
+      this.orchestrator.removeAllListeners('order:input');
+    }
+
     // order:execution-started 이벤트 처리
     this.orchestrator.on('order:execution-started', async (data: { orderId: string; baristaId: string; prompt: string }) => {
       console.log('[ExecutionManager] Received order:execution-started:', data);
