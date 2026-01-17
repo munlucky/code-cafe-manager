@@ -311,8 +311,9 @@ class OrderManager {
      */
   ipcMain.handle('order:subscribeOutput', async (event, orderId: string) =>
     handleIpc(async () => {
-      const orchDir = join(process.cwd(), '.orch');
-      const logPath = join(orchDir, 'orders', orderId, 'logs.jsonl');
+      // LogManager와 동일한 경로 사용: ~/.codecafe/logs/${orderId}.log
+      const logsDir = join(homedir(), '.codecafe', 'logs');
+      const logPath = join(logsDir, `${orderId}.log`);
 
       console.log('[Order IPC] Subscribe to order output:', orderId);
       console.log('[Order IPC] Log path:', logPath);
@@ -324,7 +325,7 @@ class OrderManager {
 
       let lastPosition = 0;
 
-      // 3초마다 로그 파일 읽기
+      // 1초마다 로그 파일 읽기 (더 빠른 업데이트)
       const interval = setInterval(async () => {
         try {
           if (!existsSync(logPath)) {
@@ -337,20 +338,22 @@ class OrderManager {
           if (newContent.length > 0) {
             lastPosition = content.length;
 
-            // JSONL 파싱 (각 줄이 JSON 객체)
+            // 일반 텍스트 형식 파싱: [timestamp] message
             const lines = newContent.trim().split('\n').filter(Boolean);
 
             for (const line of lines) {
-              try {
-                const logEntry = JSON.parse(line);
+              // [2026-01-17T10:30:45.123Z] message 형식 파싱
+              const timestampMatch = line.match(/^\[([^\]]+)\]\s*(.*)$/);
+
+              if (timestampMatch) {
                 event.sender.send('order:output', {
                   orderId,
-                  timestamp: logEntry.timestamp || new Date().toISOString(),
-                  type: logEntry.level || 'stdout',
-                  content: logEntry.message || line,
+                  timestamp: timestampMatch[1],
+                  type: 'stdout',
+                  content: timestampMatch[2],
                 });
-              } catch (parseError) {
-                // JSONL 파싱 실패 시 원본 텍스트 전송
+              } else {
+                // 타임스탬프 없는 경우 원본 전송
                 event.sender.send('order:output', {
                   orderId,
                   timestamp: new Date().toISOString(),
@@ -363,7 +366,7 @@ class OrderManager {
         } catch (error) {
           console.error('[Order IPC] Failed to read log file:', error);
         }
-      }, 3000);
+      }, 1000);
 
       // 구독 해제를 위해 interval ID 저장
       const intervalKey = `order:output:${orderId}`;
