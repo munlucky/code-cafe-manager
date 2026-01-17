@@ -136,6 +136,58 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
   }
 
   /**
+   * C2: Get the appropriate line ending for the current platform
+   * Windows PTY typically uses \r, Unix uses \n
+   */
+  private getLineEnding(): string {
+    return os.platform() === 'win32' ? '\r' : '\n';
+  }
+
+  /**
+   * C4: Verify claude CLI is available before spawn (fail fast)
+   * Throws Error if claude is not found in PATH and no hardcoded path exists
+   */
+  private verifyClaudeInstallation(): void {
+    const isWindows = os.platform() === 'win32';
+    
+    if (isWindows) {
+      // On Windows, getClaudeCommand() already does thorough checking
+      // and returns an absolute path or falls back to 'claude'
+      const claudeCmd = this.getClaudeCommand();
+      
+      // If getClaudeCommand found a path (not just 'claude'), we're good
+      if (claudeCmd !== 'claude') {
+        this.log('claude-verify-success', { platform: 'win32', method: 'path-found' });
+        return;
+      }
+      
+      // Fallback case - need to verify 'claude' is in PATH
+      try {
+        const { execSync } = require('child_process');
+        execSync('where.exe claude', { stdio: 'ignore' });
+        this.log('claude-verify-success', { platform: 'win32', method: 'where' });
+      } catch {
+        this.log('claude-verify-fail', { platform: 'win32' });
+        throw new Error(
+          'Claude CLI not found in PATH. Please install Claude CLI or set CLAUDE_CODE_PATH environment variable.'
+        );
+      }
+    } else {
+      // On Unix, verify claude is in PATH
+      try {
+        const { execSync } = require('child_process');
+        execSync('which claude', { stdio: 'ignore' });
+        this.log('claude-verify-success', { platform: os.platform(), method: 'which' });
+      } catch {
+        this.log('claude-verify-fail', { platform: os.platform() });
+        throw new Error(
+          'Claude CLI not found in PATH. Please install Claude CLI or set CLAUDE_CODE_PATH environment variable.'
+        );
+      }
+    }
+  }
+
+  /**
    * Get shell configuration based on platform
    */
   private getShellConfig(): { shell: string; args: string[] } {
@@ -213,6 +265,9 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
   async spawn(options?: { cwd?: string }): Promise<IPtyProcess> {
     const spawnStartTime = Date.now();
     
+    // C4: Verify claude installation before attempting spawn (fail fast)
+    this.verifyClaudeInstallation();
+    
     try {
       const { shell, args } = this.getShellConfig();
       const claudeCmd = this.getClaudeCommand();
@@ -286,9 +341,10 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       await this.waitForShellReady(ptyProcess, CONFIG.WAIT_TIMEOUT);
       this.log('shell-ready-exit', { elapsedMs: Date.now() - shellReadyStart });
 
-      // C1: Write claude command with logging
-      this.log('write-claude-cmd', { claudeCmd });
-      ptyProcess.write(`${claudeCmd}\r`);
+      // C1: Write claude command with logging (C2: OS-specific line ending)
+      const lineEnding = this.getLineEnding();
+      this.log('write-claude-cmd', { claudeCmd, lineEnding: lineEnding === '\r' ? '\\r' : '\\n' });
+      ptyProcess.write(`${claudeCmd}${lineEnding}`);
 
       // C1: Wait for Claude to initialize with timing
       const waitPromptStart = Date.now();
