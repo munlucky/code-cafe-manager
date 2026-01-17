@@ -22,6 +22,7 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
 import { NewOrderDialog } from '../order/NewOrderDialog';
+import { OrderExecuteDialog } from '../order/OrderExecuteDialog';
 
 // Mock data removed in favor of real API 연동
 
@@ -41,12 +42,14 @@ interface OrderCardProps {
   order: Order;
   onViewTerminal?: (orderId: string) => void;
   onCancelOrder?: (orderId: string) => void;
+  onExecuteOrder?: (order: Order) => void;
   onClick?: (orderId: string) => void;
 }
 
-function OrderCard({ order, onViewTerminal, onCancelOrder, onClick }: OrderCardProps): ReactElement {
+function OrderCard({ order, onViewTerminal, onCancelOrder, onExecuteOrder, onClick }: OrderCardProps): ReactElement {
   const config = STATUS_CONFIG[order.status];
   const Icon = config.icon;
+  const isPending = order.status === OrderStatus.PENDING;
   const isRunning = order.status === OrderStatus.RUNNING;
   const isCancellable = order.status === OrderStatus.RUNNING || order.status === OrderStatus.PENDING;
 
@@ -95,10 +98,19 @@ function OrderCard({ order, onViewTerminal, onCancelOrder, onClick }: OrderCardP
       )}
 
       <div className="mt-4 flex items-center gap-2">
+        {isPending && onExecuteOrder && (
+          <Button
+            variant="primary"
+            onClick={(e) => { e.stopPropagation(); onExecuteOrder(order); }}
+            className="flex-1 text-sm"
+          >
+            ▶ Execute
+          </Button>
+        )}
         {isRunning && onViewTerminal && (
           <Button
             variant="primary"
-            onClick={() => onViewTerminal(order.id)}
+            onClick={(e) => { e.stopPropagation(); onViewTerminal(order.id); }}
             className="flex-1 text-sm"
           >
             View Terminal
@@ -107,7 +119,7 @@ function OrderCard({ order, onViewTerminal, onCancelOrder, onClick }: OrderCardP
         {isCancellable && onCancelOrder && (
           <Button
             variant="destructive"
-            onClick={() => onCancelOrder(order.id)}
+            onClick={(e) => { e.stopPropagation(); onCancelOrder(order.id); }}
             className="flex-1 text-sm"
           >
             Cancel Order
@@ -123,6 +135,7 @@ interface OrderListProps {
   onNewOrder: () => void;
   onViewTerminal: (orderId: string) => void;
   onCancelOrder: (orderId: string) => void;
+  onExecuteOrder: (order: Order) => void;
   onClick: (orderId: string) => void;
 }
 
@@ -131,6 +144,7 @@ function OrderList({
   onNewOrder,
   onViewTerminal,
   onCancelOrder,
+  onExecuteOrder,
   onClick,
 }: OrderListProps): ReactElement {
   if (orders.length === 0) {
@@ -157,6 +171,7 @@ function OrderList({
           order={order}
           onViewTerminal={onViewTerminal}
           onCancelOrder={onCancelOrder}
+          onExecuteOrder={onExecuteOrder}
           onClick={onClick}
         />
       ))}
@@ -168,10 +183,11 @@ interface OrderKanbanProps {
   orders: Order[];
   onViewTerminal: (orderId: string) => void;
   onCancelOrder: (orderId: string) => void;
+  onExecuteOrder: (order: Order) => void;
   onClick: (orderId: string) => void;
 }
 
-function OrderKanban({ orders, onViewTerminal, onCancelOrder, onClick }: OrderKanbanProps): ReactElement {
+function OrderKanban({ orders, onViewTerminal, onCancelOrder, onExecuteOrder, onClick }: OrderKanbanProps): ReactElement {
   const columns = useMemo(() => {
     const cols: Record<OrderStatus, Order[]> = {
       [OrderStatus.PENDING]: [],
@@ -206,6 +222,7 @@ function OrderKanban({ orders, onViewTerminal, onCancelOrder, onClick }: OrderKa
                   order={order}
                   onViewTerminal={onViewTerminal}
                   onCancelOrder={onCancelOrder}
+                  onExecuteOrder={onExecuteOrder}
                   onClick={onClick}
                 />
               ))}
@@ -240,6 +257,7 @@ export function CafeDashboard(): ReactElement {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNewOrderDialog, setShowNewOrderDialog] = useState(false);
+  const [executeDialogOrder, setExecuteDialogOrder] = useState<Order | null>(null);
 
   // Load orders from API
   useEffect(() => {
@@ -383,6 +401,22 @@ export function CafeDashboard(): ReactElement {
     }
   };
 
+  const handleExecuteOrder = (order: Order): void => {
+    setExecuteDialogOrder(order);
+  };
+
+  const handleExecuteSubmit = async (orderId: string, prompt: string, vars: Record<string, string>): Promise<void> => {
+    const response = await window.codecafe.order.execute(orderId, prompt, vars);
+    if (!response.success) {
+      throw new Error(response.error?.message || 'Failed to execute order');
+    }
+    // Refresh orders
+    const ordersResponse = await window.codecafe.getAllOrders();
+    if (ordersResponse.success && ordersResponse.data) {
+      setOrders(ordersResponse.data);
+    }
+  };
+
   return (
     <div className="h-full overflow-auto flex flex-col">
       {/* Header */}
@@ -443,6 +477,7 @@ export function CafeDashboard(): ReactElement {
             onNewOrder={handleNewOrder}
             onViewTerminal={handleViewTerminal}
             onCancelOrder={handleCancelOrder}
+            onExecuteOrder={handleExecuteOrder}
             onClick={handleOrderClick}
           />
         ) : (
@@ -450,6 +485,7 @@ export function CafeDashboard(): ReactElement {
             orders={orders}
             onViewTerminal={handleViewTerminal}
             onCancelOrder={handleCancelOrder}
+            onExecuteOrder={handleExecuteOrder}
             onClick={handleOrderClick}
           />
         )}
@@ -461,6 +497,14 @@ export function CafeDashboard(): ReactElement {
         onClose={() => setShowNewOrderDialog(false)}
         cafeId={currentCafe.id}
         onSuccess={handleOrderCreated}
+      />
+
+      {/* Execute Order Dialog */}
+      <OrderExecuteDialog
+        isOpen={executeDialogOrder !== null}
+        onClose={() => setExecuteDialogOrder(null)}
+        onExecute={handleExecuteSubmit}
+        order={executeDialogOrder}
       />
     </div>
   );
