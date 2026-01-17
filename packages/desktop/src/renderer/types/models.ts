@@ -34,6 +34,7 @@ export interface Order {
   counter: string;
   provider: ProviderType;
   vars: Record<string, any>;
+  prompt?: string;
   createdAt: Date | string;
   startedAt: Date | string | null;
   endedAt: Date | string | null;

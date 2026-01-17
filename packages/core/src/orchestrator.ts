@@ -244,6 +244,62 @@ export class Orchestrator extends EventEmitter {
   }
 
   /**
+   * 주문 실행 (프롬프트와 함께)
+   */
+  async executeOrder(orderId: string, prompt: string, vars: Record<string, string> = {}): Promise<void> {
+    const order = this.orderManager.getOrder(orderId);
+    if (!order) {
+      throw new Error(`Order ${orderId} not found`);
+    }
+
+    if (order.status !== OrderStatus.PENDING) {
+      throw new Error(`Order ${orderId} is not in PENDING status (current: ${order.status})`);
+    }
+
+    // 프롬프트와 vars 저장
+    this.orderManager.updateOrderPrompt(orderId, prompt, vars);
+    await this.logManager.appendLog(orderId, `Execution requested with prompt: ${prompt.substring(0, 100)}...`);
+
+    // 바리스타 찾기 또는 생성
+    let barista = this.baristaManager.findIdleBarista(order.provider);
+    if (!barista) {
+      try {
+        barista = this.baristaManager.createBarista(order.provider);
+      } catch (error) {
+        throw new Error(`Failed to create barista for order ${orderId}: ${error}`);
+      }
+    }
+
+    // 주문 할당 및 시작
+    this.assignOrderToBarista(orderId, barista.id);
+    await this.startOrder(orderId);
+
+    await this.saveState();
+
+    // 실행 시작 이벤트 발생
+    this.emit('order:execution-started', { orderId, baristaId: barista.id, prompt });
+  }
+
+  /**
+   * 실행 중인 주문에 사용자 입력 전달
+   */
+  async sendInput(orderId: string, message: string): Promise<void> {
+    const order = this.orderManager.getOrder(orderId);
+    if (!order) {
+      throw new Error(`Order ${orderId} not found`);
+    }
+
+    if (order.status !== OrderStatus.RUNNING) {
+      throw new Error(`Order ${orderId} is not running (current: ${order.status})`);
+    }
+
+    await this.logManager.appendLog(orderId, `User input: ${message}`);
+
+    // 사용자 입력 이벤트 발생 (BaristaEngine에서 처리)
+    this.emit('order:input', { orderId, message });
+  }
+
+  /**
    * 상태 조회
    */
   getAllBaristas(): Barista[] {

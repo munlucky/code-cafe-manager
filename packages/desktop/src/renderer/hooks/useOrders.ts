@@ -49,5 +49,19 @@ export function useOrders() {
     }
   };
 
-  return { orders, fetchOrders, createOrder, getOrderLog, cancelOrder, updateOrder };
+  const executeOrder = async (orderId: string, prompt: string, vars: Record<string, string>) => {
+    try {
+      const response = await window.codecafe.order.execute(orderId, prompt, vars);
+      if (!response.success) {
+        throw new Error(response.error?.message || 'Failed to execute order');
+      }
+      await fetchOrders();
+      return response.data;
+    } catch (error) {
+      console.error('Failed to execute order:', error);
+      throw error;
+    }
+  };
+
+  return { orders, fetchOrders, createOrder, getOrderLog, cancelOrder, updateOrder, executeOrder };
 }

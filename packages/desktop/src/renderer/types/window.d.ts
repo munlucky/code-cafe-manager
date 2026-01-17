@@ -270,6 +270,12 @@ declare global {
         get: (orderId: string) => Promise<IpcResponse<Order>>;
         getLog: (orderId: string) => Promise<IpcResponse<string>>;
         cancel: (orderId: string) => Promise<IpcResponse<void>>;
+        execute: (
+          orderId: string,
+          prompt: string,
+          vars?: Record<string, string>
+        ) => Promise<IpcResponse<{ started: boolean }>>;
+        sendInput: (orderId: string, message: string) => Promise<IpcResponse<{ sent: boolean }>>;
         createWithWorktree: (
           params: CreateOrderWithWorktreeParams
         ) => Promise<IpcResponse<CreateOrderWithWorktreeResult>>;
