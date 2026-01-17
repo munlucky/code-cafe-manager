@@ -5,6 +5,7 @@
 
 import * as pty from 'node-pty';
 import * as os from 'os';
+import * as path from 'path';
 import * as fs from 'fs';
 import { ProviderType } from '@codecafe/core';
 import { IProviderAdapter } from '../provider-adapter';
@@ -33,12 +34,41 @@ const CONFIG = {
 // Windows Git Bash paths are no longer used as we switched to PowerShell
 // const WINDOWS_GIT_BASH_PATHS = ...
 
+/**
+ * Configuration interface for ClaudeCodeAdapter
+ */
+export interface ClaudeCodeAdapterConfig {
+  /**
+   * Force CI environment variable.
+   * - true: Sets CI=true (default, forces non-interactive mode)
+   * - false: Does not set CI, allows interactive mode
+   * - undefined: Uses default behavior (CI=true)
+   */
+  forceCI?: boolean;
+}
+
 export class ClaudeCodeAdapter implements IProviderAdapter {
   readonly providerType: ProviderType = 'claude-code';
+
+  private config: ClaudeCodeAdapterConfig;
 
   // C2: Startup output ring buffer for diagnostics
   private startupBuffer: string[] = [];
   private readonly STARTUP_BUFFER_SIZE = 50;
+
+  /**
+   * Constructor with optional configuration
+   */
+  constructor(config?: ClaudeCodeAdapterConfig) {
+    this.config = config || {};
+  }
+
+  /**
+   * Update adapter configuration
+   */
+  setConfig(config: Partial<ClaudeCodeAdapterConfig>): void {
+    this.config = { ...this.config, ...config };
+  }
 
   /**
    * Push a chunk to the startup ring buffer
@@ -195,9 +225,13 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       delete env.VSCODE_IPC_HOOK;
       delete env.VSCODE_PID;
       delete env.CLAUDE_CODE_PATH;
-      
-      // Force non-interactive / headless mode
-      env.CI = 'true';
+
+      // Force non-interactive / headless mode (configurable via forceCI)
+      // Default behavior: CI=true to prevent interactive prompts
+      // Set forceCI=false to disable and test interactive behavior
+      if (this.config.forceCI !== false) {
+        env.CI = 'true';
+      }
       // Set dummy editor to prevent VS Code fallback
       env.EDITOR = 'cmd /c echo';
       env.VISUAL = 'cmd /c echo';
@@ -228,7 +262,7 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         envSummary: {
           CI: env.CI,
           TERM: 'xterm-256color',
-          pathLength: env[pathKey]?.split(';').length || 0,
+          pathLength: env[pathKey]?.split(path.delimiter).length || 0,
         },
         claudeCmd,
       });
