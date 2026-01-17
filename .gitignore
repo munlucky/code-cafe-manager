@@ -13,7 +13,6 @@ coverage/
 .codex/
 .claude.backup-*
 .codex.backup-*
-.claude/
 .orch/runs/
 packages/orchestrator/src/**/*.js
 packages/orchestrator/src/**/*.d.ts
