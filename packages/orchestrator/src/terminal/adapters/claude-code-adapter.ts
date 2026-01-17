@@ -24,11 +24,13 @@ interface IPtyProcess {
 // Configuration constants
 const CONFIG = {
   IDLE_TIMEOUT: 30000, // 30 seconds - Claude CLI needs time for long-running tasks
-  WAIT_TIMEOUT: 10000, // Increased for shell + claude initialization
+  WAIT_TIMEOUT: 20000, // C3: 20 seconds for shell + claude initialization (increased from 10s)
   EXECUTE_TIMEOUT: 600000, // 10 minutes for execution
   TERM_COLS: 120,
   TERM_ROWS: 30,
   CHECK_STR_LEN: 20,
+  SPAWN_RETRY_DELAY_MIN: 300, // C2: Minimum backoff in ms
+  SPAWN_RETRY_DELAY_MAX: 800, // C2: Maximum backoff in ms
 } as const;
 
 // Windows Git Bash paths are no longer used as we switched to PowerShell
@@ -40,9 +42,9 @@ const CONFIG = {
 export interface ClaudeCodeAdapterConfig {
   /**
    * Force CI environment variable.
-   * - true: Sets CI=true (default, forces non-interactive mode)
-   * - false: Does not set CI, allows interactive mode
-   * - undefined: Uses default behavior (CI=true)
+   * - true: Sets CI=true (forces non-interactive mode)
+   * - false: Does not set CI, allows interactive mode (default)
+   * - undefined: Uses default behavior (CI=false)
    */
   forceCI?: boolean;
 }
@@ -260,14 +262,41 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
   }
 
   /**
-   * Spawn claude CLI process via shell
+   * C2: Get random backoff delay for retry
    */
-  async spawn(options?: { cwd?: string }): Promise<IPtyProcess> {
+  private getRetryDelay(): number {
+    const min = CONFIG.SPAWN_RETRY_DELAY_MIN;
+    const max = CONFIG.SPAWN_RETRY_DELAY_MAX;
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  /**
+   * C1: Cleanup PTY process on failure
+   */
+  private cleanupPty(ptyProcess: IPtyProcess | null): void {
+    if (ptyProcess && ptyProcess.pid > 0) {
+      try {
+        ptyProcess.kill();
+        this.log('pty-kill-success', { pid: ptyProcess.pid });
+      } catch (error) {
+        this.log('pty-kill-fail', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  /**
+   * Internal spawn implementation with cleanup support
+   */
+  private async spawnInternal(options?: { cwd?: string }): Promise<IPtyProcess> {
     const spawnStartTime = Date.now();
-    
+
     // C4: Verify claude installation before attempting spawn (fail fast)
     this.verifyClaudeInstallation();
-    
+
+    let ptyProcess: IPtyProcess | null = null;
+
     try {
       const { shell, args } = this.getShellConfig();
       const claudeCmd = this.getClaudeCommand();
@@ -282,10 +311,13 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       delete env.CLAUDE_CODE_PATH;
 
       // Force non-interactive / headless mode (configurable via forceCI)
-      // Default behavior: CI=true to prevent interactive prompts
-      // Set forceCI=false to disable and test interactive behavior
-      if (this.config.forceCI !== false) {
+      // Default behavior: CI=false (allows interactive mode)
+      // Set forceCI=true to force non-interactive mode
+      if (this.config.forceCI === true) {
         env.CI = 'true';
+      } else {
+        // Explicitly unset CI to ensure interactive mode
+        delete env.CI;
       }
       // Set dummy editor to prevent VS Code fallback
       env.EDITOR = 'cmd /c echo';
@@ -298,7 +330,7 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         const paths = env[pathKey].split(';'); // Windows delimiter
         const filteredPaths = paths.filter(p => {
           const lower = p.toLowerCase();
-          return !lower.includes('microsoft vs code') && 
+          return !lower.includes('microsoft vs code') &&
                  !lower.includes('vscode') &&
                  !lower.includes('visual studio code');
         });
@@ -333,7 +365,7 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         rows: CONFIG.TERM_ROWS,
       };
 
-      const ptyProcess = pty.spawn(shell, args, spawnOptions) as unknown as IPtyProcess;
+      ptyProcess = pty.spawn(shell, args, spawnOptions) as unknown as IPtyProcess;
 
       // C1: Wait for shell to initialize with timing
       const shellReadyStart = Date.now();
@@ -355,6 +387,9 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       this.log('spawn-complete', { totalElapsedMs: Date.now() - spawnStartTime });
       return ptyProcess;
     } catch (error) {
+      // C1: Cleanup PTY on error
+      this.cleanupPty(ptyProcess);
+
       // C1: Log spawn failure with ring buffer dump
       this.log('spawn-error', {
         error: error instanceof Error ? error.message : String(error),
@@ -365,6 +400,56 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         'claude-code',
         error instanceof Error ? error : new Error(String(error))
       );
+    }
+  }
+
+  /**
+   * Spawn claude CLI process via shell
+   * C2: Includes single retry on timeout with backoff
+   */
+  async spawn(options?: { cwd?: string }): Promise<IPtyProcess> {
+    let lastError: Error | null = null;
+
+    try {
+      return await this.spawnInternal(options);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      const errorMessage = lastError.message.toLowerCase();
+
+      // C2: Check if error is retryable (timeout only)
+      // PATH_ERROR and AUTH_REQUIRED should fail fast
+      const isTimeout = errorMessage.includes('timeout') &&
+                       !errorMessage.includes('path_error') &&
+                       !errorMessage.includes('auth_required');
+
+      if (!isTimeout) {
+        // Non-timeout errors: fail fast without retry
+        this.log('spawn-fail-fast', {
+          reason: 'non-timeout-error',
+          error: lastError.message,
+        });
+        throw lastError;
+      }
+
+      // C2: Retry once with backoff for timeout errors
+      const retryDelay = this.getRetryDelay();
+      this.log('spawn-retry', {
+        attempt: 1,
+        delayMs: retryDelay,
+        originalError: lastError.message,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+
+      try {
+        return await this.spawnInternal(options);
+      } catch (retryError) {
+        const finalError = retryError instanceof Error ? retryError : new Error(String(retryError));
+        this.log('spawn-retry-failed', {
+          error: finalError.message,
+        });
+        throw new ProviderSpawnError('claude-code', finalError);
+      }
     }
   }
 
@@ -579,15 +664,18 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
 
   /**
    * Wait for initialization prompt
+   * C3: Activity-based timeout extension - resets timeout when data arrives
    * Uses robust pattern detection and includes ring buffer dump on timeout
    */
   private async waitForPrompt(ptyProcess: IPtyProcess, timeout: number): Promise<void> {
     // C2: Clear startup buffer before waiting
     this.startupBuffer = [];
     let accumulatedBuffer = '';
-    
+    const startTime = Date.now();
+
     return new Promise<void>((resolve, reject) => {
       let timeoutHandle: NodeJS.Timeout;
+      let totalElapsed = 0;
 
       const cleanup = () => {
         ptyProcess.removeListener('data', onData);
@@ -598,7 +686,31 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         // C2: Push to startup ring buffer for diagnostics
         this.pushStartupLog(data);
         accumulatedBuffer += data;
-        
+
+        // C3: Reset timeout when data arrives (activity-based extension)
+        // Only extend if we haven't exceeded the original timeout significantly
+        if (totalElapsed < timeout * 2) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = setTimeout(() => {
+            cleanup();
+            const bufferDump = this.dumpStartupBuffer();
+            const failureType = this.classifyFailure(bufferDump);
+
+            this.log('waitForPrompt-timeout', {
+              failureType,
+              timeoutMs: timeout,
+              totalElapsedMs: Date.now() - startTime,
+              bufferLength: bufferDump.length,
+              bufferPreview: bufferDump.slice(-500),
+            });
+
+            reject(new Error(
+              `Claude CLI init timeout [${failureType}] after ${Date.now() - startTime}ms. ` +
+              `Buffer preview: ${bufferDump.slice(-300).replace(/\n/g, '\\n')}`
+            ));
+          }, timeout);
+        }
+
         // Handle permissions during startup
         this.checkAndHandlePermissions(data, ptyProcess);
 
@@ -611,19 +723,20 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
 
       ptyProcess.on('data', onData);
 
+      // Initial timeout
       timeoutHandle = setTimeout(() => {
         cleanup();
-        // C2: Dump ring buffer and classify failure on timeout
         const bufferDump = this.dumpStartupBuffer();
         const failureType = this.classifyFailure(bufferDump);
-        
+
         this.log('waitForPrompt-timeout', {
           failureType,
           timeoutMs: timeout,
+          totalElapsedMs: Date.now() - startTime,
           bufferLength: bufferDump.length,
           bufferPreview: bufferDump.slice(-500),
         });
-        
+
         reject(new Error(
           `Claude CLI init timeout [${failureType}] after ${timeout}ms. ` +
           `Buffer preview: ${bufferDump.slice(-300).replace(/\n/g, '\\n')}`

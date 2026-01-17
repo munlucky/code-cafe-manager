@@ -57,7 +57,7 @@ export const ProviderTerminalConfigSchema: z.ZodType<
 > = z.object({
   size: z.number().int().positive().default(8),
   timeout: z.number().int().positive().default(30000),
-  maxRetries: z.number().int().nonnegative().default(3),
+  maxRetries: z.number().int().nonnegative().default(1), // C2: Changed from 3 to 1 for single retry policy
 });
 
 export const TerminalPoolConfigSchema: z.ZodType<
