@@ -48,7 +48,16 @@ export class Orchestrator extends EventEmitter {
     const savedBaristas = await this.storage.loadBaristas();
     const savedOrders = await this.storage.loadOrders();
 
-    // TODO: 상태 복원 로직 (M1에서는 skip, 신규 시작)
+    // Orders 복원
+    if (savedOrders.length > 0) {
+      this.orderManager.restoreOrders(savedOrders);
+      console.log(`[Orchestrator] Restored ${savedOrders.length} orders`);
+    }
+
+    // Baristas는 현재 복원하지 않음 (프로세스 연결이 필요하므로 신규 시작)
+    if (savedBaristas.length > 0) {
+      console.log(`[Orchestrator] Found ${savedBaristas.length} saved baristas (not restoring)`);
+    }
   }
 
   /**

@@ -210,6 +210,24 @@ class OrderManager {
     );
 
     /**
+     * 오더 로그 조회
+     */
+    ipcMain.handle('order:getLog', async (_, orderId: string) =>
+      handleIpc(async () => {
+        return orchestrator.getOrderLog(orderId);
+      }, 'order:getLog')
+    );
+
+    /**
+     * 모든 영수증 조회
+     */
+    ipcMain.handle('receipt:getAll', async () =>
+      handleIpc(async () => {
+        return orchestrator.getReceipts();
+      }, 'receipt:getAll')
+    );
+
+    /**
      * 오더 터미널 출력 구독 (로그 파일 폴링 방식)
      */
   ipcMain.handle('order:subscribeOutput', async (event, orderId: string) =>

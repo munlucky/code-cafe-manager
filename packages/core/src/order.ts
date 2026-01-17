@@ -146,6 +146,22 @@ export class OrderManager extends EventEmitter {
   }
 
   /**
+   * 저장된 주문 복원 (앱 시작 시 호출)
+   */
+  restoreOrders(orders: Order[]): void {
+    this.orders.clear();
+    this.pendingQueue = [];
+
+    for (const order of orders) {
+      this.orders.set(order.id, order);
+      // PENDING 상태인 주문은 대기 큐에 추가
+      if (order.status === OrderStatus.PENDING) {
+        this.pendingQueue.push(order.id);
+      }
+    }
+  }
+
+  /**
    * 대기 중인 주문 조회
    */
   getPendingOrders(): Order[] {
