@@ -6,6 +6,16 @@
 import { create } from 'zustand';
 import type { PoolStatus, PoolMetrics } from '@codecafe/core';
 
+/**
+ * 출력 메트릭 (Order별)
+ */
+interface OrderOutputMetrics {
+  orderId: string;
+  totalChunks: number;
+  lastReceivedAt: Date | null;
+  status: 'idle' | 'running' | 'completed' | 'failed';
+}
+
 interface TerminalStoreState {
   // State
   status: PoolStatus | null;
@@ -14,11 +24,19 @@ interface TerminalStoreState {
   error: string | null;
   initialized: boolean;
 
+  // 실시간 출력 메트릭 (C2-3)
+  outputMetrics: Map<string, OrderOutputMetrics>;
+
   // Actions
   load: () => Promise<void>;
   initPool: (config: any) => Promise<void>;
   shutdown: () => Promise<void>;
   clearError: () => void;
+
+  // 메트릭 관련 액션
+  updateOutputMetrics: (orderId: string, chunks: number, status?: OrderOutputMetrics['status']) => void;
+  getOrderMetrics: (orderId: string) => OrderOutputMetrics | undefined;
+  clearOrderMetrics: (orderId: string) => void;
 }
 
 export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
@@ -28,6 +46,7 @@ export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
   loading: false,
   error: null,
   initialized: false,
+  outputMetrics: new Map(),
 
   // Actions
   load: async () => {
@@ -101,6 +120,7 @@ export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
         initialized: false,
         status: null,
         metrics: null,
+        outputMetrics: new Map(),
       });
     } catch (error) {
       set({
@@ -113,5 +133,34 @@ export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
 
   clearError: () => {
     set({ error: null });
+  },
+
+  // 메트릭 관련 액션
+  updateOutputMetrics: (orderId: string, chunks: number, status?: OrderOutputMetrics['status']) => {
+    set((state) => {
+      const newMetrics = new Map(state.outputMetrics);
+      const existing = newMetrics.get(orderId);
+
+      newMetrics.set(orderId, {
+        orderId,
+        totalChunks: chunks,
+        lastReceivedAt: new Date(),
+        status: status || existing?.status || 'running',
+      });
+
+      return { outputMetrics: newMetrics };
+    });
+  },
+
+  getOrderMetrics: (orderId: string) => {
+    return get().outputMetrics.get(orderId);
+  },
+
+  clearOrderMetrics: (orderId: string) => {
+    set((state) => {
+      const newMetrics = new Map(state.outputMetrics);
+      newMetrics.delete(orderId);
+      return { outputMetrics: newMetrics };
+    });
   },
 }));

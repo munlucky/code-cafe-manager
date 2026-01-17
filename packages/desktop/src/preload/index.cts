@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld('codecafe', {
     onEvent: (callback: (event: any) => void) => setupIpcListener('order:event', callback),
     onAssigned: (callback: (data: any) => void) => setupIpcListener('order:assigned', callback),
     onCompleted: (callback: (data: any) => void) => setupIpcListener('order:completed', callback),
+    onFailed: (callback: (data: any) => void) => setupIpcListener('order:failed', callback),
     onOutput: (callback: (event: any) => void) => setupIpcListener('order:output', callback),
   },
 

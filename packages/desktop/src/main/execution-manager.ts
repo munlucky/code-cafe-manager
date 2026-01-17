@@ -108,6 +108,18 @@ interface ExecutionManagerConfig {
 }
 
 /**
+ * 출력 메트릭 (Order별 IPC 전송 성능)
+ */
+interface OutputMetrics {
+  orderId: string;
+  totalChunks: number;
+  startTime: number;
+  lastSampleTime: number;
+  chunksAtLastSample: number;
+  orderStartTime?: number; // Order 시작 시각
+}
+
+/**
  * Execution Manager - Provider 실행을 관리
  */
 export class ExecutionManager {
@@ -118,6 +130,10 @@ export class ExecutionManager {
   private activeExecutions = new Map<string, { baristaId: string }>();
   // 이벤트 리스너 중복 등록 방지용 플래그
   private eventListenersRegistered = false;
+  // 출력 메트릭 (IPC 성능 모니터링용)
+  private outputMetrics = new Map<string, OutputMetrics>();
+  // 메트릭 샘플링 타이머
+  private metricsSamplingTimer: NodeJS.Timeout | null = null;
 
   constructor(config: ExecutionManagerConfig) {
     this.orchestrator = config.orchestrator;
@@ -149,6 +165,9 @@ export class ExecutionManager {
     // Orchestrator 이벤트 리스너 설정
     this.setupEventListeners();
 
+    // 메트릭 샘플링 타이머 시작 (10초마다 IPC 성능 로깅)
+    this.startMetricsSampling();
+
     console.log('[ExecutionManager] Started successfully');
   }
 
@@ -157,6 +176,12 @@ export class ExecutionManager {
    */
   async stop(): Promise<void> {
     console.log('[ExecutionManager] Stopping...');
+
+    // 메트릭 샘플링 타이머 정리
+    if (this.metricsSamplingTimer) {
+      clearInterval(this.metricsSamplingTimer);
+      this.metricsSamplingTimer = null;
+    }
 
     // Barista Engine 이벤트 리스너 제거
     if (this.baristaEngine) {
@@ -174,6 +199,9 @@ export class ExecutionManager {
       await this.terminalPool.dispose();
       this.terminalPool = null;
     }
+
+    // 메트릭 정리
+    this.outputMetrics.clear();
 
     // 플래그 초기화
     this.eventListenersRegistered = false;
@@ -230,6 +258,22 @@ export class ExecutionManager {
 
     // order:output - 터미널 출력
     this.baristaEngine.on('order:output', (data: { orderId: string; data: string }) => {
+      const now = Date.now();
+
+      // 메트릭 수집
+      let metrics = this.outputMetrics.get(data.orderId);
+      if (!metrics) {
+        metrics = {
+          orderId: data.orderId,
+          totalChunks: 0,
+          startTime: now,
+          lastSampleTime: now,
+          chunksAtLastSample: 0,
+        };
+        this.outputMetrics.set(data.orderId, metrics);
+      }
+      metrics.totalChunks++;
+
       // 1. UI 전송 (실시간 보기용) - order:output 형식으로 전송 (ANSI를 HTML로 변환)
       this.sendToRenderer('order:output', {
         orderId: data.orderId,
@@ -246,23 +290,65 @@ export class ExecutionManager {
 
     // Session 관련 이벤트들
     this.baristaEngine.on('order:started', (data: OrderStartedEvent) => {
-      console.log('[ExecutionManager] Order started (session):', data.orderId);
+      const now = Date.now();
+
+      // 메트릭 초기화 및 시작 시각 기록
+      let metrics = this.outputMetrics.get(data.orderId);
+      if (!metrics) {
+        metrics = {
+          orderId: data.orderId,
+          totalChunks: 0,
+          startTime: now,
+          lastSampleTime: now,
+          chunksAtLastSample: 0,
+          orderStartTime: now,
+        };
+      } else {
+        metrics.orderStartTime = now;
+      }
+      this.outputMetrics.set(data.orderId, metrics);
+
+      console.log(`[ExecutionManager] Order STARTED: ${data.orderId} at ${new Date(now).toISOString()}`);
       this.sendToRenderer('order:session-started', data);
     });
 
     this.baristaEngine.on('order:completed', (data: OrderCompletedEvent) => {
-      console.log('[ExecutionManager] Order completed (session):', data.orderId);
+      const now = Date.now();
+      const metrics = this.outputMetrics.get(data.orderId);
+      const duration = metrics?.orderStartTime
+        ? now - metrics.orderStartTime
+        : 0;
+
+      console.log(`[ExecutionManager] Order COMPLETED: ${data.orderId} | Duration: ${duration}ms | Total chunks: ${metrics?.totalChunks || 0}`);
       this.sendToRenderer('order:session-completed', data);
+      // Renderer에서 completed 상태 감지용
+      this.sendToRenderer('order:completed', data);
+
+      // 완료된 Order의 메트릭는 일정 시간 후 정리
+      setTimeout(() => {
+        this.outputMetrics.delete(data.orderId);
+      }, 60000); // 1분 후 정리
     });
 
     this.baristaEngine.on('order:failed', (data: OrderFailedEvent) => {
-      console.log('[ExecutionManager] Order failed (session):', data.orderId);
+      const now = Date.now();
+      const metrics = this.outputMetrics.get(data.orderId);
+      const duration = metrics?.orderStartTime
+        ? now - metrics.orderStartTime
+        : 0;
+
+      console.error(`[ExecutionManager] Order FAILED: ${data.orderId} | Duration: ${duration}ms | Total chunks: ${metrics?.totalChunks || 0} | Error: ${data.error || 'Unknown'}`);
       this.sendToRenderer('order:session-failed', data);
+      // Renderer에서 failed 상태 감지용
+      this.sendToRenderer('order:failed', data);
+
+      // 실패한 Order의 메트릭 정리
+      this.outputMetrics.delete(data.orderId);
     });
 
-    // Stage 이벤트들
+    // Stage 이벤트들 (로깅 강화)
     this.baristaEngine.on('stage:started', (data: StageStartedEvent) => {
-      console.log('[ExecutionManager] Stage started:', data.stageId);
+      console.log(`[ExecutionManager] Stage STARTED: ${data.stageId} (Order: ${data.orderId}, Provider: ${data.provider})`);
       this.sendToRenderer('order:stage-started', {
         orderId: data.orderId,
         stageId: data.stageId,
@@ -271,7 +357,8 @@ export class ExecutionManager {
     });
 
     this.baristaEngine.on('stage:completed', (data: StageCompletedEvent) => {
-      console.log('[ExecutionManager] Stage completed:', data.stageId);
+      const duration = data.duration || 0;
+      console.log(`[ExecutionManager] Stage COMPLETED: ${data.stageId} (Order: ${data.orderId}) | Duration: ${duration}ms`);
       this.sendToRenderer('order:stage-completed', {
         orderId: data.orderId,
         stageId: data.stageId,
@@ -281,7 +368,7 @@ export class ExecutionManager {
     });
 
     this.baristaEngine.on('stage:failed', (data: StageFailedEvent) => {
-      console.log('[ExecutionManager] Stage failed:', data.stageId);
+      console.error(`[ExecutionManager] Stage FAILED: ${data.stageId} (Order: ${data.orderId}) | Error: ${data.error || 'Unknown'}`);
       this.sendToRenderer('order:stage-failed', {
         orderId: data.orderId,
         stageId: data.stageId,
@@ -315,6 +402,45 @@ export class ExecutionManager {
       console.log('[ExecutionManager] Received order:input:', data);
       await this.handleOrderInput(data.orderId, data.message);
     });
+  }
+
+  /**
+   * 메트릭 샘플링 타이머 시작
+   * 10초마다 활성 Order들의 IPC 성능 메트릭을 로깅
+   */
+  private startMetricsSampling(): void {
+    // 기존 타이머 정리
+    if (this.metricsSamplingTimer) {
+      clearInterval(this.metricsSamplingTimer);
+    }
+
+    // 10초마다 샘플링
+    this.metricsSamplingTimer = setInterval(() => {
+      const now = Date.now();
+      const activeOrders = Array.from(this.outputMetrics.entries());
+
+      if (activeOrders.length === 0) {
+        return; // 활성 Order가 없으면 로그 생략
+      }
+
+      console.log('[ExecutionManager] === IPC Performance Metrics ===');
+
+      for (const [orderId, metrics] of activeOrders) {
+        const elapsedSinceLastSample = now - metrics.lastSampleTime;
+        const chunksSinceLastSample = metrics.totalChunks - metrics.chunksAtLastSample;
+        const chunksPerSec = elapsedSinceLastSample > 0
+          ? (chunksSinceLastSample / (elapsedSinceLastSample / 1000)).toFixed(2)
+          : '0';
+
+        console.log(`[ExecutionManager] Order ${orderId}: total=${metrics.totalChunks} chunks, ${chunksPerSec} chunks/sec (last ${elapsedSinceLastSample}ms)`);
+
+        // 샘플링 시점 업데이트
+        metrics.lastSampleTime = now;
+        metrics.chunksAtLastSample = metrics.totalChunks;
+      }
+
+      console.log('[ExecutionManager] === End of Metrics ===');
+    }, 10000); // 10초
   }
 
   /**

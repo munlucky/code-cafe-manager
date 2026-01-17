@@ -18,6 +18,11 @@ interface TerminalOutputPanelProps {
 }
 
 /**
+ * 출력 상태 타입
+ */
+type OutputStatus = 'initializing' | 'ready' | 'running' | 'completed' | 'failed';
+
+/**
  * Strip ANSI escape codes from text
  */
 function stripAnsiCodes(text: string): string {
@@ -29,11 +34,30 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
   const [output, setOutput] = useState<OrderOutputEvent[]>([]);
   const [autoScroll, setAutoScroll] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<OutputStatus>('initializing');
+  const [lastReceivedAt, setLastReceivedAt] = useState<Date | null>(null);
   const outputRef = useRef<HTMLPreElement>(null);
+  const logCounterRef = useRef(0);
+  const lastLogTimeRef = useRef(0);
 
   // 출력 이벤트 핸들러 (useCallback으로 안정적인 참조 유지)
   const handleOutput = useCallback((event: OrderOutputEvent) => {
     if (event.orderId === orderId) {
+      const now = Date.now();
+      logCounterRef.current++;
+
+      // 수신 로깅: 50번째마다 또는 5초 이상 간격 시
+      const shouldLog = logCounterRef.current % 50 === 0 ||
+        (now - lastLogTimeRef.current > 5000 && logCounterRef.current > 0);
+
+      if (shouldLog) {
+        console.log(`[TerminalOutputPanel] Received ${logCounterRef.current} chunks for order ${orderId}`);
+        lastLogTimeRef.current = now;
+      }
+
+      // 상태 업데이트
+      setLastReceivedAt(new Date(event.timestamp));
+      setStatus('running');
       setOutput((prev) => [...prev, event]);
     }
   }, [orderId]);
@@ -48,6 +72,9 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
 
       setLoading(true);
       setOutput([]);
+      setStatus('initializing');
+      logCounterRef.current = 0;
+      lastLogTimeRef.current = 0;
 
       // 구독 시작
       const result = await window.codecafe.order.subscribeOutput(orderId);
@@ -57,9 +84,11 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
       if (result.success) {
         console.log('[TerminalOutputPanel] Subscribed to order:', orderId);
         setLoading(false);
+        setStatus('ready');
       } else {
         console.error('[TerminalOutputPanel] Failed to subscribe:', result.error);
         setLoading(false);
+        setStatus('ready'); // 실패해도 ready로 표시 (error 표시는 별도)
       }
     };
 
@@ -69,11 +98,31 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
     // 출력 이벤트 리스너
     const cleanupListener = window.codecafe.order.onOutput(handleOutput);
 
+    // 완료/실패 이벤트 리스너
+    const handleCompleted = (data: any) => {
+      if (data.orderId === orderId) {
+        console.log('[TerminalOutputPanel] Order completed:', orderId);
+        setStatus('completed');
+      }
+    };
+
+    const handleFailed = (data: any) => {
+      if (data.orderId === orderId) {
+        console.error('[TerminalOutputPanel] Order failed:', orderId, data.error);
+        setStatus('failed');
+      }
+    };
+
+    const cleanupCompleted = window.codecafe.order.onCompleted(handleCompleted);
+    const cleanupFailed = window.codecafe.order.onFailed?.(handleFailed);
+
     return () => {
       cleanupCalled = true;
       // 구독 해제
       window.codecafe.order.unsubscribeOutput(orderId);
       if (cleanupListener) cleanupListener();
+      if (cleanupCompleted) cleanupCompleted();
+      if (cleanupFailed) cleanupFailed();
       console.log('[TerminalOutputPanel] Cleanup for order:', orderId);
     };
   }, [orderId, handleOutput]);
@@ -110,8 +159,26 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
     <div className="flex flex-col h-full bg-background border border-border rounded">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-bone/5">
-        <div className="text-sm text-gray-500">
-          Order: <span className="text-bone font-medium">{orderId}</span>
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-gray-500">
+            Order: <span className="text-bone font-medium">{orderId}</span>
+          </div>
+          {/* 상태 표시 */}
+          <div className="flex items-center gap-2">
+            <span className={`text-xs px-2 py-0.5 rounded ${
+              status === 'initializing' ? 'bg-yellow-500/20 text-yellow-400' :
+              status === 'running' ? 'bg-green-500/20 text-green-400' :
+              status === 'completed' ? 'bg-blue-500/20 text-blue-400' :
+              status === 'failed' ? 'bg-red-500/20 text-red-400' :
+              'bg-gray-500/20 text-gray-400'
+            }`}>
+              {status === 'initializing' ? 'Initializing...' :
+               status === 'running' ? 'Running' :
+               status === 'completed' ? 'Completed' :
+               status === 'failed' ? 'Failed' :
+               'Ready'}
+            </span>
+          </div>
         </div>
         <button
           onClick={() => setAutoScroll(!autoScroll)}
@@ -148,8 +215,11 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
       </pre>
 
       {/* Footer */}
-      <div className="px-4 py-2 border-t border-border bg-bone/5 text-xs text-gray-500">
-        {output.length} lines
+      <div className="px-4 py-2 border-t border-border bg-bone/5 text-xs text-gray-500 flex justify-between">
+        <span>{output.length} lines</span>
+        {lastReceivedAt && (
+          <span>Last received: {formatTimestamp(lastReceivedAt.toISOString())}</span>
+        )}
       </div>
     </div>
   );
