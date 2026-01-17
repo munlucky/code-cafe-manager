@@ -72,6 +72,40 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
   }
 
   /**
+   * C1: Check if prompt is detected using robust patterns
+   * Supports unicode prompt characters and case-insensitive matching
+   */
+  private isPromptDetected(buffer: string): boolean {
+    // Unicode prompt characters: >, ›, », ❯
+    const promptChars = '[>›»❯]';
+    const patterns = [
+      new RegExp(`claude\\s*${promptChars}`, 'i'),  // claude>, claude ›, etc.
+      /ready/i,
+      /welcome/i,
+      new RegExp(`${promptChars}\\s*$`),  // Prompt character at end of output
+    ];
+    return patterns.some(p => p.test(buffer));
+  }
+
+  /**
+   * C2: Classify failure cause from ring buffer content
+   * Returns: PATH_ERROR | AUTH_REQUIRED | UPDATE_PROMPT | PROMPT_DETECTION
+   */
+  private classifyFailure(buffer: string): string {
+    const lower = buffer.toLowerCase();
+    if (lower.includes('not found') || lower.includes('not recognized') || lower.includes('command not found')) {
+      return 'PATH_ERROR';
+    }
+    if (lower.includes('login') || lower.includes('permission') || lower.includes('authenticate') || lower.includes('unauthorized')) {
+      return 'AUTH_REQUIRED';
+    }
+    if (lower.includes('update') || lower.includes('upgrade') || lower.includes('new version')) {
+      return 'UPDATE_PROMPT';
+    }
+    return 'PROMPT_DETECTION';
+  }
+
+  /**
    * Get shell configuration based on platform
    */
   private getShellConfig(): { shell: string; args: string[] } {
@@ -455,29 +489,57 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
 
   /**
    * Wait for initialization prompt
+   * Uses robust pattern detection and includes ring buffer dump on timeout
    */
   private async waitForPrompt(ptyProcess: IPtyProcess, timeout: number): Promise<void> {
     // C2: Clear startup buffer before waiting
     this.startupBuffer = [];
+    let accumulatedBuffer = '';
     
-    return ClaudeCodeAdapter._createEventPromise<void>(
-      ptyProcess,
-      'data',
-      timeout,
-      `Claude CLI initialization timeout after ${timeout}ms`,
-      (data: string, resolve, reject, cleanup) => {
+    return new Promise<void>((resolve, reject) => {
+      let timeoutHandle: NodeJS.Timeout;
+
+      const cleanup = () => {
+        ptyProcess.removeListener('data', onData);
+        clearTimeout(timeoutHandle);
+      };
+
+      const onData = (data: string) => {
         // C2: Push to startup ring buffer for diagnostics
         this.pushStartupLog(data);
+        accumulatedBuffer += data;
         
         // Handle permissions during startup
         this.checkAndHandlePermissions(data, ptyProcess);
 
-        if (data.includes('claude>') || data.includes('ready') || data.includes('Welcome')) {
+        // C1: Use robust pattern detection
+        if (this.isPromptDetected(accumulatedBuffer)) {
           cleanup();
           resolve();
         }
-      }
-    );
+      };
+
+      ptyProcess.on('data', onData);
+
+      timeoutHandle = setTimeout(() => {
+        cleanup();
+        // C2: Dump ring buffer and classify failure on timeout
+        const bufferDump = this.dumpStartupBuffer();
+        const failureType = this.classifyFailure(bufferDump);
+        
+        this.log('waitForPrompt-timeout', {
+          failureType,
+          timeoutMs: timeout,
+          bufferLength: bufferDump.length,
+          bufferPreview: bufferDump.slice(-500),
+        });
+        
+        reject(new Error(
+          `Claude CLI init timeout [${failureType}] after ${timeout}ms. ` +
+          `Buffer preview: ${bufferDump.slice(-300).replace(/\n/g, '\\n')}`
+        ));
+      }, timeout);
+    });
   }
 
   private static _createEventPromise<T>(
