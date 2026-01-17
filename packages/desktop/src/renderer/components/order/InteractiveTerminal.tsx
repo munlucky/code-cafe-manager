@@ -3,7 +3,7 @@
  * 오더의 터미널 출력을 표시하고 사용자 입력을 받는 컴포넌트
  */
 
-import { useEffect, useState, useRef, type KeyboardEvent } from 'react';
+import { useEffect, useState, useRef, useCallback, type KeyboardEvent } from 'react';
 import { Send, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../../utils/cn';
@@ -22,6 +22,26 @@ interface InteractiveTerminalProps {
   isRunning?: boolean;
 }
 
+/**
+ * ANSI escape 코드 제거
+ * 터미널 색상, 커서 제어 등의 코드를 strip
+ */
+function stripAnsi(text: string): string {
+  // ANSI escape 코드 패턴들
+  // - CSI sequences: ESC[ ... 또는 \x1b[ ...
+  // - OSC sequences: ESC] ... ST
+  // - Other escape sequences
+  const ansiPattern = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[PX^_][^\x1b]*\x1b\\|\x1b[@-Z\\-_]|\[\?[0-9;]*[a-zA-Z]|\[[0-9;]*[a-zA-Z]/g;
+  return text.replace(ansiPattern, '');
+}
+
+/**
+ * 로그 항목 고유 키 생성 (중복 검사용)
+ */
+function getLogKey(event: OrderOutputEvent): string {
+  return `${event.timestamp}:${event.content}`;
+}
+
 export function InteractiveTerminal({
   orderId,
   onSendInput,
@@ -37,10 +57,35 @@ export function InteractiveTerminal({
   const [sending, setSending] = useState(false);
   const outputRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // 중복 검사를 위한 Set (타임스탬프+내용 기반)
+  const seenKeysRef = useRef<Set<string>>(new Set());
+
+  // 중복 없이 로그 추가
+  const addOutputEvent = useCallback((event: OrderOutputEvent) => {
+    const key = getLogKey(event);
+    if (seenKeysRef.current.has(key)) {
+      return; // 중복 무시
+    }
+    seenKeysRef.current.add(key);
+
+    // ANSI escape 코드 제거
+    const cleanedEvent: OrderOutputEvent = {
+      ...event,
+      content: stripAnsi(event.content),
+    };
+
+    // 빈 내용 필터링
+    if (!cleanedEvent.content.trim()) {
+      return;
+    }
+
+    setOutput((prev) => [...prev, cleanedEvent]);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
     setOutput([]);
+    seenKeysRef.current.clear();
 
     // 구독 시작
     window.codecafe.order.subscribeOutput(orderId).then((result: any) => {
@@ -56,7 +101,7 @@ export function InteractiveTerminal({
     // 출력 이벤트 리스너
     const cleanup = window.codecafe.order.onOutput((event: OrderOutputEvent) => {
       if (event.orderId === orderId) {
-        setOutput((prev) => [...prev, event]);
+        addOutputEvent(event);
       }
     });
 
@@ -64,7 +109,7 @@ export function InteractiveTerminal({
       window.codecafe.order.unsubscribeOutput(orderId);
       if (cleanup) cleanup();
     };
-  }, [orderId]);
+  }, [orderId, addOutputEvent]);
 
   // Auto-scroll
   useEffect(() => {
