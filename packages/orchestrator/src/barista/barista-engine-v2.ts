@@ -235,17 +235,17 @@ export class BaristaEngineV2 extends EventEmitter {
   ): Promise<void> {
     console.log(`BaristaEngineV2: Executing legacy order ${order.id}`);
 
-    const context: Record<string, unknown> = {
-      orderId: order.id,
-      workflowId: order.workflowId,
-      workflowName: order.workflowName,
-      vars: order.vars || {},
-    };
+    // order.prompt는 ExecutionManager에서 추가됨
+    const prompt = (order as any).prompt;
+    if (!prompt) {
+      throw new Error(`No prompt found for legacy order ${order.id}`);
+    }
 
-    this.addRoleContextToRecord(context, role);
+    console.log(`BaristaEngineV2: Sending prompt to terminal: ${prompt.substring(0, 100)}...`);
 
     const adapter = ProviderAdapterFactory.get(barista.provider);
-    const result = await adapter.execute(lease.terminal.process, context, (data) => {
+    // 프롬프트를 직접 문자열로 전달 (JSON.stringify 방지)
+    const result = await adapter.execute(lease.terminal.process, prompt, (data) => {
       this.emit('order:output', { orderId: order.id, data });
     });
 
