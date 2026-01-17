@@ -25,6 +25,62 @@ interface Cafe {
 }
 
 /**
+ * 로그 청크 타입
+ */
+interface LogChunk {
+  timestamp: string;
+  message: string;
+}
+
+/**
+ * 로그 파일 내용을 타임스탬프 기준으로 청크 분리
+ * 여러 줄 메시지를 올바르게 처리
+ *
+ * 형식: [YYYY-MM-DDTHH:mm:ss.sssZ] message (여러 줄 가능)
+ */
+function parseLogChunks(content: string): LogChunk[] {
+  const chunks: LogChunk[] = [];
+  // ISO 타임스탬프 패턴: [2026-01-17T10:30:45.123Z]
+  const timestampPattern = /^\[(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\]\s*/;
+
+  const lines = content.split('\n');
+  let currentChunk: LogChunk | null = null;
+
+  for (const line of lines) {
+    const match = line.match(timestampPattern);
+
+    if (match) {
+      // 이전 청크 저장
+      if (currentChunk) {
+        chunks.push(currentChunk);
+      }
+
+      // 새 청크 시작
+      currentChunk = {
+        timestamp: match[1],
+        message: line.slice(match[0].length),
+      };
+    } else if (currentChunk) {
+      // 여러 줄 메시지: 현재 청크에 추가
+      currentChunk.message += '\n' + line;
+    } else if (line.trim()) {
+      // 타임스탬프 없는 첫 줄 (비정상적인 경우)
+      chunks.push({
+        timestamp: new Date().toISOString(),
+        message: line,
+      });
+    }
+  }
+
+  // 마지막 청크 저장
+  if (currentChunk) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
+}
+
+/**
  * Cafe Registry 로드
  */
 async function loadCafeRegistry(): Promise<Cafe[]> {
@@ -307,7 +363,10 @@ class OrderManager {
     );
 
     /**
-     * 오더 터미널 출력 구독 (로그 파일 폴링 방식)
+     * 오더 터미널 출력 구독
+     * - 기존 로그는 파일에서 한 번 읽어서 전송 (히스토리)
+     * - 실시간 출력은 ExecutionManager에서 order:output 이벤트로 전송
+     * - 폴링 제거하여 로그 중복 방지
      */
   ipcMain.handle('order:subscribeOutput', async (event, orderId: string) =>
     handleIpc(async () => {
@@ -318,67 +377,40 @@ class OrderManager {
       console.log('[Order IPC] Subscribe to order output:', orderId);
       console.log('[Order IPC] Log path:', logPath);
 
-      // 로그 파일 존재 확인
-      if (!existsSync(logPath)) {
-        console.warn('[Order IPC] Log file not found (will retry):', logPath);
-      }
-
-      let lastPosition = 0;
-
-      // 1초마다 로그 파일 읽기 (더 빠른 업데이트)
-      const interval = setInterval(async () => {
-        try {
-          if (!existsSync(logPath)) {
-            return;
-          }
-
-          const content = await fs.readFile(logPath, 'utf-8');
-          const newContent = content.slice(lastPosition);
-
-          if (newContent.length > 0) {
-            lastPosition = content.length;
-
-            // 일반 텍스트 형식 파싱: [timestamp] message
-            const lines = newContent.trim().split('\n').filter(Boolean);
-
-            for (const line of lines) {
-              // [2026-01-17T10:30:45.123Z] message 형식 파싱
-              const timestampMatch = line.match(/^\[([^\]]+)\]\s*(.*)$/);
-
-              if (timestampMatch) {
-                event.sender.send('order:output', {
-                  orderId,
-                  timestamp: timestampMatch[1],
-                  type: 'stdout',
-                  content: timestampMatch[2],
-                });
-              } else {
-                // 타임스탬프 없는 경우 원본 전송
-                event.sender.send('order:output', {
-                  orderId,
-                  timestamp: new Date().toISOString(),
-                  type: 'stdout',
-                  content: line,
-                });
-              }
-            }
-          }
-        } catch (error) {
-          console.error('[Order IPC] Failed to read log file:', error);
-        }
-      }, 1000);
-
-      // 구독 해제를 위해 interval ID 저장
+      // 기존 interval 정리 (중복 구독 방지)
       const intervalKey = `order:output:${orderId}`;
-
-      // 기존 interval 정리
       const existingInterval = OrderManager.outputIntervals.get(intervalKey);
       if (existingInterval) {
         clearInterval(existingInterval);
+        OrderManager.outputIntervals.delete(intervalKey);
       }
 
-      OrderManager.outputIntervals.set(intervalKey, interval);
+      // 기존 로그 파일이 있으면 히스토리로 한 번 전송
+      if (existsSync(logPath)) {
+        try {
+          const content = await fs.readFile(logPath, 'utf-8');
+          if (content.trim()) {
+            // 타임스탬프 패턴으로 로그 청크 분리 (여러 줄 메시지 지원)
+            const chunks = parseLogChunks(content);
 
+            for (const chunk of chunks) {
+              event.sender.send('order:output', {
+                orderId,
+                timestamp: chunk.timestamp,
+                type: 'stdout',
+                content: chunk.message,
+              });
+            }
+
+            console.log(`[Order IPC] Sent ${chunks.length} history entries for order: ${orderId}`);
+          }
+        } catch (error) {
+          console.error('[Order IPC] Failed to read history log file:', error);
+        }
+      }
+
+      // 실시간 출력은 ExecutionManager에서 order:output 이벤트로 직접 전송됨
+      // 폴링 없이 구독 완료 반환
       return { subscribed: true };
     }, 'order:subscribeOutput')
   );
