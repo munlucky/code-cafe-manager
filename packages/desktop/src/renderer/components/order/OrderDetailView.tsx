@@ -9,9 +9,9 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { StatusBadge } from '../ui/Badge';
 import { InteractiveTerminal } from './InteractiveTerminal';
-import { OrderStageProgress, OrderStageProgressBar, type StageInfo } from './OrderStageProgress';
+import { OrderStageProgress, OrderStageProgressBar, type StageInfo, type StageStatus } from './OrderStageProgress';
 import { formatRelativeTime } from '../../utils/formatters';
-import type { Order } from '../../types/models';
+import type { Order, ExtendedWorkflowInfo } from '../../types/models';
 import { OrderStatus } from '../../types/models';
 
 interface OrderDetailViewProps {
@@ -26,8 +26,27 @@ export function OrderDetailView({
   onCancel,
 }: OrderDetailViewProps): JSX.Element {
   const [currentOrder, setCurrentOrder] = useState<Order>(order);
+  const [workflow, setWorkflow] = useState<ExtendedWorkflowInfo | null>(null);
+  const [currentStageIndex, setCurrentStageIndex] = useState(0);
   const isRunning = currentOrder.status === OrderStatus.RUNNING;
   const isPending = currentOrder.status === OrderStatus.PENDING;
+  const isCompleted = currentOrder.status === OrderStatus.COMPLETED;
+  const isFailed = currentOrder.status === OrderStatus.FAILED;
+
+  // Workflow 정보 가져오기
+  useEffect(() => {
+    async function fetchWorkflow() {
+      try {
+        const response = await window.codecafe.workflow.get(order.workflowId);
+        if (response.success && response.data) {
+          setWorkflow(response.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch workflow:', error);
+      }
+    }
+    fetchWorkflow();
+  }, [order.workflowId]);
 
   // 주기적으로 Order 상태 갱신
   useEffect(() => {
@@ -45,6 +64,29 @@ export function OrderDetailView({
     return () => clearInterval(interval);
   }, [order.id]);
 
+  // 실행 진행 이벤트 리스너
+  useEffect(() => {
+    const cleanup = window.codecafe.order.onOutput((event: any) => {
+      if (event.orderId === order.id && event.type === 'system') {
+        // Stage 변경 감지 (예: "[STAGE] code" 형식의 메시지)
+        const stageMatch = event.content?.match(/\[STAGE\]\s*(\w+)/i);
+        if (stageMatch && workflow) {
+          const stageName = stageMatch[1].toLowerCase();
+          const stageIdx = workflow.stages.findIndex(
+            (s) => s.toLowerCase() === stageName
+          );
+          if (stageIdx >= 0) {
+            setCurrentStageIndex(stageIdx);
+          }
+        }
+      }
+    });
+
+    return () => {
+      if (cleanup) cleanup();
+    };
+  }, [order.id, workflow]);
+
   // 사용자 입력 전송
   const handleSendInput = useCallback(async (message: string) => {
     const response = await window.codecafe.order.sendInput(order.id, message);
@@ -53,13 +95,33 @@ export function OrderDetailView({
     }
   }, [order.id]);
 
-  // Mock stages (실제로는 workflow 정보에서 가져와야 함)
-  const stages: StageInfo[] = [
-    { name: 'Plan', status: isRunning ? 'running' : 'pending' },
-    { name: 'Code', status: 'pending' },
-    { name: 'Review', status: 'pending' },
-    { name: 'Test', status: 'pending' },
-  ];
+  // Stage 정보 계산
+  const stages: StageInfo[] = (workflow?.stages || ['Plan', 'Code', 'Test']).map(
+    (stageName, index): StageInfo => {
+      let status: StageStatus = 'pending';
+
+      if (isCompleted) {
+        status = 'completed';
+      } else if (isFailed) {
+        if (index < currentStageIndex) {
+          status = 'completed';
+        } else if (index === currentStageIndex) {
+          status = 'failed';
+        }
+      } else if (isRunning) {
+        if (index < currentStageIndex) {
+          status = 'completed';
+        } else if (index === currentStageIndex) {
+          status = 'running';
+        }
+      }
+
+      return {
+        name: stageName.charAt(0).toUpperCase() + stageName.slice(1),
+        status,
+      };
+    }
+  );
 
   return (
     <div className="flex flex-col h-full">

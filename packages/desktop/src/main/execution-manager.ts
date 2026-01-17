@@ -1,0 +1,264 @@
+/**
+ * Execution Manager
+ * Orchestrator의 order:execution-started 이벤트를 받아 BaristaEngineV2를 통해 실제 실행
+ */
+
+import { BrowserWindow } from 'electron';
+import { Orchestrator, Order, Barista } from '@codecafe/core';
+import { BaristaEngineV2, TerminalPool, TerminalPoolConfig } from '@codecafe/orchestrator';
+
+interface ExecutionManagerConfig {
+  orchestrator: Orchestrator;
+  mainWindow: BrowserWindow | null;
+}
+
+/**
+ * Execution Manager - Provider 실행을 관리
+ */
+export class ExecutionManager {
+  private orchestrator: Orchestrator;
+  private mainWindow: BrowserWindow | null;
+  private terminalPool: TerminalPool | null = null;
+  private baristaEngine: BaristaEngineV2 | null = null;
+  private activeExecutions = new Map<string, { baristaId: string }>();
+
+  constructor(config: ExecutionManagerConfig) {
+    this.orchestrator = config.orchestrator;
+    this.mainWindow = config.mainWindow;
+  }
+
+  /**
+   * 실행 관리자 시작
+   */
+  async start(): Promise<void> {
+    console.log('[ExecutionManager] Starting...');
+
+    // Terminal Pool 초기화
+    await this.initTerminalPool();
+
+    // Barista Engine 초기화
+    this.baristaEngine = new BaristaEngineV2(this.terminalPool!);
+
+    // Orchestrator 이벤트 리스너 설정
+    this.setupEventListeners();
+
+    console.log('[ExecutionManager] Started successfully');
+  }
+
+  /**
+   * 실행 관리자 중지
+   */
+  async stop(): Promise<void> {
+    console.log('[ExecutionManager] Stopping...');
+
+    if (this.baristaEngine) {
+      await this.baristaEngine.dispose();
+      this.baristaEngine = null;
+    }
+
+    if (this.terminalPool) {
+      await this.terminalPool.dispose();
+      this.terminalPool = null;
+    }
+
+    console.log('[ExecutionManager] Stopped');
+  }
+
+  /**
+   * mainWindow 참조 업데이트
+   */
+  setMainWindow(window: BrowserWindow | null): void {
+    this.mainWindow = window;
+  }
+
+  /**
+   * Terminal Pool 초기화
+   */
+  private async initTerminalPool(): Promise<void> {
+    const config: TerminalPoolConfig = {
+      perProvider: {
+        'claude-code': {
+          size: 4,
+          timeout: 300000, // 5 minutes
+          maxRetries: 3,
+        },
+        codex: {
+          size: 2,
+          timeout: 300000,
+          maxRetries: 3,
+        },
+      },
+    };
+
+    this.terminalPool = new TerminalPool(config);
+    console.log('[ExecutionManager] Terminal pool initialized');
+  }
+
+  /**
+   * Orchestrator 이벤트 리스너 설정
+   */
+  private setupEventListeners(): void {
+    // order:execution-started 이벤트 처리
+    this.orchestrator.on('order:execution-started', async (data: { orderId: string; baristaId: string; prompt: string }) => {
+      console.log('[ExecutionManager] Received order:execution-started:', data);
+      await this.handleOrderExecution(data.orderId, data.baristaId, data.prompt);
+    });
+
+    // order:input 이벤트 처리
+    this.orchestrator.on('order:input', async (data: { orderId: string; message: string }) => {
+      console.log('[ExecutionManager] Received order:input:', data);
+      await this.handleOrderInput(data.orderId, data.message);
+    });
+  }
+
+  /**
+   * Order 실행 처리
+   */
+  private async handleOrderExecution(orderId: string, baristaId: string, prompt: string): Promise<void> {
+    if (!this.baristaEngine) {
+      console.error('[ExecutionManager] Barista engine not initialized');
+      await this.orchestrator.completeOrder(orderId, false, 'Execution engine not initialized');
+      return;
+    }
+
+    const order = this.orchestrator.getOrder(orderId);
+    const barista = this.orchestrator.getBarista(baristaId);
+
+    if (!order || !barista) {
+      console.error('[ExecutionManager] Order or Barista not found:', { orderId, baristaId });
+      await this.orchestrator.completeOrder(orderId, false, 'Order or Barista not found');
+      return;
+    }
+
+    this.activeExecutions.set(orderId, { baristaId });
+
+    // UI에 실행 시작 알림
+    this.sendToRenderer('order:execution-progress', {
+      orderId,
+      stage: 'starting',
+      message: 'Execution started',
+    });
+
+    try {
+      // 프롬프트를 order의 context에 추가
+      const executionOrder = {
+        ...order,
+        prompt,
+      };
+
+      // BaristaEngineV2를 통해 실행
+      await this.baristaEngine.executeOrder(executionOrder as Order, barista);
+
+      // 성공 처리
+      await this.orchestrator.completeOrder(orderId, true);
+
+      this.sendToRenderer('order:execution-progress', {
+        orderId,
+        stage: 'completed',
+        message: 'Execution completed successfully',
+      });
+
+    } catch (error: any) {
+      console.error('[ExecutionManager] Execution failed:', error);
+
+      // 실패 처리
+      await this.orchestrator.completeOrder(orderId, false, error.message || 'Execution failed');
+
+      this.sendToRenderer('order:execution-progress', {
+        orderId,
+        stage: 'failed',
+        message: error.message || 'Execution failed',
+        error: true,
+      });
+    } finally {
+      this.activeExecutions.delete(orderId);
+    }
+  }
+
+  /**
+   * Order 입력 처리
+   */
+  private async handleOrderInput(orderId: string, message: string): Promise<void> {
+    if (!this.baristaEngine) {
+      console.error('[ExecutionManager] Barista engine not initialized');
+      return;
+    }
+
+    const execution = this.activeExecutions.get(orderId);
+    if (!execution) {
+      console.warn('[ExecutionManager] No active execution for order:', orderId);
+      return;
+    }
+
+    // BaristaEngineV2의 activeExecutions에서 lease를 찾아 입력 전달
+    const activeExecs = this.baristaEngine.getActiveExecutions();
+    const exec = activeExecs.get(orderId);
+
+    if (exec && exec.lease) {
+      try {
+        // PTY에 입력 전송
+        exec.lease.terminal.process.write(message + '\n');
+        console.log('[ExecutionManager] Input sent to order:', orderId);
+
+        // UI에 입력 전송 알림
+        this.sendToRenderer('order:execution-progress', {
+          orderId,
+          stage: 'input-sent',
+          message: `Input sent: ${message.substring(0, 50)}...`,
+        });
+      } catch (error: any) {
+        console.error('[ExecutionManager] Failed to send input:', error);
+      }
+    } else {
+      console.warn('[ExecutionManager] No active lease for order:', orderId);
+    }
+  }
+
+  /**
+   * Renderer에 메시지 전송
+   */
+  private sendToRenderer(channel: string, data: any): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send(channel, data);
+    }
+  }
+}
+
+let executionManager: ExecutionManager | null = null;
+
+/**
+ * ExecutionManager 초기화
+ */
+export async function initExecutionManager(
+  orchestrator: Orchestrator,
+  mainWindow: BrowserWindow | null
+): Promise<ExecutionManager> {
+  if (executionManager) {
+    await executionManager.stop();
+  }
+
+  executionManager = new ExecutionManager({
+    orchestrator,
+    mainWindow,
+  });
+
+  await executionManager.start();
+  return executionManager;
+}
+
+/**
+ * ExecutionManager 인스턴스 반환
+ */
+export function getExecutionManager(): ExecutionManager | null {
+  return executionManager;
+}
+
+/**
+ * ExecutionManager 정리
+ */
+export async function cleanupExecutionManager(): Promise<void> {
+  if (executionManager) {
+    await executionManager.stop();
+    executionManager = null;
+  }
+}
