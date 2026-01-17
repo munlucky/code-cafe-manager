@@ -4,6 +4,8 @@
  */
 
 import * as pty from 'node-pty';
+import * as os from 'os';
+import * as fs from 'fs';
 import { ProviderType } from '@codecafe/core';
 import { IProviderAdapter } from '../provider-adapter';
 import { ProviderSpawnError } from '../errors';
@@ -21,21 +23,51 @@ interface IPtyProcess {
 // Configuration constants
 const CONFIG = {
   IDLE_TIMEOUT: 500,
-  WAIT_TIMEOUT: 5000,
+  WAIT_TIMEOUT: 10000, // Increased for shell + claude initialization
   EXECUTE_TIMEOUT: 30000,
   TERM_COLS: 120,
   TERM_ROWS: 30,
   CHECK_STR_LEN: 20,
 } as const;
 
+// Windows Git Bash paths to check
+const WINDOWS_GIT_BASH_PATHS = [
+  process.env.CLAUDE_CODE_GIT_BASH_PATH,
+  'C:\\Program Files\\Git\\bin\\bash.exe',
+  'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+].filter(Boolean) as string[];
+
 export class ClaudeCodeAdapter implements IProviderAdapter {
   readonly providerType: ProviderType = 'claude-code';
 
   /**
-   * Spawn claude CLI process
+   * Get the shell path for the current platform
+   */
+  private getShellConfig(): { shell: string; args: string[] } {
+    const isWindows = os.platform() === 'win32';
+
+    if (isWindows) {
+      // Find Git Bash on Windows
+      const bashPath = WINDOWS_GIT_BASH_PATHS.find((p) => fs.existsSync(p));
+      if (!bashPath) {
+        throw new Error(
+          'Git Bash not found. Please install Git for Windows or set CLAUDE_CODE_GIT_BASH_PATH environment variable.'
+        );
+      }
+      return { shell: bashPath, args: ['--login', '-i'] };
+    } else {
+      // Linux/macOS
+      return { shell: '/bin/bash', args: ['--login', '-i'] };
+    }
+  }
+
+  /**
+   * Spawn claude CLI process via shell
    */
   async spawn(): Promise<IPtyProcess> {
     try {
+      const { shell, args } = this.getShellConfig();
+
       const spawnOptions = {
         name: 'xterm-color',
         cwd: process.cwd(),
@@ -46,11 +78,21 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         cols: CONFIG.TERM_COLS,
         rows: CONFIG.TERM_ROWS,
       };
-      const ptyProcess = pty.spawn('claude', [], spawnOptions) as unknown as IPtyProcess;
 
-      // Wait for initialization prompt
+      console.log(`[ClaudeCodeAdapter] Spawning shell: ${shell} ${args.join(' ')}`);
+      const ptyProcess = pty.spawn(shell, args, spawnOptions) as unknown as IPtyProcess;
+
+      // Wait for shell to initialize
+      await this.waitForShellReady(ptyProcess, CONFIG.WAIT_TIMEOUT);
+
+      // Start claude CLI inside the shell
+      console.log('[ClaudeCodeAdapter] Starting claude CLI...');
+      ptyProcess.write('claude\r');
+
+      // Wait for Claude to initialize
       await this.waitForPrompt(ptyProcess, CONFIG.WAIT_TIMEOUT);
 
+      console.log('[ClaudeCodeAdapter] Claude CLI ready');
       return ptyProcess;
     } catch (error) {
       throw new ProviderSpawnError(
@@ -58,6 +100,16 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         error instanceof Error ? error : new Error(String(error))
       );
     }
+  }
+
+  /**
+   * Wait for shell to be ready
+   */
+  private async waitForShellReady(ptyProcess: IPtyProcess, timeout: number): Promise<void> {
+    return new Promise((resolve) => {
+      // Give shell a moment to initialize
+      setTimeout(() => resolve(), 500);
+    });
   }
 
   /**

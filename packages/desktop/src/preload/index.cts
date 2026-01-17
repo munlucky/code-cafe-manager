@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld('codecafe', {
     get: createIpcInvoker('order:get'),
     getLog: createIpcInvoker('order:getLog'),
     cancel: createIpcInvoker('order:cancel'),
+    delete: createIpcInvoker('order:delete'),
+    deleteMany: createIpcInvoker('order:deleteMany'),
     execute: createIpcInvoker('order:execute'),
     sendInput: createIpcInvoker('order:sendInput'),
     createWithWorktree: createIpcInvoker('order:createWithWorktree'),

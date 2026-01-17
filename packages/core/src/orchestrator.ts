@@ -327,6 +327,28 @@ export class Orchestrator extends EventEmitter {
   }
 
   /**
+   * 주문 삭제
+   */
+  async deleteOrder(orderId: string): Promise<boolean> {
+    const deleted = this.orderManager.deleteOrder(orderId);
+    if (deleted) {
+      await this.saveState();
+    }
+    return deleted;
+  }
+
+  /**
+   * 여러 주문 삭제
+   */
+  async deleteOrders(orderIds: string[]): Promise<{ deleted: string[]; failed: string[] }> {
+    const result = this.orderManager.deleteOrders(orderIds);
+    if (result.deleted.length > 0) {
+      await this.saveState();
+    }
+    return result;
+  }
+
+  /**
    * 상태 저장 (비동기)
    */
   private async saveState(): Promise<void> {

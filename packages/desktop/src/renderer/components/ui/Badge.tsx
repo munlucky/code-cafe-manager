@@ -20,14 +20,15 @@ export function StatusBadge({
 }: {
   status: BaristaStatus | OrderStatus | string;
 }) {
+  const safeStatus = status || 'unknown';
   return (
     <div
       className={cn(
         'inline-block px-3 py-1 rounded text-sm font-semibold',
-        STATUS_STYLES[(status as string).toLowerCase()] || DEFAULT_STATUS_STYLE
+        STATUS_STYLES[safeStatus.toLowerCase()] || DEFAULT_STATUS_STYLE
       )}
     >
-      {status}
+      {safeStatus}
     </div>
   );
 }

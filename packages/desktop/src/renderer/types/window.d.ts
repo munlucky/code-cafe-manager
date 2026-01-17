@@ -270,6 +270,8 @@ declare global {
         get: (orderId: string) => Promise<IpcResponse<Order>>;
         getLog: (orderId: string) => Promise<IpcResponse<string>>;
         cancel: (orderId: string) => Promise<IpcResponse<void>>;
+        delete: (orderId: string) => Promise<IpcResponse<{ deleted: boolean }>>;
+        deleteMany: (orderIds: string[]) => Promise<IpcResponse<{ deleted: string[]; failed: string[] }>>;
         execute: (
           orderId: string,
           prompt: string,

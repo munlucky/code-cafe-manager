@@ -42,16 +42,18 @@ interface OrderCardProps {
   order: Order;
   onViewTerminal?: (orderId: string) => void;
   onCancelOrder?: (orderId: string) => void;
+  onDeleteOrder?: (orderId: string) => void;
   onExecuteOrder?: (order: Order) => void;
   onClick?: (orderId: string) => void;
 }
 
-function OrderCard({ order, onViewTerminal, onCancelOrder, onExecuteOrder, onClick }: OrderCardProps): ReactElement {
+function OrderCard({ order, onViewTerminal, onCancelOrder, onDeleteOrder, onExecuteOrder, onClick }: OrderCardProps): ReactElement {
   const config = STATUS_CONFIG[order.status];
   const Icon = config.icon;
   const isPending = order.status === OrderStatus.PENDING;
   const isRunning = order.status === OrderStatus.RUNNING;
   const isCancellable = order.status === OrderStatus.RUNNING || order.status === OrderStatus.PENDING;
+  const isDeletable = order.status === OrderStatus.COMPLETED || order.status === OrderStatus.FAILED || order.status === OrderStatus.CANCELLED;
 
   return (
     <Card 
@@ -122,7 +124,16 @@ function OrderCard({ order, onViewTerminal, onCancelOrder, onExecuteOrder, onCli
             onClick={(e) => { e.stopPropagation(); onCancelOrder(order.id); }}
             className="flex-1 text-sm"
           >
-            Cancel Order
+            Cancel
+          </Button>
+        )}
+        {isDeletable && onDeleteOrder && (
+          <Button
+            variant="secondary"
+            onClick={(e) => { e.stopPropagation(); onDeleteOrder(order.id); }}
+            className="flex-1 text-sm text-red-400 hover:text-red-300"
+          >
+            Delete
           </Button>
         )}
       </div>
@@ -135,6 +146,7 @@ interface OrderListProps {
   onNewOrder: () => void;
   onViewTerminal: (orderId: string) => void;
   onCancelOrder: (orderId: string) => void;
+  onDeleteOrder: (orderId: string) => void;
   onExecuteOrder: (order: Order) => void;
   onClick: (orderId: string) => void;
 }
@@ -144,6 +156,7 @@ function OrderList({
   onNewOrder,
   onViewTerminal,
   onCancelOrder,
+  onDeleteOrder,
   onExecuteOrder,
   onClick,
 }: OrderListProps): ReactElement {
@@ -171,6 +184,7 @@ function OrderList({
           order={order}
           onViewTerminal={onViewTerminal}
           onCancelOrder={onCancelOrder}
+          onDeleteOrder={onDeleteOrder}
           onExecuteOrder={onExecuteOrder}
           onClick={onClick}
         />
@@ -183,11 +197,12 @@ interface OrderKanbanProps {
   orders: Order[];
   onViewTerminal: (orderId: string) => void;
   onCancelOrder: (orderId: string) => void;
+  onDeleteOrder: (orderId: string) => void;
   onExecuteOrder: (order: Order) => void;
   onClick: (orderId: string) => void;
 }
 
-function OrderKanban({ orders, onViewTerminal, onCancelOrder, onExecuteOrder, onClick }: OrderKanbanProps): ReactElement {
+function OrderKanban({ orders, onViewTerminal, onCancelOrder, onDeleteOrder, onExecuteOrder, onClick }: OrderKanbanProps): ReactElement {
   const columns = useMemo(() => {
     const cols: Record<OrderStatus, Order[]> = {
       [OrderStatus.PENDING]: [],
@@ -222,6 +237,7 @@ function OrderKanban({ orders, onViewTerminal, onCancelOrder, onExecuteOrder, on
                   order={order}
                   onViewTerminal={onViewTerminal}
                   onCancelOrder={onCancelOrder}
+                  onDeleteOrder={onDeleteOrder}
                   onExecuteOrder={onExecuteOrder}
                   onClick={onClick}
                 />
@@ -417,6 +433,44 @@ export function CafeDashboard(): ReactElement {
     }
   };
 
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!confirm('Delete this order? This cannot be undone.')) {
+      return;
+    }
+    try {
+      const response = await window.codecafe.order.delete(orderId);
+      if (response.success) {
+        setOrders((prevOrders) => prevOrders.filter((o) => o.id !== orderId));
+      } else {
+        alert(`Failed to delete order: ${response.error?.message}`);
+      }
+    } catch (err: any) {
+      alert(`Failed to delete order: ${err.message}`);
+    }
+  };
+
+  const handleClearFinished = async () => {
+    const finishedOrders = orders.filter(
+      (o) => o.status === OrderStatus.COMPLETED || o.status === OrderStatus.FAILED || o.status === OrderStatus.CANCELLED
+    );
+    if (finishedOrders.length === 0) {
+      alert('No finished orders to clear.');
+      return;
+    }
+    if (!confirm(`Delete ${finishedOrders.length} finished orders?`)) {
+      return;
+    }
+    try {
+      const orderIds = finishedOrders.map((o) => o.id);
+      const response = await window.codecafe.order.deleteMany(orderIds);
+      if (response.success && response.data) {
+        setOrders((prevOrders) => prevOrders.filter((o) => !response.data!.deleted.includes(o.id)));
+      }
+    } catch (err: any) {
+      alert(`Failed to clear orders: ${err.message}`);
+    }
+  };
+
   return (
     <div className="h-full overflow-auto flex flex-col">
       {/* Header */}
@@ -457,6 +511,14 @@ export function CafeDashboard(): ReactElement {
             <span className="hidden sm:inline">New Order</span>
             <span className="sm:hidden">New</span>
           </Button>
+          <Button
+            variant="secondary"
+            onClick={handleClearFinished}
+            className="text-sm text-red-400 hover:text-red-300"
+          >
+            <span className="hidden sm:inline">Clear Finished</span>
+            <span className="sm:hidden">Clear</span>
+          </Button>
         </div>
       </div>
 
@@ -477,6 +539,7 @@ export function CafeDashboard(): ReactElement {
             onNewOrder={handleNewOrder}
             onViewTerminal={handleViewTerminal}
             onCancelOrder={handleCancelOrder}
+            onDeleteOrder={handleDeleteOrder}
             onExecuteOrder={handleExecuteOrder}
             onClick={handleOrderClick}
           />
@@ -485,6 +548,7 @@ export function CafeDashboard(): ReactElement {
             orders={orders}
             onViewTerminal={handleViewTerminal}
             onCancelOrder={handleCancelOrder}
+            onDeleteOrder={handleDeleteOrder}
             onExecuteOrder={handleExecuteOrder}
             onClick={handleOrderClick}
           />

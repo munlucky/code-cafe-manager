@@ -160,6 +160,47 @@ export class OrderManager extends EventEmitter {
   }
 
   /**
+   * 주문 삭제 (완료/실패/취소된 주문만)
+   */
+  deleteOrder(orderId: string): boolean {
+    const order = this.orders.get(orderId);
+    if (!order) {
+      return false;
+    }
+
+    // RUNNING/PENDING 상태 주문은 삭제할 수 없음
+    if (order.status === OrderStatus.RUNNING || order.status === OrderStatus.PENDING) {
+      throw new Error(`Cannot delete ${order.status.toLowerCase()} order ${orderId}. Cancel it first.`);
+    }
+
+    this.orders.delete(orderId);
+    this.emitEvent(EventType.ORDER_STATUS_CHANGED, orderId, { deleted: true });
+    return true;
+  }
+
+  /**
+   * 여러 주문 삭제 (완료/실패/취소된 주문만)
+   */
+  deleteOrders(orderIds: string[]): { deleted: string[]; failed: string[] } {
+    const deleted: string[] = [];
+    const failed: string[] = [];
+
+    for (const orderId of orderIds) {
+      try {
+        if (this.deleteOrder(orderId)) {
+          deleted.push(orderId);
+        } else {
+          failed.push(orderId);
+        }
+      } catch {
+        failed.push(orderId);
+      }
+    }
+
+    return { deleted, failed };
+  }
+
+  /**
    * 저장된 주문 복원 (앱 시작 시 호출)
    */
   restoreOrders(orders: Order[]): void {

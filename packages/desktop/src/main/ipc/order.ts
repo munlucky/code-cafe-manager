@@ -191,6 +191,35 @@ class OrderManager {
   );
 
     /**
+     * 오더 생성 (단순)
+     */
+    ipcMain.handle(
+      'order:create',
+      async (_, params: { workflowId: string; workflowName: string; counter: string; provider?: string; vars?: Record<string, string> }) =>
+        handleIpc(async () => {
+          // counter is the cafe path directly
+          const order = orchestrator.createOrder(
+            params.workflowId,
+            params.workflowName,
+            params.counter, // Use counter as cafe path
+            params.provider as any,
+            params.vars || {}
+          );
+
+          return order;
+        }, 'order:create')
+    );
+
+    /**
+     * 단일 오더 조회
+     */
+    ipcMain.handle('order:get', async (_, orderId: string) =>
+      handleIpc(async () => {
+        return orchestrator.getOrder(orderId);
+      }, 'order:get')
+    );
+
+    /**
      * 모든 오더 조회
      */
     ipcMain.handle('order:getAll', async () =>
@@ -207,6 +236,25 @@ class OrderManager {
         await orchestrator.cancelOrder(orderId);
         return { cancelled: true };
       }, 'order:cancel')
+    );
+
+    /**
+     * 오더 삭제 (단일)
+     */
+    ipcMain.handle('order:delete', async (_, orderId: string) =>
+      handleIpc(async () => {
+        const deleted = await orchestrator.deleteOrder(orderId);
+        return { deleted };
+      }, 'order:delete')
+    );
+
+    /**
+     * 오더 삭제 (다중)
+     */
+    ipcMain.handle('order:deleteMany', async (_, orderIds: string[]) =>
+      handleIpc(async () => {
+        return await orchestrator.deleteOrders(orderIds);
+      }, 'order:deleteMany')
     );
 
     /**
