@@ -82,14 +82,14 @@ export function GlobalLobby() {
   }
 
   return (
-    <div className="p-6 h-full overflow-auto">
+    <div className="h-full overflow-auto">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-bone mb-2">Global Lobby</h1>
-          <p className="text-gray-400">Manage your local repositories (Cafes)</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-bone mb-1 sm:mb-2">Global Lobby</h1>
+          <p className="text-xs sm:text-sm text-gray-400">Manage your local repositories (Cafes)</p>
         </div>
-        <Button onClick={() => setShowAddDialog(true)} className="flex items-center gap-2">
+        <Button onClick={() => setShowAddDialog(true)} className="flex items-center gap-2 self-start sm:self-auto">
           <Plus className="w-4 h-4" />
           Add Cafe
         </Button>

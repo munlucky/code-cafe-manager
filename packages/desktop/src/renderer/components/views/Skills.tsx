@@ -265,26 +265,26 @@ export function Skills(): ReactElement {
 
   return (
     <>
-      <div className="p-6 h-full overflow-auto">
-        <div className="flex items-center justify-between mb-6">
+      <div className="h-full overflow-auto">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-bone">Skills</h1>
-            <p className="text-sm text-gray-400 mt-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-bone">Skills</h1>
+            <p className="text-xs sm:text-sm text-gray-400 mt-1">
               개별 스킬을 관리합니다. Workflow의 Stage에서 스킬을 선택하여 사용할 수 있습니다.
             </p>
           </div>
-          <Button onClick={handleNewSkill} className="flex items-center gap-2">
+          <Button onClick={handleNewSkill} className="flex items-center gap-2 self-start sm:self-auto">
             <Plus className="w-4 h-4" />
             New Skill
           </Button>
         </div>
 
         {/* Category Filter */}
-        <div className="flex items-center gap-2 mb-6">
-          <Filter className="w-4 h-4 text-gray-400" />
+        <div className="flex items-center gap-2 mb-4 sm:mb-6 overflow-x-auto pb-2">
+          <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
           <button
             onClick={() => setCategoryFilter('all')}
-            className={`px-3 py-1 rounded-full text-sm transition-colors ${
+            className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm transition-colors whitespace-nowrap ${
               categoryFilter === 'all'
                 ? 'bg-coffee text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -298,7 +298,7 @@ export function Skills(): ReactElement {
               <button
                 key={cat.value}
                 onClick={() => setCategoryFilter(cat.value)}
-                className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm transition-colors whitespace-nowrap ${
                   categoryFilter === cat.value
                     ? `${CATEGORY_COLORS[cat.value]} border border-current`
                     : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -330,10 +330,10 @@ export function Skills(): ReactElement {
           />
         ) : categoryFilter === 'all' ? (
           // Grouped view when showing all
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {groupedSkills.map(({ category, skills: catSkills }) => (
               <div key={category.value}>
-                <h2 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${
+                <h2 className={`text-xs sm:text-sm font-semibold mb-2 sm:mb-3 flex items-center gap-2 ${
                   CATEGORY_COLORS[category.value].split(' ')[1]
                 }`}>
                   <span className={`w-2 h-2 rounded-full ${
@@ -342,7 +342,7 @@ export function Skills(): ReactElement {
                   {category.label}
                   <span className="text-gray-500 font-normal">({catSkills.length})</span>
                 </h2>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
                   {catSkills.map((skill) => (
                     <SkillCard
                       key={skill.id}
@@ -359,7 +359,7 @@ export function Skills(): ReactElement {
           </div>
         ) : (
           // Flat view when filtering by category
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
             {filteredSkills.map((skill) => (
               <SkillCard
                 key={skill.id}

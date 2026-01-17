@@ -206,10 +206,10 @@ export function Workflows(): ReactElement {
 
   return (
     <>
-      <div className="p-6 h-full overflow-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-bone">Recipes</h1>
-          <Button onClick={handleNewWorkflow} className="flex items-center gap-2">
+      <div className="h-full overflow-auto">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold text-bone">Recipes</h1>
+          <Button onClick={handleNewWorkflow} className="flex items-center gap-2 self-start sm:self-auto">
             <Plus className="w-4 h-4" />
             New Recipe
           </Button>
@@ -228,7 +228,7 @@ export function Workflows(): ReactElement {
             }
           />
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
             {workflows.map((workflow) => (
               <WorkflowCard
                 key={workflow.id}

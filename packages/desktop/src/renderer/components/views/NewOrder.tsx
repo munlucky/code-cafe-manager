@@ -194,8 +194,8 @@ export function NewOrder({ onSuccess }: NewOrderProps) {
   };
 
   return (
-    <Card className="max-w-3xl">
-      <h3 className="text-xl font-bold text-coffee mb-6">Run Workflow</h3>
+    <Card className="max-w-3xl p-3 sm:p-4 lg:p-6">
+      <h3 className="text-lg sm:text-xl font-bold text-coffee mb-4 sm:mb-6">Run Workflow</h3>
 
       <div className="space-y-5">
         <div>

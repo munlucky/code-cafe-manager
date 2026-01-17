@@ -47,7 +47,7 @@ export function Dashboard(): JSX.Element {
     .slice(0, 5);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
       <BaristaWidget baristas={baristas} />
 
       <TerminalPoolStatus />

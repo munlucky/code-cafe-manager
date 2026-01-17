@@ -2,8 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  /* Hide scrollbar globally while maintaining scroll functionality */
+  * {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+
+  *::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+  }
+}
+
 @layer utilities {
+  /* Optional: Custom scrollbar for elements that need visible scrollbar */
   .scrollbar-custom::-webkit-scrollbar {
+    display: block;
     width: 8px;
   }
   .scrollbar-custom::-webkit-scrollbar-track {
@@ -15,5 +29,9 @@
   }
   .scrollbar-custom::-webkit-scrollbar-thumb:hover {
     background: #444;
+  }
+  .scrollbar-custom {
+    scrollbar-width: thin;
+    -ms-overflow-style: auto;
   }
 }
