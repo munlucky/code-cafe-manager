@@ -3,6 +3,7 @@
  * Orchestrator의 order:execution-started 이벤트를 받아 BaristaEngineV2를 통해 실제 실행
  */
 
+import * as path from 'path';
 import { BrowserWindow } from 'electron';
 import { Orchestrator, Order, Barista } from '@codecafe/core';
 import { BaristaEngineV2, TerminalPool } from '@codecafe/orchestrator';
@@ -39,6 +40,17 @@ export class ExecutionManager {
 
     // Barista Engine 초기화
     this.baristaEngine = new BaristaEngineV2(this.terminalPool!);
+    
+    // Barista Engine 이벤트 리스너 설정
+    this.baristaEngine.on('order:output', (data: { orderId: string; data: string }) => {
+      // 1. UI 전송 (실시간 보기용)
+      this.sendToRenderer('terminal:data', data);
+      
+      // 2. 로그 저장 (지속성용)
+      this.orchestrator.appendOrderLog(data.orderId, data.data).catch((err: Error) => {
+        console.error(`[ExecutionManager] Failed to append log for order ${data.orderId}:`, err);
+      });
+    });
 
     // Orchestrator 이벤트 리스너 설정
     this.setupEventListeners();
@@ -76,7 +88,21 @@ export class ExecutionManager {
    * Terminal Pool 초기화
    */
   private async initTerminalPool(): Promise<void> {
-    this.terminalPool = new TerminalPool(DEFAULT_TERMINAL_POOL_CONFIG);
+    const appRoot = process.cwd();
+    // Resolve project root (repo root) assuming we are running from packages/desktop during dev
+    // If packaged or running from root, handle accordingly
+    const projectRoot = appRoot.includes('packages') 
+      ? path.resolve(appRoot, '..', '..') 
+      : appRoot;
+
+    console.log(`[ExecutionManager] Initializing Terminal Pool with CWD: ${projectRoot}`);
+
+    const poolConfig = {
+      ...DEFAULT_TERMINAL_POOL_CONFIG,
+      cwd: projectRoot,
+    };
+
+    this.terminalPool = new TerminalPool(poolConfig);
     console.log('[ExecutionManager] Terminal pool initialized');
   }
 

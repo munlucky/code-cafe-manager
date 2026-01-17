@@ -41,11 +41,11 @@ export class CodexAdapter implements IProviderAdapter {
   /**
    * Spawn codex CLI process in interactive mode
    */
-  async spawn(): Promise<IPtyProcess> {
+  async spawn(options?: { cwd?: string }): Promise<IPtyProcess> {
     try {
       const ptyProcess = pty.spawn('codex', ['--interactive'], {
         name: 'xterm-color',
-        cwd: process.cwd(),
+        cwd: options?.cwd || process.cwd(),
         env: {
           ...process.env,
         },
@@ -108,7 +108,7 @@ export class CodexAdapter implements IProviderAdapter {
   /**
    * Read output with JSON framing
    */
-  async readOutput(ptyProcess: IPtyProcess, timeout: number): Promise<string> {
+  async readOutput(ptyProcess: IPtyProcess, timeout: number, onDataCallback?: (data: string) => void): Promise<string> {
     const expectedMessageId = this.lastMessageId;
 
     return new Promise((resolve, reject) => {
@@ -128,7 +128,9 @@ export class CodexAdapter implements IProviderAdapter {
 
           switch (parsed.type) {
             case 'output':
-              output += parsed.content || '';
+              const content = parsed.content || '';
+              if (onDataCallback) onDataCallback(content);
+              output += content;
               return false;
 
             case 'done':
@@ -199,12 +201,13 @@ export class CodexAdapter implements IProviderAdapter {
    */
   async execute(
     ptyProcess: IPtyProcess,
-    context: any
+    context: any,
+    onDataCallback?: (data: string) => void
   ): Promise<{ success: boolean; output?: string; error?: string }> {
     try {
       const prompt = typeof context === 'string' ? context : JSON.stringify(context);
       await this.sendPrompt(ptyProcess, prompt);
-      const output = await this.readOutput(ptyProcess, CONFIG.EXECUTE_TIMEOUT);
+      const output = await this.readOutput(ptyProcess, CONFIG.EXECUTE_TIMEOUT, onDataCallback);
       return { success: true, output };
     } catch (error) {
       return {

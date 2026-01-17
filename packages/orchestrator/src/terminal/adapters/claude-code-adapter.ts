@@ -22,57 +22,139 @@ interface IPtyProcess {
 
 // Configuration constants
 const CONFIG = {
-  IDLE_TIMEOUT: 500,
+  IDLE_TIMEOUT: 30000, // 30 seconds - Claude CLI needs time for long-running tasks
   WAIT_TIMEOUT: 10000, // Increased for shell + claude initialization
-  EXECUTE_TIMEOUT: 30000,
+  EXECUTE_TIMEOUT: 600000, // 10 minutes for execution
   TERM_COLS: 120,
   TERM_ROWS: 30,
   CHECK_STR_LEN: 20,
 } as const;
 
-// Windows Git Bash paths to check
-const WINDOWS_GIT_BASH_PATHS = [
-  process.env.CLAUDE_CODE_GIT_BASH_PATH,
-  'C:\\Program Files\\Git\\bin\\bash.exe',
-  'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
-].filter(Boolean) as string[];
+// Windows Git Bash paths are no longer used as we switched to PowerShell
+// const WINDOWS_GIT_BASH_PATHS = ...
 
 export class ClaudeCodeAdapter implements IProviderAdapter {
   readonly providerType: ProviderType = 'claude-code';
 
   /**
-   * Get the shell path for the current platform
+   * Get shell configuration based on platform
    */
   private getShellConfig(): { shell: string; args: string[] } {
+    if (os.platform() === 'win32') {
+      return {
+        shell: 'powershell.exe',
+        args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass'],
+      };
+    } else {
+      return { shell: '/bin/bash', args: ['--login', '-i'] };
+    }
+  }
+
+  /**
+   * Get the claude command for the current platform
+   * Returns absolute path on Windows
+   */
+  private getClaudeCommand(): string {
     const isWindows = os.platform() === 'win32';
 
     if (isWindows) {
-      // Find Git Bash on Windows
-      const bashPath = WINDOWS_GIT_BASH_PATHS.find((p) => fs.existsSync(p));
-      if (!bashPath) {
-        throw new Error(
-          'Git Bash not found. Please install Git for Windows or set CLAUDE_CODE_GIT_BASH_PATH environment variable.'
-        );
+      // Try common installation paths
+      const homedir = os.homedir();
+
+      // 1. Try to find generic 'claude' in PATH using PowerShell
+      // This supports unknown installation paths (e.g. bun, pipx, choco) as long as it's in PATH
+      try {
+        const { execSync } = require('child_process');
+        // Use PowerShell to find the command path
+        const cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Command claude -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path | Select-Object -First 1"';
+        const stdout = execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+        
+        if (stdout && fs.existsSync(stdout)) {
+           console.log(`[ClaudeCodeAdapter] Found claude via PATH: ${stdout}`);
+           return `& "${stdout}"`;
+        }
+      } catch (e) {
+        // Ignore error and fall back to manual paths
+        console.log('[ClaudeCodeAdapter] Could not find claude in PATH via Get-Command, checking common paths...');
       }
-      return { shell: bashPath, args: ['--login', '-i'] };
+      
+      // Log environment variable if set
+      if (process.env.CLAUDE_CODE_PATH) {
+        console.log(`[ClaudeCodeAdapter] System CLAUDE_CODE_PATH is set to: ${process.env.CLAUDE_CODE_PATH}`);
+      }
+
+      // Prioritize known paths
+      // Note: .local/bin/claude.exe was confirmed by 'where.exe'
+      const possiblePaths = [
+        `${homedir}\\.local\\bin\\claude.exe`, 
+        `${homedir}\\AppData\\Roaming\\npm\\claude.cmd`,
+        `${homedir}\\AppData\\Local\\Programs\\claude\\claude.exe`,
+        process.env.CLAUDE_CODE_PATH,
+      ].filter(Boolean) as string[];
+
+      for (const claudePath of possiblePaths) {
+        if (fs.existsSync(claudePath)) {
+          console.log(`[ClaudeCodeAdapter] Found claude at: ${claudePath}`);
+          return `& "${claudePath}"`;
+        }
+      }
+
+      // Fallback
+      console.warn('[ClaudeCodeAdapter] Claude CLI not found at common paths, using "claude"');
+      return 'claude';
     } else {
-      // Linux/macOS
-      return { shell: '/bin/bash', args: ['--login', '-i'] };
+      // On Linux/macOS, just use 'claude' and rely on PATH
+      return 'claude';
     }
   }
 
   /**
    * Spawn claude CLI process via shell
    */
-  async spawn(): Promise<IPtyProcess> {
+  async spawn(options?: { cwd?: string }): Promise<IPtyProcess> {
     try {
       const { shell, args } = this.getShellConfig();
+      const claudeCmd = this.getClaudeCommand();
+
+      // Filter out environment variables that might cause issues
+      const env = { ...process.env };
+      // Electron/VS Code variables
+      delete env.ELECTRON_RUN_AS_NODE;
+      delete env.ELECTRON_NO_ATTACH_CONSOLE;
+      delete env.VSCODE_IPC_HOOK;
+      delete env.VSCODE_PID;
+      delete env.CLAUDE_CODE_PATH;
+      
+      // Force non-interactive / headless mode
+      env.CI = 'true';
+      // Set dummy editor to prevent VS Code fallback
+      env.EDITOR = 'cmd /c echo';
+      env.VISUAL = 'cmd /c echo';
+
+      // CRITICAL: Remove VS Code from PATH to prevent Claude from launching 'code' command
+      // This is the aggressive fix for "VS Code launching" issue
+      const pathKey = Object.keys(env).find(k => k.toLowerCase() === 'path') || 'Path';
+      if (env[pathKey]) {
+        const paths = env[pathKey].split(';'); // Windows delimiter
+        const filteredPaths = paths.filter(p => {
+          const lower = p.toLowerCase();
+          return !lower.includes('microsoft vs code') && 
+                 !lower.includes('vscode') &&
+                 !lower.includes('visual studio code');
+        });
+        env[pathKey] = filteredPaths.join(';');
+        console.log(`[ClaudeCodeAdapter] Filtered PATH to remove VS Code (Original: ${paths.length}, New: ${filteredPaths.length})`);
+      }
+
+      // Use provided CWD or fallback to process.cwd()
+      const spawnCwd = options?.cwd || process.cwd();
+      console.log(`[ClaudeCodeAdapter] Spawning in CWD: ${spawnCwd}`);
 
       const spawnOptions = {
         name: 'xterm-color',
-        cwd: process.cwd(),
+        cwd: spawnCwd,
         env: {
-          ...process.env,
+          ...env,
           TERM: 'xterm-256color',
         },
         cols: CONFIG.TERM_COLS,
@@ -86,8 +168,8 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       await this.waitForShellReady(ptyProcess, CONFIG.WAIT_TIMEOUT);
 
       // Start claude CLI inside the shell
-      console.log('[ClaudeCodeAdapter] Starting claude CLI...');
-      ptyProcess.write('claude\r');
+      console.log(`[ClaudeCodeAdapter] Starting claude CLI: ${claudeCmd}`);
+      ptyProcess.write(`${claudeCmd}\r`);
 
       // Wait for Claude to initialize
       await this.waitForPrompt(ptyProcess, CONFIG.WAIT_TIMEOUT);
@@ -108,7 +190,7 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
   private async waitForShellReady(ptyProcess: IPtyProcess, timeout: number): Promise<void> {
     return new Promise((resolve) => {
       // Give shell a moment to initialize
-      setTimeout(() => resolve(), 500);
+      setTimeout(() => resolve(), timeout);
     });
   }
 
@@ -116,8 +198,11 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
    * Send prompt to terminal with escaping
    */
   async sendPrompt(ptyProcess: IPtyProcess, prompt: string): Promise<boolean> {
-    const escapedPrompt = prompt.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
-    const checkStr = escapedPrompt.substring(0, Math.min(CONFIG.CHECK_STR_LEN, escapedPrompt.length));
+    // Send raw prompt with a single carriage return at the end
+    const dataToWrite = prompt + '\r';
+    
+    // Simple verification check (remove newlines for check)
+    const checkStr = prompt.substring(0, Math.min(20, prompt.length)).replace(/\r|\n/g, '');
 
     return ClaudeCodeAdapter._createEventPromise<boolean>(
       ptyProcess,
@@ -131,22 +216,25 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         }
       },
       false,
-      () => ptyProcess.write(escapedPrompt + '\r\n')
-    );
+      () => ptyProcess.write(dataToWrite)
+    ).catch(() => true); // Best effort
   }
 
   /**
-   * Read output with idle detection
+   * Read output with idle detection and completion patterns
    */
-  async readOutput(ptyProcess: IPtyProcess, timeout: number): Promise<string> {
+
+  async readOutput(ptyProcess: IPtyProcess, timeout: number, onDataCallback?: (data: string) => void): Promise<string> {
     return new Promise((resolve, reject) => {
       let output = '';
       let idleTimer: NodeJS.Timeout | null = null;
+      let hardTimeout: NodeJS.Timeout | null = null;
 
       const cleanup = () => {
         if (idleTimer) clearTimeout(idleTimer);
-        clearTimeout(timeoutHandle);
+        if (hardTimeout) clearTimeout(hardTimeout);
         ptyProcess.removeListener('data', onData);
+        ptyProcess.removeListener('exit', onExit);
       };
 
       const complete = () => {
@@ -154,28 +242,71 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         resolve(output.trim());
       };
 
-      const onData = (data: string) => {
-        output += data;
+      // Set hard timeout
+      hardTimeout = setTimeout(() => {
+        console.warn(`[ClaudeCodeAdapter] Operation hard timeout reached (${timeout}ms)`);
+        cleanup();
+        resolve(output.trim()); // Return what we have instead of failing
+      }, timeout);
 
-        // Reset idle timer on new data
+      // Claude CLI completion patterns
+      const isCompleted = (text: string): boolean => {
+        // Explicit markers
+        if (text.includes('[DONE]')) return true;
+
+        // Token usage stats
+        if (/Total cost:.*\$[\d.]+/i.test(text)) return true;
+        if (/tokens used/i.test(text)) return true;
+
+        // Prompt detection (including special chars used by Claude Code)
+        // Check last few lines
+        const lastLines = text.slice(-200).trim();
+        // Standard prompts
+        if (/claude[>›»]/i.test(lastLines)) return true;
+        // Arrow prompts (❯, >, etc) at the end of line
+        if (/[>›»❯]\s*$/.test(lastLines)) return true;
+
+        return false;
+      };
+
+      const onData = (data: string) => {
+        if (onDataCallback) onDataCallback(data);
+        output += data;
+        // console.log('[ClaudeCodeAdapter] Output chunk:', data.substring(0, 50));
+
+        this.checkAndHandlePermissions(data, ptyProcess);
+
         if (idleTimer) clearTimeout(idleTimer);
 
-        // Check for explicit completion marker or setup idle check
-        if (output.includes('[DONE]')) {
-          complete();
+        if (isCompleted(output)) {
+          console.log('[ClaudeCodeAdapter] Completion pattern detected');
+          // Short delay to ensure all prompt chars are flushed
+          setTimeout(complete, 100);
         } else {
-          idleTimer = setTimeout(complete, CONFIG.IDLE_TIMEOUT);
+          // Restart idle timer
+          idleTimer = setTimeout(() => {
+            console.log('[ClaudeCodeAdapter] Idle check...');
+            if (isCompleted(output)) {
+              complete();
+            } else {
+              console.log('[ClaudeCodeAdapter] Still waiting for completion...');
+              // Do not complete unless isCompleted is true, rely on hardTimeout
+            }
+          }, CONFIG.IDLE_TIMEOUT);
         }
       };
 
-      const timeoutHandle = setTimeout(() => {
-        cleanup();
-        reject(new Error(`Read timeout after ${timeout}ms`));
-      }, timeout);
+      const onExit = (code: number) => {
+        console.log(`[ClaudeCodeAdapter] Process exited with code ${code}`);
+        complete();
+      };
 
       ptyProcess.on('data', onData);
+      ptyProcess.on('exit', onExit);
     });
   }
+
+
 
   /**
    * Wait for process exit
@@ -213,13 +344,14 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
    */
   async execute(
     ptyProcess: IPtyProcess,
-    context: any
+    context: any,
+    onDataCallback?: (data: string) => void
   ): Promise<{ success: boolean; output?: string; error?: string }> {
     try {
       const prompt = typeof context === 'string' ? context : JSON.stringify(context);
 
       await this.sendPrompt(ptyProcess, prompt);
-      const output = await this.readOutput(ptyProcess, CONFIG.EXECUTE_TIMEOUT);
+      const output = await this.readOutput(ptyProcess, CONFIG.EXECUTE_TIMEOUT, onDataCallback);
 
       return { success: true, output };
     } catch (error) {
@@ -240,6 +372,28 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
   }
 
   /**
+   * Check for permission prompts and auto-approve
+   */
+  private checkAndHandlePermissions(text: string, ptyProcess: IPtyProcess): boolean {
+    const permissionPatterns = [
+      /Allow .* execution/i,
+      /Do you want to run/i,
+      /\(y\/n\)/i,
+      /Risk:/i,
+      /Allow .* access/i,
+    ];
+
+    for (const pattern of permissionPatterns) {
+      if (pattern.test(text)) {
+        console.log(`[ClaudeCodeAdapter] Auto-approving permission prompt matching: ${pattern}`);
+        ptyProcess.write('y\r');
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Wait for initialization prompt
    */
   private async waitForPrompt(ptyProcess: IPtyProcess, timeout: number): Promise<void> {
@@ -249,6 +403,12 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       timeout,
       `Claude CLI initialization timeout after ${timeout}ms`,
       (data: string, resolve, reject, cleanup) => {
+        // Log startup data for debugging
+        console.log('[ClaudeCodeAdapter] Startup chunk:', data.trim());
+        
+        // Handle permissions during startup
+        this.checkAndHandlePermissions(data, ptyProcess);
+
         if (data.includes('claude>') || data.includes('ready') || data.includes('Welcome')) {
           cleanup();
           resolve();

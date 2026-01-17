@@ -72,6 +72,7 @@ export class TerminalPool {
   async acquireLease(
     provider: ProviderType,
     baristaId: string,
+    cwd?: string,
     timeoutMs?: number
   ): Promise<TerminalLease> {
     const providerConfig = this.config.perProvider[provider];
@@ -87,8 +88,9 @@ export class TerminalPool {
     const timeout = timeoutMs || providerConfig.timeout;
 
     try {
+      // Pass CWD to getOrCreateTerminal
       const terminal = await semaphore.acquire(provider, timeout, () =>
-        this.getOrCreateTerminal(provider)
+        this.getOrCreateTerminal(provider, cwd)
       );
 
       return this.createActiveLease(terminal, baristaId, provider, timeout);
@@ -97,6 +99,8 @@ export class TerminalPool {
       throw error;
     }
   }
+
+  // ... (acquireLease implementation)
 
   private createActiveLease(
     terminal: Terminal,
@@ -237,26 +241,57 @@ export class TerminalPool {
     this.activeLeases.clear();
   }
 
-  private async getOrCreateTerminal(provider: ProviderType): Promise<Terminal> {
+  /**
+   * Helper to kill a specific terminal
+   */
+  private async killTerminal(terminal: Terminal): Promise<void> {
+    if (terminal.process) {
+      const adapter = ProviderAdapterFactory.get(terminal.provider);
+      await adapter.kill(terminal.process);
+    }
+    this.terminals.delete(terminal.id);
+  }
+
+  private async getOrCreateTerminal(provider: ProviderType, cwd?: string): Promise<Terminal> {
+    const effectiveCwd = cwd || this.config.cwd || process.cwd();
+    
+    // Find idle terminal with matching CWD
     const idleTerminal = Array.from(this.terminals.values())
-      .find(t => t.provider === provider && t.status === 'idle');
+      .find(t => t.provider === provider && t.status === 'idle' && (t.cwd === effectiveCwd));
 
     if (idleTerminal) {
       return idleTerminal;
     }
 
-    return this.createNewTerminal(provider);
+    // No matching idle terminal. Check if we need to make room.
+    const providerTerminals = Array.from(this.terminals.values()).filter(t => t.provider === provider);
+    const maxTerminals = this.config.perProvider[provider].size;
+
+    if (providerTerminals.length >= maxTerminals) {
+      // Find an idle terminal to recycle (even if CWD didn't match above)
+      const victim = providerTerminals.find(t => t.status === 'idle');
+      if (victim) {
+        console.log(`[TerminalPool] Recycling terminal ${victim.id} (CWD mismatch: ${victim.cwd} != ${effectiveCwd})`);
+        await this.killTerminal(victim);
+      } else {
+        // Should not happen if Semaphore logic is correct (permits <= size)
+        console.warn('[TerminalPool] Semaphore acquired but no idle terminals to recycle?');
+      }
+    }
+
+    return this.createNewTerminal(provider, effectiveCwd);
   }
 
-  private async createNewTerminal(provider: ProviderType): Promise<Terminal> {
+  private async createNewTerminal(provider: ProviderType, cwd: string): Promise<Terminal> {
     const adapter = ProviderAdapterFactory.get(provider);
-    const process = await adapter.spawn();
+    const process = await adapter.spawn({ cwd });
 
     const terminal: Terminal = {
       id: `terminal-${Date.now()}-${Math.random().toString(36).substring(7)}`,
       provider,
       process,
       status: 'idle',
+      cwd,
       createdAt: new Date(),
       lastUsed: new Date(),
     };

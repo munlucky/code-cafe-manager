@@ -29,9 +29,10 @@ export interface IProviderAdapter {
 
   /**
    * Create a new PTY process
+   * @param options - Spawn options (cwd, etc.)
    * @returns node-pty IPty instance
    */
-  spawn(): Promise<IPty>;
+  spawn(options?: { cwd?: string }): Promise<IPty>;
 
   /**
    * Send prompt to the terminal
@@ -47,7 +48,14 @@ export interface IProviderAdapter {
    * @param timeout - Read timeout in ms
    * @returns Output string
    */
-  readOutput(process: IPty, timeout: number): Promise<string>;
+  /**
+   * Read output from the terminal
+   * @param process - node-pty process
+   * @param timeout - Read timeout in ms
+   * @param onData - Optional callback for streaming data chunks
+   * @returns Output string
+   */
+  readOutput(process: IPty, timeout: number, onData?: (data: string) => void): Promise<string>;
 
   /**
    * Wait for process to exit
@@ -73,8 +81,13 @@ export interface IProviderAdapter {
    * Execute command with context
    * @param process - node-pty process
    * @param context - Execution context
+   * @param onData - Optional callback for streaming output
    */
-  execute(process: IPty, context: any): Promise<{ success: boolean; output?: string; error?: string }>;
+  execute(
+    process: IPty,
+    context: any,
+    onData?: (data: string) => void
+  ): Promise<{ success: boolean; output?: string; error?: string }>;
 
   /**
    * Register exit handler
@@ -101,7 +114,7 @@ export class MockProviderAdapter implements IProviderAdapter {
     this.mockResponses.set(prompt, response);
   }
 
-  async spawn(): Promise<IPty> {
+  async spawn(options?: { cwd?: string }): Promise<IPty> {
     const mockPty: IPty = {
       pid: Math.floor(Math.random() * 10000),
       on: (event: string, listener: Function) => {
@@ -134,8 +147,9 @@ export class MockProviderAdapter implements IProviderAdapter {
     return true;
   }
 
-  async readOutput(process: IPty, timeout: number): Promise<string> {
+  async readOutput(process: IPty, timeout: number, onData?: (data: string) => void): Promise<string> {
     const mockResponse = this.mockResponses.get('default') || 'Mock output';
+    if (onData) onData(mockResponse);
     return new Promise((resolve) => {
       setTimeout(() => resolve(mockResponse), 50);
     });
@@ -155,7 +169,13 @@ export class MockProviderAdapter implements IProviderAdapter {
     return true;
   }
 
-  async execute(process: IPty, context: any): Promise<{ success: boolean; output?: string; error?: string }> {
+  async execute(
+    process: IPty,
+    context: any,
+    onData?: (data: string) => void
+  ): Promise<{ success: boolean; output?: string; error?: string }> {
+    if (onData) onData('Mock execution started\n');
+    if (onData) onData('Mock execution completed\n');
     return { success: true, output: 'Mock execution completed' };
   }
 

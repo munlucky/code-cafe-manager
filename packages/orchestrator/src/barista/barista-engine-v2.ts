@@ -14,15 +14,18 @@ interface ActiveExecution {
   lease: TerminalLease;
 }
 
+import { EventEmitter } from 'events';
+
 /**
  * Barista Engine V2 - Terminal Pool based execution
  */
-export class BaristaEngineV2 {
+export class BaristaEngineV2 extends EventEmitter {
   private readonly terminalPool: TerminalPool;
   private readonly roleManager: RoleManager;
   private readonly activeExecutions = new Map<string, ActiveExecution>();
 
   constructor(terminalPool: TerminalPool, roleManager?: RoleManager) {
+    super();
     this.terminalPool = terminalPool;
     this.roleManager = roleManager || new RoleManager();
   }
@@ -34,13 +37,20 @@ export class BaristaEngineV2 {
     console.log(`BaristaEngineV2: Executing order ${order.id} with barista ${barista.id}`);
 
     const role = this.getRoleForBarista(barista);
-    const lease = await this.terminalPool.acquireLease(barista.provider, barista.id);
+    
+    // Extract CWD from order variables if available
+    const cwd = order.vars?.['PROJECT_ROOT'];
+    if (cwd) {
+      console.log(`[BaristaEngineV2] Using requested CWD for order ${order.id}: ${cwd}`);
+    }
+
+    const lease = await this.terminalPool.acquireLease(barista.provider, barista.id, cwd);
 
     try {
       this.activeExecutions.set(order.id, { baristaId: barista.id, lease });
 
       if (this.hasSteps(order)) {
-        await this.executeSteps(order.steps, barista, lease, role);
+        await this.executeSteps(order.id, order.steps, barista, lease, role);
       } else {
         await this.executeLegacyOrder(order, barista, lease, role);
       }
@@ -129,13 +139,14 @@ export class BaristaEngineV2 {
   }
 
   private async executeSteps(
+    orderId: string,
     steps: Step[],
     barista: Barista,
     lease: TerminalLease,
     role: Role | null
   ): Promise<void> {
     for (const step of steps) {
-      await this.executeStep(step, barista, lease, role);
+      await this.executeStep(orderId, step, barista, lease, role);
     }
   }
 
@@ -143,6 +154,7 @@ export class BaristaEngineV2 {
    * Execute a single step
    */
   private async executeStep(
+    orderId: string,
     step: Step,
     barista: Barista,
     lease: TerminalLease,
@@ -154,7 +166,9 @@ export class BaristaEngineV2 {
 
     try {
       const context = this.prepareExecutionContext(step, role);
-      const result = await adapter.execute(lease.terminal.process, context);
+      const result = await adapter.execute(lease.terminal.process, context, (data) => {
+        this.emit('order:output', { orderId, data });
+      });
 
       if (result.success) {
         console.log(`BaristaEngineV2: Step ${step.id} completed`);
@@ -231,7 +245,9 @@ export class BaristaEngineV2 {
     this.addRoleContextToRecord(context, role);
 
     const adapter = ProviderAdapterFactory.get(barista.provider);
-    const result = await adapter.execute(lease.terminal.process, context);
+    const result = await adapter.execute(lease.terminal.process, context, (data) => {
+      this.emit('order:output', { orderId: order.id, data });
+    });
 
     if (!result.success) {
       throw new Error(`Legacy order execution failed: ${result.error}`);

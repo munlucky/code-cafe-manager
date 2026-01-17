@@ -146,7 +146,7 @@ class OrderManager {
           params.workflowName,
           cafe.path, // counter: 카페 경로
           params.provider as any,
-          params.vars || {}
+          params.vars ? { ...params.vars, PROJECT_ROOT: cafe.path } : { PROJECT_ROOT: cafe.path }
         );
 
         let worktreeInfo = null;
@@ -203,7 +203,7 @@ class OrderManager {
             params.workflowName,
             params.counter, // Use counter as cafe path
             params.provider as any,
-            params.vars || {}
+            params.vars ? { ...params.vars, PROJECT_ROOT: params.counter } : { PROJECT_ROOT: params.counter }
           );
 
           return order;

@@ -11,11 +11,13 @@ export interface Terminal {
   status: TerminalStatus;
   currentBarista?: string;
   leaseToken?: LeaseToken; // NEW (Gap 2)
+  cwd?: string; // Working directory for this terminal
   createdAt: Date;
   lastUsed: Date;
 }
 
 export interface TerminalPoolConfig {
+  cwd?: string; // Global working directory for terminals (e.g. project root)
   perProvider: {
     [provider: string]: ProviderTerminalConfig;
   };
