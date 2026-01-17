@@ -305,7 +305,7 @@ export function CafeDashboard(): ReactElement {
   useEffect(() => {
     const handleOrderEvent = (event: any) => {
       console.log('[Cafe Dashboard] Order event:', event);
-      
+
       // Reload orders when there's an event
       window.codecafe.getAllOrders().then((response) => {
         if (response.success && response.data) {
@@ -325,11 +325,16 @@ export function CafeDashboard(): ReactElement {
     };
 
     // Set up event listeners
-    window.codecafe.onOrderEvent(handleOrderEvent);
-    window.codecafe.onOrderAssigned(handleOrderAssigned);
-    window.codecafe.onOrderCompleted(handleOrderCompleted);
+    const cleanupOrderEvent = window.codecafe.onOrderEvent(handleOrderEvent);
+    const cleanupOrderAssigned = window.codecafe.onOrderAssigned(handleOrderAssigned);
+    const cleanupOrderCompleted = window.codecafe.onOrderCompleted(handleOrderCompleted);
 
-    // Cleanup is handled by the next effect call
+    // Cleanup function: remove listeners when component unmounts or effect re-runs
+    return () => {
+      cleanupOrderEvent?.();
+      cleanupOrderAssigned?.();
+      cleanupOrderCompleted?.();
+    };
   }, []);
 
   const activeOrdersCount = useMemo(

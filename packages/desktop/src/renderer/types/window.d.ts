@@ -283,9 +283,9 @@ declare global {
         ) => Promise<IpcResponse<CreateOrderWithWorktreeResult>>;
         subscribeOutput: (orderId: string) => Promise<IpcResponse<{ subscribed: boolean }>>;
         unsubscribeOutput: (orderId: string) => Promise<IpcResponse<{ unsubscribed: boolean }>>;
-        onEvent: (callback: (event: any) => void) => void;
-        onAssigned: (callback: (data: any) => void) => void;
-        onCompleted: (callback: (data: any) => void) => void;
+        onEvent: (callback: (event: any) => void) => () => void;
+        onAssigned: (callback: (data: any) => void) => () => void;
+        onCompleted: (callback: (data: any) => void) => () => void;
         onOutput: (callback: (event: any) => void) => () => void;
       };
 
@@ -356,7 +356,7 @@ declare global {
         resume: (runId: string) => Promise<IpcResponse<void>>;
         cancel: (runId: string) => Promise<IpcResponse<void>>;
         getLogs: (runId: string) => Promise<IpcResponse<RunLogEntry[]>>;
-        onEvent: (callback: (event: any) => void) => void;
+        onEvent: (callback: (event: any) => void) => () => void;
       };
 
       // Config
@@ -383,11 +383,11 @@ declare global {
         reload: () => Promise<IpcResponse<void>>;
       };
 
-      // Event Listeners - No change for callbacks
-      onBaristaEvent: (callback: (event: any) => void) => void;
-      onOrderEvent: (callback: (event: any) => void) => void;
-      onOrderAssigned: (callback: (data: any) => void) => void;
-      onOrderCompleted: (callback: (data: any) => void) => void;
+      // Event Listeners - Return cleanup function
+      onBaristaEvent: (callback: (event: any) => void) => () => void;
+      onOrderEvent: (callback: (event: any) => void) => () => void;
+      onOrderAssigned: (callback: (data: any) => void) => () => void;
+      onOrderCompleted: (callback: (data: any) => void) => () => void;
     };
 
     // Phase 2: Role and Terminal APIs (separate namespace)
