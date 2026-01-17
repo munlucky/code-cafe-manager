@@ -9,15 +9,15 @@
  */
 
 import { EventEmitter } from 'events';
-import { Order, Barista } from '@codecafe/core';
+import { Order, Barista, ProviderType } from '@codecafe/core';
 import { TerminalPool } from '../terminal/terminal-pool';
 import { SharedContext } from './shared-context';
-import { TerminalGroup, ProviderType } from './terminal-group';
+import { TerminalGroup } from './terminal-group';
 
 export interface StageConfig {
   id: string;
   name: string;
-  provider: ProviderType;
+  provider: 'claude-code' | 'codex' | 'gemini' | 'grok';
   prompt: string;
   role?: string;
   mode?: 'sequential' | 'parallel';

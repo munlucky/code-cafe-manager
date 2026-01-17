@@ -8,7 +8,79 @@
  * - SharedContext: 터미널 간 결과 동기화
  */
 
-export { SharedContext, type StageResult, type ContextSnapshot } from './shared-context';
-export { TerminalGroup, type ProviderType, type TerminalInfo, type TerminalGroupConfig } from './terminal-group';
-export { OrderSession, type StageConfig, type WorkflowConfig, type SessionStatus } from './order-session';
-export { CafeSessionManager, type CafeSessionInfo, type SessionManagerConfig } from './cafe-session-manager';
+// 내부 사용용 클래스 타입 (이름 충돌 방지를 위해 별칭 사용)
+export { SharedContext } from './shared-context';
+export type { ContextSnapshot } from './shared-context';
+
+export { TerminalGroup } from './terminal-group';
+export type {
+  TerminalInfo as SessionTerminalInfo,
+  TerminalGroupConfig
+} from './terminal-group';
+
+export { OrderSession } from './order-session';
+export type {
+  WorkflowConfig,
+  SessionStatus
+} from './order-session';
+
+// Session 내부 StageConfig (외부 StageConfig와 이름 충돌 방지)
+export type { StageConfig as SessionStageConfig } from './order-session';
+
+export { CafeSessionManager } from './cafe-session-manager';
+export type {
+  CafeSessionInfo,
+  SessionManagerConfig,
+  SessionStatusSummary
+} from './cafe-session-manager';
+
+// SharedContext의 StageResult (별칭으로 내보내기)
+export type { StageResult as SessionStageResult } from './shared-context';
+
+/**
+ * Session Event Payload Types
+ * BaristaEngine/CafeSessionManager에서 발생하는 이벤트의 페이로드 타입
+ */
+
+/** order:started 이벤트 페이로드 */
+export interface OrderStartedEvent {
+  orderId: string;
+  cafeId: string;
+}
+
+/** order:completed 이벤트 페이로드 */
+export interface OrderCompletedEvent {
+  orderId: string;
+  cafeId: string;
+  output?: string;
+  context?: unknown;
+}
+
+/** order:failed 이벤트 페이로드 */
+export interface OrderFailedEvent {
+  orderId: string;
+  cafeId: string;
+  error: string;
+}
+
+/** stage:started 이벤트 페이로드 */
+export interface StageStartedEvent {
+  orderId: string;
+  stageId: string;
+  provider: string;
+}
+
+/** stage:completed 이벤트 페이로드 */
+export interface StageCompletedEvent {
+  orderId: string;
+  stageId: string;
+  output: string;
+  duration: number;
+}
+
+/** stage:failed 이벤트 페이로드 */
+export interface StageFailedEvent {
+  orderId: string;
+  stageId: string;
+  error: string;
+}

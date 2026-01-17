@@ -22,6 +22,20 @@ export interface SessionManagerConfig {
   maxConcurrentOrdersPerCafe?: number;
 }
 
+/** Session 상태 요약 (getStatusSummary 반환 타입) */
+export interface SessionStatusSummary {
+  totalCafes: number;
+  totalSessions: number;
+  runningCount: number;
+  completedCount: number;
+  failedCount: number;
+  cafes: Array<{
+    cafeId: string;
+    sessionCount: number;
+    runningCount: number;
+  }>;
+}
+
 /**
  * CafeSessionManager - Cafe별 Order 세션들을 관리
  */
@@ -161,18 +175,7 @@ export class CafeSessionManager extends EventEmitter {
   /**
    * 세션 상태 요약
    */
-  getStatusSummary(): {
-    totalCafes: number;
-    totalSessions: number;
-    runningCount: number;
-    completedCount: number;
-    failedCount: number;
-    cafes: Array<{
-      cafeId: string;
-      sessionCount: number;
-      runningCount: number;
-    }>;
-  } {
+  getStatusSummary(): SessionStatusSummary {
     let totalSessions = 0;
     let runningCount = 0;
     let completedCount = 0;

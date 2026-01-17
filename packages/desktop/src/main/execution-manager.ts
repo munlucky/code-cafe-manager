@@ -7,6 +7,15 @@ import * as path from 'path';
 import { BrowserWindow } from 'electron';
 import { Orchestrator, Order, Barista } from '@codecafe/core';
 import { BaristaEngineV2, TerminalPool } from '@codecafe/orchestrator';
+import type {
+  OrderStartedEvent,
+  OrderCompletedEvent,
+  OrderFailedEvent,
+  StageStartedEvent,
+  StageCompletedEvent,
+  StageFailedEvent,
+  SessionStatusSummary,
+} from '@codecafe/orchestrator/session';
 import { DEFAULT_TERMINAL_POOL_CONFIG } from './config/terminal-pool.config.js';
 
 interface ExecutionManagerConfig {
@@ -121,23 +130,23 @@ export class ExecutionManager {
     });
 
     // Session 관련 이벤트들
-    this.baristaEngine.on('order:started', (data: any) => {
+    this.baristaEngine.on('order:started', (data: OrderStartedEvent) => {
       console.log('[ExecutionManager] Order started (session):', data.orderId);
       this.sendToRenderer('order:session-started', data);
     });
 
-    this.baristaEngine.on('order:completed', (data: any) => {
+    this.baristaEngine.on('order:completed', (data: OrderCompletedEvent) => {
       console.log('[ExecutionManager] Order completed (session):', data.orderId);
       this.sendToRenderer('order:session-completed', data);
     });
 
-    this.baristaEngine.on('order:failed', (data: any) => {
+    this.baristaEngine.on('order:failed', (data: OrderFailedEvent) => {
       console.log('[ExecutionManager] Order failed (session):', data.orderId);
       this.sendToRenderer('order:session-failed', data);
     });
 
     // Stage 이벤트들
-    this.baristaEngine.on('stage:started', (data: any) => {
+    this.baristaEngine.on('stage:started', (data: StageStartedEvent) => {
       console.log('[ExecutionManager] Stage started:', data.stageId);
       this.sendToRenderer('order:stage-started', {
         orderId: data.orderId,
@@ -146,7 +155,7 @@ export class ExecutionManager {
       });
     });
 
-    this.baristaEngine.on('stage:completed', (data: any) => {
+    this.baristaEngine.on('stage:completed', (data: StageCompletedEvent) => {
       console.log('[ExecutionManager] Stage completed:', data.stageId);
       this.sendToRenderer('order:stage-completed', {
         orderId: data.orderId,
@@ -156,7 +165,7 @@ export class ExecutionManager {
       });
     });
 
-    this.baristaEngine.on('stage:failed', (data: any) => {
+    this.baristaEngine.on('stage:failed', (data: StageFailedEvent) => {
       console.log('[ExecutionManager] Stage failed:', data.stageId);
       this.sendToRenderer('order:stage-failed', {
         orderId: data.orderId,
@@ -289,7 +298,7 @@ export class ExecutionManager {
   /**
    * Session 상태 조회
    */
-  getSessionStatus(): any {
+  getSessionStatus(): SessionStatusSummary | { error: string } {
     if (!this.baristaEngine) {
       return { error: 'Engine not initialized' };
     }

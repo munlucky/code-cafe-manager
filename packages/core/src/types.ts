@@ -69,6 +69,8 @@ export interface Order {
     branch: string;
     baseBranch: string;
   };
+  // Session-based execution을 위한 cafeId (다중 터미널 관리)
+  cafeId?: string;
   // @deprecated Legacy fields for backward compatibility (Recipe → Workflow)
   recipeId?: string;
   recipeName?: string;

@@ -9,9 +9,26 @@ import { TerminalPool, TerminalLease } from '../terminal/terminal-pool';
 import { ProviderAdapterFactory } from '../terminal/provider-adapter';
 import { RoleManager } from '../role/role-manager';
 import { Role } from '../types';
-import { OrderSession, CafeSessionManager, WorkflowConfig, StageConfig } from '../session';
+import {
+  OrderSession,
+  CafeSessionManager,
+  WorkflowConfig,
+  SessionStageConfig,
+  SessionStatusSummary
+} from '../session';
 
 import { EventEmitter } from 'events';
+
+/**
+ * Order 인터페이스 확장 (orchestrator 전용 속성)
+ * core 패키지의 순환 의존성을 피하기 위해 여기서 확장
+ */
+interface OrderWithWorkflow extends Order {
+  workflowConfig?: WorkflowConfig;
+}
+
+// StageConfig 별칭 (내부 사용)
+type StageConfig = SessionStageConfig;
 
 interface ActiveExecution {
   baristaId: string;
@@ -71,10 +88,10 @@ export class BaristaEngineV2 extends EventEmitter {
 
     // Extract CWD from order variables if available
     const cwd = order.vars?.['PROJECT_ROOT'] || process.cwd();
-    const cafeId = (order as any).cafeId || 'default';
+    const cafeId = order.cafeId || 'default';
 
     // 워크플로우 설정이 있는 경우 Session 사용
-    const workflowConfig = (order as any).workflowConfig as WorkflowConfig | undefined;
+    const workflowConfig = (order as OrderWithWorkflow).workflowConfig;
     if (workflowConfig && workflowConfig.stages && workflowConfig.stages.length > 0) {
       await this.executeWithSession(order, barista, cafeId, cwd, workflowConfig);
       return;
@@ -268,7 +285,7 @@ export class BaristaEngineV2 extends EventEmitter {
   /**
    * Get session status summary
    */
-  getSessionStatus(): ReturnType<CafeSessionManager['getStatusSummary']> {
+  getSessionStatus(): SessionStatusSummary {
     return this.sessionManager.getStatusSummary();
   }
 
@@ -386,8 +403,8 @@ export class BaristaEngineV2 extends EventEmitter {
   ): Promise<void> {
     console.log(`BaristaEngineV2: Executing legacy order ${order.id}`);
 
-    // order.prompt는 ExecutionManager에서 추가됨
-    const prompt = (order as any).prompt;
+    // order.prompt는 ExecutionManager에서 추가됨 (Order 인터페이스에 이미 정의됨)
+    const prompt = order.prompt;
     if (!prompt) {
       throw new Error(`No prompt found for legacy order ${order.id}`);
     }

@@ -29,9 +29,10 @@ interface InteractiveTerminalProps {
 function stripAnsi(text: string): string {
   // ANSI escape 코드 패턴들
   // - CSI sequences: ESC[ ... 또는 \x1b[ ...
-  // - OSC sequences: ESC] ... ST
+  // - OSC sequences: ESC] ... ST (terminated by BEL or ESC)
   // - Other escape sequences
-  const ansiPattern = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[PX^_][^\x1b]*\x1b\\|\x1b[@-Z\\-_]|\[\?[0-9;]*[a-zA-Z]|\[[0-9;]*[a-zA-Z]/g;
+  // 참고: 모든 ANSI escape sequence는 \x1b (ESC)로 시작해야 함
+  const ansiPattern = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07\x1b]*[\x07\x1b]|\x1b[PX^_][^\x1b]*\x1b\\|\x1b[@-Z\\-_]/g;
   return text.replace(ansiPattern, '');
 }
 

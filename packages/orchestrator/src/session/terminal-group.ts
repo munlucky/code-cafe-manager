@@ -8,11 +8,10 @@
  */
 
 import { EventEmitter } from 'events';
+import { ProviderType } from '@codecafe/core';
 import { TerminalPool, TerminalLease } from '../terminal/terminal-pool';
 import { ProviderAdapterFactory } from '../terminal/provider-adapter';
 import { SharedContext } from './shared-context';
-
-export type ProviderType = 'claude-code' | 'codex' | 'gemini' | 'custom';
 
 export interface TerminalInfo {
   id: string;
