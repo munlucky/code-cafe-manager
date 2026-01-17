@@ -19,6 +19,9 @@ export type { TerminalPoolConfig, ProviderTerminalConfig, PoolStatus, PoolMetric
 // Export barista engine
 export { BaristaEngineV2 } from './barista/barista-engine-v2.js';
 
+// Export session management (Phase 3 - Multi-terminal orchestration)
+export * from './session';
+
 // Export schema validation
 export * from './schema/validator';
 
