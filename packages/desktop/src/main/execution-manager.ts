@@ -20,11 +20,24 @@ import { DEFAULT_TERMINAL_POOL_CONFIG } from './config/terminal-pool.config.js';
 
 /**
  * ANSI escape 코드를 HTML로 변환
- * 터미널 출력의 색상/스타일을 유지
+ * 터미널 출력의 색상/스타일을 유지하고 제어 시퀀스는 제거
  */
 function convertAnsiToHtml(text: string): string {
-  // ANSI escape 시퀀스 패턴 매칭 및 스타일 적용
-  const ansiRegex = /\x1b\[([0-9;?]*)m/g;
+  // 1. 먼저 모든 ANSI CSI 시퀀스를 처리 (ESC [ ... final_byte)
+  // final byte는 0x40-0x7E (@-~) 범위
+  // 색상 코드(m으로 끝남)만 유지하고 나머지 제어 코드는 제거
+  const allCsiRegex = /\x1b\[[0-9;?]*[@-~]/g;
+  let cleanedText = text.replace(allCsiRegex, (match) => {
+    // 색상 코드 (m으로 끝남)는 유지
+    if (match.endsWith('m')) {
+      return match;
+    }
+    // 나머지 제어 코드 (H, J, K, X, C, A, B, D, h, l 등)는 제거
+    return '';
+  });
+
+  // 2. 색상 코드를 HTML로 변환
+  const ansiColorRegex = /\x1b\[([0-9;?]*)m/g;
 
   let result = '';
   let lastIndex = 0;
@@ -54,8 +67,8 @@ function convertAnsiToHtml(text: string): string {
     '97': 'color:#ffffff',  // Bright White
   };
 
-  text.replace(ansiRegex, (match, codes, offset) => {
-    result += text.slice(lastIndex, offset);
+  cleanedText.replace(ansiColorRegex, (match, codes, offset) => {
+    result += cleanedText.slice(lastIndex, offset);
 
     const codeList = codes.split(';');
     for (const code of codeList) {
@@ -79,7 +92,7 @@ function convertAnsiToHtml(text: string): string {
     return '';
   });
 
-  result += text.slice(lastIndex);
+  result += cleanedText.slice(lastIndex);
 
   while (currentStyles.length > 0) {
     result += '</span>';

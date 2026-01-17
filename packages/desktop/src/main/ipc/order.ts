@@ -13,11 +13,24 @@ import { promises as fs } from 'fs';
 
 /**
  * ANSI escape 코드를 HTML로 변환
- * 터미널 출력의 색상/스타일을 유지
+ * 터미널 출력의 색상/스타일을 유지하고 제어 시퀀스는 제거
  */
 function convertAnsiToHtml(text: string): string {
-  // ANSI escape 시퀀스 패턴 매칭 및 스타일 적용
-  const ansiRegex = /\x1b\[([0-9;?]*)m/g;
+  // 1. 먼저 모든 ANSI CSI 시퀀스를 처리 (ESC [ ... final_byte)
+  // final byte는 0x40-0x7E (@-~) 범위
+  // 색상 코드(m으로 끝남)만 유지하고 나머지 제어 코드는 제거
+  const allCsiRegex = /\x1b\[[0-9;?]*[@-~]/g;
+  let cleanedText = text.replace(allCsiRegex, (match) => {
+    // 색상 코드 (m으로 끝남)는 유지
+    if (match.endsWith('m')) {
+      return match;
+    }
+    // 나머지 제어 코드 (H, J, K, X, C, A, B, D, h, l 등)는 제거
+    return '';
+  });
+
+  // 2. 색상 코드를 HTML로 변환
+  const ansiColorRegex = /\x1b\[([0-9;?]*)m/g;
 
   let result = '';
   let lastIndex = 0;
@@ -45,24 +58,19 @@ function convertAnsiToHtml(text: string): string {
     '95': 'color:#ab47bc',  // Bright Magenta
     '96': 'color:#26c6da',  // Bright Cyan
     '97': 'color:#ffffff',  // Bright White
-    // RGB colors like 38;2;R;G;B
   };
 
-  text.replace(ansiRegex, (match, codes, offset) => {
-    // 이전 텍스트 추가
-    result += text.slice(lastIndex, offset);
+  cleanedText.replace(ansiColorRegex, (match, codes, offset) => {
+    result += cleanedText.slice(lastIndex, offset);
 
-    // 스타일 처리
     const codeList = codes.split(';');
     for (const code of codeList) {
       if (code === '0') {
-        // Reset - close all open spans
         while (currentStyles.length > 0) {
           result += '</span>';
           currentStyles.pop();
         }
       } else if (code.startsWith('38') || code.startsWith('48')) {
-        // RGB foreground/background - 스킵
         continue;
       } else if (styleMap[code]) {
         const style = styleMap[code];
@@ -77,10 +85,8 @@ function convertAnsiToHtml(text: string): string {
     return '';
   });
 
-  // 남은 텍스트 추가
-  result += text.slice(lastIndex);
+  result += cleanedText.slice(lastIndex);
 
-  // 열린 스타일 모두 닫기
   while (currentStyles.length > 0) {
     result += '</span>';
     currentStyles.pop();
@@ -257,6 +263,8 @@ async function handleIpc<T>(
  */
 class OrderManager {
   private static outputIntervals = new Map<string, NodeJS.Timeout>();
+  // Track which orders have already received history (prevent duplicate on Strict Mode remount)
+  private static historySent = new Set<string>();
 
   /**
    * Register Order IPC Handlers
@@ -463,8 +471,10 @@ class OrderManager {
         OrderManager.outputIntervals.delete(intervalKey);
       }
 
-      // 기존 로그 파일이 있으면 히스토리로 한 번 전송
-      if (existsSync(logPath)) {
+      // 기존 로그 파일이 있으면 히스토리로 한 번 전송 (중복 방지)
+      const historyKey = `history:${orderId}`;
+      if (existsSync(logPath) && !OrderManager.historySent.has(historyKey)) {
+        OrderManager.historySent.add(historyKey);
         try {
           const content = await fs.readFile(logPath, 'utf-8');
           if (content.trim()) {

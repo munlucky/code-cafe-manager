@@ -67,6 +67,18 @@ export class TerminalPool {
   }
 
   /**
+   * C3: Structured log helper for diagnostics
+   */
+  private log(step: string, details: Record<string, unknown> = {}): void {
+    console.log(JSON.stringify({
+      scope: 'terminal-pool',
+      step,
+      timestamp: new Date().toISOString(),
+      ...details,
+    }));
+  }
+
+  /**
    * Acquire a terminal lease
    */
   async acquireLease(
@@ -86,6 +98,15 @@ export class TerminalPool {
     }
 
     const timeout = timeoutMs || providerConfig.timeout;
+    const acquireStartTime = Date.now();
+
+    // C3: Log acquire start
+    this.log('acquire-start', {
+      provider,
+      baristaId,
+      cwd: cwd || this.config.cwd || process.cwd(),
+      timeoutMs: timeout,
+    });
 
     try {
       // Pass CWD to getOrCreateTerminal
@@ -93,8 +114,25 @@ export class TerminalPool {
         this.getOrCreateTerminal(provider, cwd)
       );
 
+      // C3: Log acquire success
+      this.log('acquire-success', {
+        provider,
+        baristaId,
+        terminalId: terminal.id,
+        elapsedMs: Date.now() - acquireStartTime,
+      });
+
       return this.createActiveLease(terminal, baristaId, provider, timeout);
     } catch (error) {
+      // C3: Log acquire failure
+      this.log('acquire-fail', {
+        provider,
+        baristaId,
+        cwd: cwd || this.config.cwd || process.cwd(),
+        timeoutMs: timeout,
+        elapsedMs: Date.now() - acquireStartTime,
+        error: error instanceof Error ? error.message : String(error),
+      });
       this.handleAcquireError(error, provider, timeout);
       throw error;
     }

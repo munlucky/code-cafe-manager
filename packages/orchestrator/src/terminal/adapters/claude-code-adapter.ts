@@ -36,6 +36,41 @@ const CONFIG = {
 export class ClaudeCodeAdapter implements IProviderAdapter {
   readonly providerType: ProviderType = 'claude-code';
 
+  // C2: Startup output ring buffer for diagnostics
+  private startupBuffer: string[] = [];
+  private readonly STARTUP_BUFFER_SIZE = 50;
+
+  /**
+   * Push a chunk to the startup ring buffer
+   */
+  private pushStartupLog(chunk: string): void {
+    if (this.startupBuffer.length >= this.STARTUP_BUFFER_SIZE) {
+      this.startupBuffer.shift();
+    }
+    this.startupBuffer.push(chunk);
+  }
+
+  /**
+   * Dump and clear the startup buffer
+   */
+  private dumpStartupBuffer(): string {
+    const dump = this.startupBuffer.join('');
+    this.startupBuffer = [];
+    return dump;
+  }
+
+  /**
+   * C1: Structured log helper for diagnostics
+   */
+  private log(step: string, details: Record<string, unknown> = {}): void {
+    console.log(JSON.stringify({
+      scope: 'claude-adapter',
+      step,
+      timestamp: new Date().toISOString(),
+      ...details,
+    }));
+  }
+
   /**
    * Get shell configuration based on platform
    */
@@ -112,6 +147,8 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
    * Spawn claude CLI process via shell
    */
   async spawn(options?: { cwd?: string }): Promise<IPtyProcess> {
+    const spawnStartTime = Date.now();
+    
     try {
       const { shell, args } = this.getShellConfig();
       const claudeCmd = this.getClaudeCommand();
@@ -143,12 +180,24 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
                  !lower.includes('visual studio code');
         });
         env[pathKey] = filteredPaths.join(';');
-        console.log(`[ClaudeCodeAdapter] Filtered PATH to remove VS Code (Original: ${paths.length}, New: ${filteredPaths.length})`);
       }
 
       // Use provided CWD or fallback to process.cwd()
       const spawnCwd = options?.cwd || process.cwd();
-      console.log(`[ClaudeCodeAdapter] Spawning in CWD: ${spawnCwd}`);
+
+      // C1: Structured log - spawn start
+      this.log('spawn-start', {
+        provider: this.providerType,
+        cwd: spawnCwd,
+        shell,
+        args,
+        envSummary: {
+          CI: env.CI,
+          TERM: 'xterm-256color',
+          pathLength: env[pathKey]?.split(';').length || 0,
+        },
+        claudeCmd,
+      });
 
       const spawnOptions = {
         name: 'xterm-color',
@@ -161,22 +210,33 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         rows: CONFIG.TERM_ROWS,
       };
 
-      console.log(`[ClaudeCodeAdapter] Spawning shell: ${shell} ${args.join(' ')}`);
       const ptyProcess = pty.spawn(shell, args, spawnOptions) as unknown as IPtyProcess;
 
-      // Wait for shell to initialize
+      // C1: Wait for shell to initialize with timing
+      const shellReadyStart = Date.now();
+      this.log('shell-ready-enter', { timeoutMs: CONFIG.WAIT_TIMEOUT });
       await this.waitForShellReady(ptyProcess, CONFIG.WAIT_TIMEOUT);
+      this.log('shell-ready-exit', { elapsedMs: Date.now() - shellReadyStart });
 
-      // Start claude CLI inside the shell
-      console.log(`[ClaudeCodeAdapter] Starting claude CLI: ${claudeCmd}`);
+      // C1: Write claude command with logging
+      this.log('write-claude-cmd', { claudeCmd });
       ptyProcess.write(`${claudeCmd}\r`);
 
-      // Wait for Claude to initialize
+      // C1: Wait for Claude to initialize with timing
+      const waitPromptStart = Date.now();
+      this.log('waitForPrompt-enter', { timeoutMs: CONFIG.WAIT_TIMEOUT });
       await this.waitForPrompt(ptyProcess, CONFIG.WAIT_TIMEOUT);
+      this.log('waitForPrompt-success', { elapsedMs: Date.now() - waitPromptStart });
 
-      console.log('[ClaudeCodeAdapter] Claude CLI ready');
+      this.log('spawn-complete', { totalElapsedMs: Date.now() - spawnStartTime });
       return ptyProcess;
     } catch (error) {
+      // C1: Log spawn failure with ring buffer dump
+      this.log('spawn-error', {
+        error: error instanceof Error ? error.message : String(error),
+        totalElapsedMs: Date.now() - spawnStartTime,
+        startupBufferDump: this.dumpStartupBuffer(),
+      });
       throw new ProviderSpawnError(
         'claude-code',
         error instanceof Error ? error : new Error(String(error))
@@ -397,14 +457,17 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
    * Wait for initialization prompt
    */
   private async waitForPrompt(ptyProcess: IPtyProcess, timeout: number): Promise<void> {
+    // C2: Clear startup buffer before waiting
+    this.startupBuffer = [];
+    
     return ClaudeCodeAdapter._createEventPromise<void>(
       ptyProcess,
       'data',
       timeout,
       `Claude CLI initialization timeout after ${timeout}ms`,
       (data: string, resolve, reject, cleanup) => {
-        // Log startup data for debugging
-        console.log('[ClaudeCodeAdapter] Startup chunk:', data.trim());
+        // C2: Push to startup ring buffer for diagnostics
+        this.pushStartupLog(data);
         
         // Handle permissions during startup
         this.checkAndHandlePermissions(data, ptyProcess);

@@ -67,29 +67,9 @@ export function OrderDetailView({
     return () => clearInterval(interval);
   }, [order.id]);
 
-  // 실행 진행 이벤트 리스너
-  useEffect(() => {
-    const cleanup = window.codecafe.order.onOutput((event: any) => {
-      if (event.orderId === order.id && event.type === 'system') {
-        // TODO: Replace with structured event (e.g., order:stage-changed) when backend supports it
-        // Stage detection via string matching (fragile, depends on log format)
-        const stageMatch = event.content?.match(/\[STAGE\]\s*(\w+)/i);
-        if (stageMatch && workflow) {
-          const stageName = stageMatch[1].toLowerCase();
-          const stageIdx = workflow.stages.findIndex(
-            (s) => s.toLowerCase() === stageName
-          );
-          if (stageIdx >= 0) {
-            setCurrentStageIndex(stageIdx);
-          }
-        }
-      }
-    });
-
-    return () => {
-      if (cleanup) cleanup();
-    };
-  }, [order.id, workflow]);
+  // Stage 변경 이벤트 리스너 (order:stage-started)
+  // NOTE: onOutput 리스너는 InteractiveTerminal에서 처리하므로 여기서는 제거
+  // TODO: order:stage-started 이벤트가 구현되면 여기서 stage 추적 활성화
 
   // 사용자 입력 전송
   const handleSendInput = useCallback(async (message: string) => {

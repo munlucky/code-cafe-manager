@@ -17,6 +17,14 @@ interface TerminalOutputPanelProps {
   orderId: string;
 }
 
+/**
+ * Strip ANSI escape codes from text
+ */
+function stripAnsiCodes(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+}
+
 export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.Element {
   const [output, setOutput] = useState<OrderOutputEvent[]>([]);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -131,7 +139,10 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
         {output.map((e, i) => (
           <div key={i} className="mb-1">
             <span className="text-gray-600 mr-2">[{formatTimestamp(e.timestamp)}]</span>
-            <span className={getTypeColor(e.type)}>{stripAnsiCodes(e.content)}</span>
+            <span 
+              className={getTypeColor(e.type)} 
+              dangerouslySetInnerHTML={{ __html: e.content }}
+            />
           </div>
         ))}
       </pre>
