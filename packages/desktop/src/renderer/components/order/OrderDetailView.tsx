@@ -31,6 +31,7 @@ export function OrderDetailView({
   const [currentOrder, setCurrentOrder] = useState<Order>(order);
   const [workflow, setWorkflow] = useState<ExtendedWorkflowInfo | null>(null);
   const [currentStageIndex, setCurrentStageIndex] = useState(0);
+  const [completedStages, setCompletedStages] = useState<Set<string>>(new Set());
   const isRunning = currentOrder.status === OrderStatus.RUNNING;
   const isPending = currentOrder.status === OrderStatus.PENDING;
   const isCompleted = currentOrder.status === OrderStatus.COMPLETED;
@@ -67,9 +68,30 @@ export function OrderDetailView({
     return () => clearInterval(interval);
   }, [order.id]);
 
-  // Stage 변경 이벤트 리스너 (order:stage-started)
-  // NOTE: onOutput 리스너는 InteractiveTerminal에서 처리하므로 여기서는 제거
-  // TODO: order:stage-started 이벤트가 구현되면 여기서 stage 추적 활성화
+  // Stage 이벤트 리스너 - 실시간 stage 진행 상황 추적
+  useEffect(() => {
+    // order:stage-started 이벤트 리스너
+    const cleanupStageStarted = window.codecafe.order.onStageStarted((data: { orderId: string; stageId: string; provider?: string }) => {
+      if (data.orderId === order.id && workflow) {
+        const stageIndex = workflow.stages.indexOf(data.stageId);
+        if (stageIndex >= 0) {
+          setCurrentStageIndex(stageIndex);
+        }
+      }
+    });
+
+    // order:stage-completed 이벤트 리스너
+    const cleanupStageCompleted = window.codecafe.order.onStageCompleted((data: { orderId: string; stageId: string; output?: string; duration?: number }) => {
+      if (data.orderId === order.id) {
+        setCompletedStages(prev => new Set(prev).add(data.stageId));
+      }
+    });
+
+    return () => {
+      cleanupStageStarted();
+      cleanupStageCompleted();
+    };
+  }, [order.id, workflow]);
 
   // 사용자 입력 전송
   const handleSendInput = useCallback(async (message: string) => {
@@ -84,7 +106,11 @@ export function OrderDetailView({
     (stageName, index): StageInfo => {
       let status: StageStatus = 'pending';
 
-      if (isCompleted) {
+      // 명시적으로 완료된 stage 확인
+      if (completedStages.has(stageName)) {
+        status = 'completed';
+      } else if (isCompleted) {
+        // 전체 order가 완료된 경우
         status = 'completed';
       } else if (isFailed) {
         if (index < currentStageIndex) {

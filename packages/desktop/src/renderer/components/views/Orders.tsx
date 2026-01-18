@@ -15,15 +15,52 @@ type ViewMode = 'grid' | 'list';
 
 export function Orders(): JSX.Element {
   const { orders, fetchOrders, getOrderLog, cancelOrder, executeOrder } = useOrders();
-  const { sessionStatuses, stageResults } = useOrderStore();
+  const { sessionStatuses, stageResults, updateStageResult } = useOrderStore();
   const [executeDialogOrder, setExecuteDialogOrder] = useState<Order | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [modalOrder, setModalOrder] = useState<Order | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  // Workflow 캐시: workflowId -> stages[]
+  const [workflowStages, setWorkflowStages] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  // Stage 이벤트 리스너 - stageResults 업데이트
+  useEffect(() => {
+    // order:stage-started 이벤트 리스너
+    const cleanupStageStarted = window.codecafe.order.onStageStarted((data: { orderId: string; stageId: string; provider?: string }) => {
+      updateStageResult(data.orderId, data.stageId, {
+        status: 'running',
+        startedAt: new Date().toISOString(),
+      });
+    });
+
+    // order:stage-completed 이벤트 리스너
+    const cleanupStageCompleted = window.codecafe.order.onStageCompleted((data: { orderId: string; stageId: string; output?: string; duration?: number }) => {
+      updateStageResult(data.orderId, data.stageId, {
+        status: 'completed',
+        completedAt: new Date().toISOString(),
+        duration: data.duration,
+      });
+    });
+
+    // order:stage-failed 이벤트 리스너
+    const cleanupStageFailed = window.codecafe.order.onStageFailed((data: { orderId: string; stageId: string; error?: string }) => {
+      updateStageResult(data.orderId, data.stageId, {
+        status: 'failed',
+        completedAt: new Date().toISOString(),
+        error: data.error,
+      });
+    });
+
+    return () => {
+      cleanupStageStarted();
+      cleanupStageCompleted();
+      cleanupStageFailed();
+    };
+  }, [updateStageResult]);
 
   // 주기적으로 갱신
   useEffect(() => {
@@ -37,15 +74,75 @@ export function Orders(): JSX.Element {
     return [...orders].reverse();
   }, [orders]);
 
+  // Workflow 스테이지 로드 - 각 order의 workflowId로 stages 목록 가져오기
+  useEffect(() => {
+    const uniqueWorkflowIds = Array.from(new Set(orders.map(o => o.workflowId).filter(Boolean)));
+
+    uniqueWorkflowIds.forEach(async (workflowId) => {
+      if (!workflowId || workflowStages[workflowId]) return;
+
+      try {
+        const response = await window.codecafe.workflow.get(workflowId);
+        if (response.success && response.data?.stages) {
+          setWorkflowStages(prev => ({
+            ...prev,
+            [workflowId]: response.data.stages,
+          }));
+        }
+      } catch (error) {
+        console.error(`Failed to load workflow ${workflowId}:`, error);
+      }
+    });
+  }, [orders, workflowStages]);
+
   // Order에 대한 Stage 정보 생성
-  const getStagesForOrder = (orderId: string): StageInfo[] => {
-    const results = stageResults[orderId];
-    if (!results) return [];
-    
-    return Object.values(results).map(r => ({
-      name: r.stageId,
-      status: r.status,
-    }));
+  // workflow의 전체 stage 목록을 기반으로, stageResults에서 상태를 찾음
+  const getStagesForOrder = (order: Order): StageInfo[] => {
+    const orderStages = workflowStages[order.workflowId] || [];
+    const results = stageResults[order.id] || {};
+
+    // workflow stages를 기반으로 StageInfo 생성
+    return orderStages.map(stageId => {
+      const stageResult = results[stageId];
+      const isCompleted = order.status === OrderStatus.COMPLETED;
+      const isFailed = order.status === OrderStatus.FAILED;
+      const isRunning = order.status === OrderStatus.RUNNING;
+
+      // stageResult가 있으면 그 상태 사용, 없으면 order 상태 기반 추정
+      let status: StageInfo['status'] = 'pending';
+
+      if (stageResult) {
+        status = stageResult.status;
+      } else if (isCompleted) {
+        status = 'completed';
+      } else if (isFailed) {
+        status = 'failed';
+      } else if (isRunning) {
+        // 첫 번째 미완료 stage는 running 상태로 표시
+        const stageIndex = orderStages.indexOf(stageId);
+        const hasEarlierIncomplete = orderStages
+          .slice(0, stageIndex)
+          .some(s => !results[s] || results[s].status !== 'completed');
+        if (!hasEarlierIncomplete) {
+          status = 'running';
+        }
+      }
+
+      return {
+        name: stageId.charAt(0).toUpperCase() + stageId.slice(1),
+        status,
+      };
+    });
+
+    // fallback: workflow stages가 없으면 stageResults만 사용
+    if (orderStages.length === 0 && Object.keys(results).length > 0) {
+      return Object.values(results).map(r => ({
+        name: r.stageId,
+        status: r.status,
+      }));
+    }
+
+    return [];
   };
 
   // Order에 대한 Timeline 이벤트 생성 (placeholder)
@@ -166,7 +263,7 @@ export function Orders(): JSX.Element {
             <OrderCard
               key={order.id}
               order={order}
-              stages={getStagesForOrder(order.id)}
+              stages={getStagesForOrder(order)}
               onView={handleViewModal}
               onCancel={handleCancel}
               onExecute={(orderId) => {
@@ -207,7 +304,7 @@ export function Orders(): JSX.Element {
           isOpen={!!modalOrder}
           onClose={() => setModalOrder(null)}
           order={modalOrder}
-          stages={getStagesForOrder(modalOrder.id)}
+          stages={getStagesForOrder(modalOrder)}
           timelineEvents={getTimelineForOrder(modalOrder.id)}
           onSendInput={async (msg) => {
             await window.codecafe.order.sendInput(modalOrder.id, msg);
