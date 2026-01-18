@@ -352,11 +352,18 @@ class OrderManager {
             worktreeInfo = { path: result.path, branch: result.branch };
           } catch (wtError: any) {
             console.error('[Order IPC] Failed to create worktree:', wtError);
+
+            // Worktree 생성 실패 시 order 롤백 (생성된 order 삭제)
+            try {
+              await orchestrator.deleteOrder(order.id);
+              console.log('[Order IPC] Order rolled back due to worktree failure:', order.id);
+            } catch (deleteError: any) {
+              console.error(`[Order IPC] Failed to rollback order ${order.id}:`, deleteError);
+            }
+
             // handleIpc에서 일관된 에러 응답을 생성하도록 에러를 던짐
-            // order 객체를 details에 포함하여 클라이언트가 재시도 등에 활용할 수 있도록 함
             const error = new Error(`Failed to create worktree: ${wtError.message || 'Unknown error'}`);
             (error as any).code = 'WORKTREE_CREATION_FAILED';
-            (error as any).details = { order };
             throw error;
           }
         }

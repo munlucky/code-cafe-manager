@@ -233,17 +233,19 @@ export class WorktreeManager {
   /**
    * Safe directory 설정 (Windows dubious ownership 에러 방지)
    * Git 2.35.2+에서 다른 사용자 소유 저장소 접근 시 발생하는 보안 에러 해결
+   *
+   * 주의: git config --global 명령은 cwd 없이 실행해야 함
+   * dubious ownership 저장소에서 cwd로 실행하면 명령 자체가 실패함
    */
   private static async ensureSafeDirectory(repoPath: string): Promise<void> {
     const absolutePath = path.resolve(repoPath);
     let safeDirectories: string[] = [];
 
-    // 1. 현재 safe.directory 목록 확인
+    // 1. 현재 safe.directory 목록 확인 (cwd 없이 실행 - global 설정이므로)
     try {
       const { stdout } = await execFileAsync(
         'git',
-        ['config', '--global', '--get-all', 'safe.directory'],
-        { cwd: repoPath }
+        ['config', '--global', '--get-all', 'safe.directory']
       );
       safeDirectories = stdout.trim().split('\n').filter(Boolean);
     } catch {
@@ -260,14 +262,15 @@ export class WorktreeManager {
       return;
     }
 
-    // 3. safe.directory에 추가
+    // 3. safe.directory에 추가 (cwd 없이 실행 - global 설정이므로)
     try {
       await execFileAsync(
         'git',
-        ['config', '--global', '--add', 'safe.directory', absolutePath],
-        { cwd: repoPath }
+        ['config', '--global', '--add', 'safe.directory', absolutePath]
       );
-    } catch {
+      console.log(`[WorktreeManager] Added safe.directory: ${absolutePath}`);
+    } catch (error: any) {
+      console.error(`[WorktreeManager] Failed to add safe.directory '${absolutePath}': ${error.message}`);
       // 설정 실패해도 worktree 생성 시도는 계속 진행
     }
   }
