@@ -20,6 +20,7 @@
 import * as pty from 'node-pty';
 import * as os from 'os';
 import * as readline from 'readline';
+import * as fs from 'fs';
 
 // ============================================================================
 // Configuration
@@ -87,7 +88,7 @@ function findClaude(): string {
 
   for (const p of paths) {
     try {
-      require('fs').accessSync(p);
+      fs.accessSync(p);
       return p;
     } catch {}
   }
@@ -95,23 +96,10 @@ function findClaude(): string {
   return 'claude'; // Fallback to PATH
 }
 
-// ============================================================================
-// Test Functions
-// ============================================================================
-
-interface PtyProcess {
-  pid: number;
-  write(data: string): void;
-  on(event: string, listener: (...args: any[]) => void): void;
-  once(event: string, listener: (...args: any[]) => void): void;
-  removeListener(event: string, listener: (...args: any[]) => void): void;
-  kill(signal?: string): void;
-}
-
 /**
  * Step 1: Spawn PTY and start Claude CLI
  */
-async function testSpawn(cwd?: string): Promise<PtyProcess> {
+async function testSpawn(cwd?: string): Promise<pty.IPty> {
   log('spawn-start', { cwd: cwd || process.cwd() });
 
   const isWindows = os.platform() === 'win32';
@@ -130,7 +118,7 @@ async function testSpawn(cwd?: string): Promise<PtyProcess> {
       TERM: 'xterm-256color',
       FORCE_COLOR: '1',
     },
-  }) as unknown as PtyProcess;
+  });
 
   log('pty-spawned', { pid: ptyProcess.pid, shell });
 
@@ -138,7 +126,7 @@ async function testSpawn(cwd?: string): Promise<PtyProcess> {
   let buffer = '';
 
   // Log all output
-  ptyProcess.on('data', (data: string) => {
+  ptyProcess.onData((data: string) => {
     buffer += data;
     // Clean ANSI for logging
     const clean = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
@@ -179,7 +167,7 @@ async function testSpawn(cwd?: string): Promise<PtyProcess> {
  * Step 2: Send prompt to Claude CLI
  */
 async function testSendPrompt(
-  ptyProcess: PtyProcess,
+  ptyProcess: pty.IPty,
   prompt: string,
   lineEnding: string = '\r'
 ): Promise<void> {
@@ -201,7 +189,7 @@ async function testSendPrompt(
  * Step 3: Read output until completion
  */
 async function testReadOutput(
-  ptyProcess: PtyProcess,
+  ptyProcess: pty.IPty,
   timeout: number = CONFIG.EXECUTE_TIMEOUT
 ): Promise<string> {
   log('read-output-start', { timeout });
@@ -209,6 +197,7 @@ async function testReadOutput(
   return new Promise((resolve) => {
     let output = '';
     let idleTimer: NodeJS.Timeout | null = null;
+    let dataDisposable: { dispose(): void } | null = null;
 
     const hardTimeout = setTimeout(() => {
       log('hard-timeout', { outputLength: output.length });
@@ -230,10 +219,10 @@ async function testReadOutput(
     const cleanup = () => {
       clearTimeout(hardTimeout);
       if (idleTimer) clearTimeout(idleTimer);
-      ptyProcess.removeListener('data', onData);
+      if (dataDisposable) dataDisposable.dispose();
     };
 
-    const onData = (data: string) => {
+    dataDisposable = ptyProcess.onData((data: string) => {
       output += data;
       resetIdleTimer();
 
@@ -243,9 +232,8 @@ async function testReadOutput(
         cleanup();
         resolve(output);
       }
-    };
+    });
 
-    ptyProcess.on('data', onData);
     resetIdleTimer();
   });
 }
@@ -299,7 +287,14 @@ async function interactiveMode(): Promise<void> {
     output: process.stdout,
   });
 
-  let ptyProcess: PtyProcess | null = null;
+  let ptyProcess: pty.IPty | null = null;
+
+  // Send command handlers (refactored to reduce duplication)
+  const sendCommands: Record<string, string> = {
+    '/send ': '\r',
+    '/sendn ': '\n',
+    '/sendrn ': '\r\n',
+  };
 
   const prompt = () => {
     rl.question('> ', async (input) => {
@@ -322,43 +317,19 @@ async function interactiveMode(): Promise<void> {
         return;
       }
 
-      if (trimmed.startsWith('/send ')) {
-        if (!ptyProcess) {
-          console.log('Run /spawn first');
+      // Handle /send, /sendn, /sendrn commands
+      for (const [command, lineEnding] of Object.entries(sendCommands)) {
+        if (trimmed.startsWith(command)) {
+          if (!ptyProcess) {
+            console.log('Run /spawn first');
+          } else {
+            const text = trimmed.substring(command.length);
+            ptyProcess.write(text + lineEnding);
+            console.log(`Sent with ${JSON.stringify(lineEnding)}: ${text}`);
+          }
           prompt();
           return;
         }
-        const text = trimmed.substring(6);
-        ptyProcess.write(text + '\r');
-        console.log(`Sent: ${text}`);
-        prompt();
-        return;
-      }
-
-      if (trimmed.startsWith('/sendn ')) {
-        if (!ptyProcess) {
-          console.log('Run /spawn first');
-          prompt();
-          return;
-        }
-        const text = trimmed.substring(7);
-        ptyProcess.write(text + '\n');
-        console.log(`Sent with \\n: ${text}`);
-        prompt();
-        return;
-      }
-
-      if (trimmed.startsWith('/sendrn ')) {
-        if (!ptyProcess) {
-          console.log('Run /spawn first');
-          prompt();
-          return;
-        }
-        const text = trimmed.substring(8);
-        ptyProcess.write(text + '\r\n');
-        console.log(`Sent with \\r\\n: ${text}`);
-        prompt();
-        return;
       }
 
       // Direct send
