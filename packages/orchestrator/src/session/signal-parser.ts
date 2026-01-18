@@ -70,8 +70,14 @@ export class SignalParser {
     // 3. signals 블록을 찾지 못함
     if (!rawBlock) {
       // 휴리스틱: 출력에 질문이 많으면 불확실성 있음으로 판단
+      // 하지만 출력이 충분히 길다면 단순히 설명 중에 질문을 포함한 것일 수 있음
       const questionCount = (output.match(/\?/g) || []).length;
-      if (questionCount >= 3) {
+      const outputLength = output.length;
+      const isSubstantialOutput = outputLength > 1000;
+      
+      // 질문이 5개 이상이고 출력이 충분하지 않을 때만 await_user로 추론
+      if (questionCount >= 5 && !isSubstantialOutput) {
+        console.log(`[SignalParser] Inferring await_user: ${questionCount} questions in ${outputLength} chars (no signals block)`);
         return {
           success: false,
           signals: {
@@ -84,6 +90,7 @@ export class SignalParser {
         };
       }
 
+      console.log(`[SignalParser] No signals block found, output: ${outputLength} chars, questions: ${questionCount}`);
       return {
         success: false,
         signals: { ...DEFAULT_SIGNALS },

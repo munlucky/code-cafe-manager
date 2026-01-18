@@ -160,8 +160,8 @@ export class StageOrchestrator extends EventEmitter {
   /**
    * AI 기반 판단 (신호 파싱 실패 시 폴백)
    *
-   * signals 블록이 없으면 기본적으로 await_user 처리.
-   * Claude가 작업을 제대로 수행했다면 signals 블록을 출력해야 함.
+   * signals 블록이 없더라도 출력 내용을 분석하여 작업 완료 여부를 추론
+   * 실질적인 작업이 수행되었다면 proceed, 그렇지 않으면 await_user
    */
   private async evaluateWithAI(
     stageId: string,
@@ -170,12 +170,55 @@ export class StageOrchestrator extends EventEmitter {
   ): Promise<OrchestratorDecision> {
     console.log(`[StageOrchestrator] AI evaluation for stage ${stageId} (no signals block found)`);
 
-    // signals 블록이 없다는 것 자체가 작업 미완료를 의미
-    // 명시적으로 await_user 처리
+    // 1. 출력 길이 확인 - 실질적인 출력이 있는가?
+    const outputLength = output.length;
+    const hasSubstantialOutput = outputLength > 500;
+
+    // 2. 작업 완료 지표 확인
+    const completionIndicators = [
+      /(?:created|modified|updated|wrote|generated)\s+(?:file|files)/i,  // File operations
+      /(?:analysis|plan|implementation|review)\s+(?:complete|completed|done)/i,  // Task completion
+      /```(?:yaml|json|markdown)/i,  // Structured output blocks
+      /^##?\s+/m,  // Markdown headers (structured output)
+      /complexity:\s*(?:simple|medium|complex)/i,  // Complexity assessment
+      /taskType:\s*(?:feature|modification|bugfix|refactor)/i,  // Task classification
+    ];
+
+    const hasCompletionIndicators = completionIndicators.some(pattern => pattern.test(output));
+
+    // 3. 불확실성 지표 확인
+    const hasUncertainty = this.hasUncertaintyIndicators(output);
+    const questionCount = (output.match(/\?/g) || []).length;
+    const hasExcessiveQuestions = questionCount >= 5;
+
+    // 4. 판단 로직
+    if (hasSubstantialOutput && hasCompletionIndicators && !hasExcessiveQuestions) {
+      // 실질적인 작업이 수행된 것으로 보임 - proceed
+      console.log(`[StageOrchestrator] Inferring completion: substantial output (${outputLength} chars) with completion indicators`);
+      return {
+        action: 'proceed',
+        reason: 'Inferred completion from output content (no signals block but work appears done)',
+        usedAI: true,
+      };
+    }
+
+    if (hasUncertainty || hasExcessiveQuestions) {
+      // 명확한 불확실성이 있음 - await_user
+      console.log(`[StageOrchestrator] Inferring uncertainty: ${questionCount} questions, uncertainty indicators: ${hasUncertainty}`);
+      return {
+        action: 'await_user',
+        reason: 'No signals block found and output contains uncertainty indicators',
+        userMessage: `Stage ${stageId} did not produce a signals block. The stage may need clarification.`,
+        usedAI: true,
+      };
+    }
+
+    // 5. 기본: signals 블록이 없고 판단하기 어려우면 await_user
+    console.log(`[StageOrchestrator] Cannot infer completion: insufficient indicators (output: ${outputLength} chars)`);
     return {
       action: 'await_user',
-      reason: 'No signals block found in stage output',
-      userMessage: `Stage ${stageId} did not produce a signals block. The stage may not have completed properly.`,
+      reason: 'No signals block found and cannot infer completion',
+      userMessage: `Stage ${stageId} did not produce a signals block. Please review the output.`,
       usedAI: true,
     };
   }

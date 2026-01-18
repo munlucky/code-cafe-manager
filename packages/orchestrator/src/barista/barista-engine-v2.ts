@@ -280,10 +280,28 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
     }
 
     prompt += `## User Request\n\n${orderPrompt}\n\n`;
+    
+    // Add mandatory signals block requirement with examples
+    prompt += `## MANDATORY OUTPUT FORMAT\n\n`;
+    prompt += `You MUST end your response with a signals block in this EXACT format:\n\n`;
+    prompt += `\`\`\`yaml\n`;
+    prompt += `signals:\n`;
+    prompt += `  nextAction: proceed  # proceed | await_user | skip_next | retry\n`;
+    prompt += `  needsUserInput: false  # true only if you MUST ask the user something\n`;
+    prompt += `  complexity: medium  # simple | medium | complex\n`;
+    prompt += `  uncertainties:  # optional: list questions only if needsUserInput is true\n`;
+    prompt += `    - "Question for user"\n`;
+    prompt += `\`\`\`\n\n`;
+    prompt += `**Examples of valid signals:**\n`;
+    prompt += `- Work completed successfully: nextAction=proceed, needsUserInput=false\n`;
+    prompt += `- Need clarification: nextAction=await_user, needsUserInput=true, uncertainties=[...]\n`;
+    prompt += `- Simple task, skip review: nextAction=skip_next, skipStages=[review]\n\n`;
+    
     prompt += `## CRITICAL REMINDER\n`;
-    prompt += `- You are in NON-INTERACTIVE mode. Do NOT ask questions.\n`;
+    prompt += `- You are in NON-INTERACTIVE mode. Do NOT ask questions unless absolutely necessary.\n`;
     prompt += `- Make reasonable assumptions and proceed with the task.\n`;
     prompt += `- Output structured results, not conversational responses.\n`;
+    prompt += `- **ALWAYS output a signals block at the end - this is MANDATORY!**\n`;
 
     return prompt;
   }
