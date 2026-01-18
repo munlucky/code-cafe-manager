@@ -235,49 +235,40 @@ export class WorktreeManager {
    * Git 2.35.2+에서 다른 사용자 소유 저장소 접근 시 발생하는 보안 에러 해결
    */
   private static async ensureSafeDirectory(repoPath: string): Promise<void> {
-    try {
-      // 절대 경로로 변환
-      const absolutePath = path.resolve(repoPath);
+    const absolutePath = path.resolve(repoPath);
+    let safeDirectories: string[] = [];
 
-      // 현재 safe.directory 목록 확인
+    // 1. 현재 safe.directory 목록 확인
+    try {
       const { stdout } = await execFileAsync(
         'git',
         ['config', '--global', '--get-all', 'safe.directory'],
         { cwd: repoPath }
       );
+      safeDirectories = stdout.trim().split('\n').filter(Boolean);
+    } catch {
+      // safe.directory 설정이 없으면 git-config는 exit code 1을 반환
+      // 정상적인 경우이므로 빈 배열로 진행
+    }
 
-      const safeDirectories = stdout.trim().split('\n').filter(Boolean);
+    // 2. 이미 등록되어 있으면 스킵 (대소문자 무시, Windows 호환)
+    const isAlreadySafe = safeDirectories.some(
+      (dir: string) => dir.toLowerCase() === absolutePath.toLowerCase() || dir === '*'
+    );
 
-      // 이미 등록되어 있으면 스킵 (대소문자 무시, Windows 호환)
-      const isAlreadySafe = safeDirectories.some(
-        (dir: string) => dir.toLowerCase() === absolutePath.toLowerCase() || dir === '*'
-      );
+    if (isAlreadySafe) {
+      return;
+    }
 
-      if (isAlreadySafe) {
-        return;
-      }
-
-      // safe.directory에 추가
+    // 3. safe.directory에 추가
+    try {
       await execFileAsync(
         'git',
         ['config', '--global', '--add', 'safe.directory', absolutePath],
         { cwd: repoPath }
       );
-    } catch (error: any) {
-      // safe.directory가 아예 없는 경우 (exit code 1) 새로 추가
-      if (error.code === 1 || error.message?.includes('exit code 1')) {
-        try {
-          const absolutePath = path.resolve(repoPath);
-          await execFileAsync(
-            'git',
-            ['config', '--global', '--add', 'safe.directory', absolutePath],
-            { cwd: repoPath }
-          );
-        } catch {
-          // 설정 실패해도 worktree 생성 시도는 계속 진행
-        }
-      }
-      // 다른 에러는 무시하고 worktree 생성 시도 계속 진행
+    } catch {
+      // 설정 실패해도 worktree 생성 시도는 계속 진행
     }
   }
 }
