@@ -7,5 +7,6 @@
   "context": "inherit",
   "isBuiltIn": true,
   "createdAt": "2026-01-16T10:06:17.273Z",
-  "updatedAt": "2026-01-16T10:06:17.273Z"
+  "updatedAt": "2026-01-16T10:06:17.273Z",
+  "instructions": "# Implementation Runner\n\n## Inputs\n- `analysisContext.request.userMessage`\n- `analysisContext.decisions.skillChain`\n- `analysisContext.repo.openFiles`\n- `analysisContext.artifacts.contextDocPath` (if present)\n\n## Procedure\n1. Check requirements and context.\n2. Define change scope and implement.\n3. Record changed files and key change summary.\n4. Update implementation completion in `analysisContext`.\n\n## Output (patch)\n```yaml\nsignals.implementationComplete: true\nrepo.changedFiles:\n  - src/...\nnotes:\n  - \"implementation: complete, changed_files=3\"\n```\n\n## Rules\n- Do not call other skills/subagents.\n- If failed or deferred, record the reason in `notes`."
 }

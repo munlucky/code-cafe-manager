@@ -13,6 +13,8 @@ import { Order, Barista, ProviderType } from '@codecafe/core';
 import { TerminalPool } from '../terminal/terminal-pool';
 import { SharedContext } from './shared-context';
 import { TerminalGroup } from './terminal-group';
+import { StageOrchestrator, OrchestratorConfig } from './stage-orchestrator';
+import { OrchestratorDecision } from './stage-signals';
 
 export interface StageConfig {
   id: string;
@@ -29,7 +31,25 @@ export interface WorkflowConfig {
   vars?: Record<string, unknown>;
 }
 
-export type SessionStatus = 'created' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type SessionStatus = 'created' | 'running' | 'awaiting_input' | 'completed' | 'failed' | 'cancelled';
+
+/**
+ * 대기 상태 정보
+ */
+export interface AwaitingState {
+  /** 대기 중인 stage ID */
+  stageId: string;
+  /** 사용자에게 할 질문들 */
+  questions?: string[];
+  /** 사용자에게 표시할 메시지 */
+  message?: string;
+  /** 남은 실행 계획 */
+  remainingPlan: StageConfig[][];
+  /** 현재 batch 인덱스 */
+  batchIndex: number;
+  /** cwd */
+  cwd: string;
+}
 
 /**
  * OrderSession - Order 실행 세션
@@ -41,6 +61,7 @@ export class OrderSession extends EventEmitter {
 
   private readonly terminalPool: TerminalPool;
   private readonly sharedContext: SharedContext;
+  private readonly orchestrator: StageOrchestrator;
   private terminalGroup: TerminalGroup | null = null;
 
   private status: SessionStatus = 'created';
@@ -48,12 +69,15 @@ export class OrderSession extends EventEmitter {
   private startedAt: Date | null = null;
   private completedAt: Date | null = null;
   private error: string | null = null;
+  private awaitingState: AwaitingState | null = null;
+  private skipStages: Set<string> = new Set();
 
   constructor(
     order: Order,
     barista: Barista,
     cafeId: string,
-    terminalPool: TerminalPool
+    terminalPool: TerminalPool,
+    orchestratorConfig?: OrchestratorConfig
   ) {
     super();
     this.orderId = order.id;
@@ -63,6 +87,9 @@ export class OrderSession extends EventEmitter {
 
     // SharedContext 초기화 (Order 변수로)
     this.sharedContext = new SharedContext(order.id, order.vars || {});
+
+    // Orchestrator 초기화
+    this.orchestrator = new StageOrchestrator(orchestratorConfig);
 
     // SharedContext 이벤트 전파
     this.sharedContext.on('stage:started', (data) => this.emit('stage:started', data));
@@ -187,48 +214,9 @@ export class OrderSession extends EventEmitter {
       // Stage 실행 계획 생성
       const executionPlan = this.buildExecutionPlan(this.workflowConfig.stages);
 
-      // 계획에 따라 Stage 실행
-      for (const batch of executionPlan) {
-        if (batch.length === 1) {
-          // 순차 실행
-          const stage = batch[0];
-          const interpolatedPrompt = this.interpolatePrompt(stage.prompt);
-          const result = await this.terminalGroup.executeStage(
-            stage.id,
-            stage.provider,
-            interpolatedPrompt,
-            { role: stage.role, includeContext: true }
-          );
+      // 계획에 따라 Stage 실행 (오케스트레이터 판단 포함)
+      await this.executeWithOrchestrator(executionPlan, cwd);
 
-          if (!result.success) {
-            throw new Error(`Stage ${stage.id} failed: ${result.error}`);
-          }
-        } else {
-          // 병렬 실행
-          const stagesWithPrompts = batch.map((stage) => ({
-            stageId: stage.id,
-            provider: stage.provider,
-            prompt: this.interpolatePrompt(stage.prompt),
-            role: stage.role,
-          }));
-
-          const results = await this.terminalGroup.executeStagesParallel(stagesWithPrompts);
-
-          // 실패한 Stage 확인
-          const failed = results.filter((r) => !r.success);
-          if (failed.length > 0) {
-            throw new Error(
-              `Parallel stages failed: ${failed.map((f) => `${f.stageId}: ${f.error}`).join(', ')}`
-            );
-          }
-        }
-      }
-
-      this.status = 'completed';
-      this.emit('session:completed', {
-        orderId: this.orderId,
-        context: this.sharedContext.snapshot(),
-      });
     } catch (error) {
       this.status = 'failed';
       this.error = error instanceof Error ? error.message : String(error);
@@ -238,8 +226,241 @@ export class OrderSession extends EventEmitter {
       });
       throw error;
     } finally {
-      this.completedAt = new Date();
+      if ((this.status as SessionStatus) !== 'awaiting_input') {
+        this.completedAt = new Date();
+      }
     }
+  }
+
+  /**
+   * 오케스트레이터와 함께 Stage 실행
+   */
+  private async executeWithOrchestrator(
+    executionPlan: StageConfig[][],
+    cwd: string,
+    startFromBatch: number = 0
+  ): Promise<void> {
+    const MAX_RETRIES = 2;
+
+    for (let batchIndex = startFromBatch; batchIndex < executionPlan.length; batchIndex++) {
+      const batch = executionPlan[batchIndex];
+
+      // 스킵할 stage 필터링
+      const filteredBatch = batch.filter(stage => !this.skipStages.has(stage.id));
+      if (filteredBatch.length === 0) {
+        console.log(`[OrderSession] Skipping batch ${batchIndex} - all stages skipped`);
+        continue;
+      }
+
+      if (filteredBatch.length === 1) {
+        // 순차 실행 + 오케스트레이터 판단 (with retry support)
+        const stage = filteredBatch[0];
+        let retries = 0;
+        let result: 'proceed' | 'awaiting' | 'retry';
+
+        do {
+          result = await this.executeStageWithOrchestrator(stage, executionPlan, batchIndex, cwd);
+
+          if (result === 'retry') {
+            retries++;
+            console.log(`[OrderSession] Retrying stage ${stage.id} (${retries}/${MAX_RETRIES})...`);
+          }
+        } while (result === 'retry' && retries < MAX_RETRIES);
+
+        if (result === 'awaiting') {
+          // 대기 상태로 전환 - 실행 중단
+          return;
+        }
+
+        if (result === 'retry') {
+          // 재시도 한도 초과
+          throw new Error(`Stage ${stage.id} failed after ${MAX_RETRIES} retries`);
+        }
+      } else {
+        // 병렬 실행
+        const stagesWithPrompts = filteredBatch.map((stage) => ({
+          stageId: stage.id,
+          provider: stage.provider,
+          prompt: this.interpolatePrompt(stage.prompt),
+          role: stage.role,
+        }));
+
+        const results = await this.terminalGroup!.executeStagesParallel(stagesWithPrompts);
+
+        // 실패한 Stage 확인
+        const failed = results.filter((r) => !r.success);
+        if (failed.length > 0) {
+          throw new Error(
+            `Parallel stages failed: ${failed.map((f) => `${f.stageId}: ${f.error}`).join(', ')}`
+          );
+        }
+
+        // 병렬 실행 후 모든 결과의 시그널 확인
+        for (const result of results) {
+          const decision = await this.orchestrator.evaluate(
+            result.stageId,
+            result.output || '',
+            this.sharedContext
+          );
+
+          const handled = await this.handleOrchestratorDecision(
+            decision,
+            result.stageId,
+            executionPlan,
+            batchIndex,
+            cwd
+          );
+
+          if (handled === 'awaiting') {
+            // 어떤 병렬 stage라도 사용자 입력 필요 시 중단
+            return;
+          }
+        }
+      }
+    }
+
+    // 모든 Stage 완료
+    this.status = 'completed';
+    this.emit('session:completed', {
+      orderId: this.orderId,
+      context: this.sharedContext.snapshot(),
+    });
+  }
+
+  /**
+   * 단일 Stage 실행 및 오케스트레이터 판단
+   * @returns 'proceed' | 'awaiting' | 'retry'
+   */
+  private async executeStageWithOrchestrator(
+    stage: StageConfig,
+    executionPlan: StageConfig[][],
+    batchIndex: number,
+    cwd: string
+  ): Promise<'proceed' | 'awaiting' | 'retry'> {
+    const interpolatedPrompt = this.interpolatePrompt(stage.prompt);
+    const result = await this.terminalGroup!.executeStage(
+      stage.id,
+      stage.provider,
+      interpolatedPrompt,
+      { role: stage.role, includeContext: true }
+    );
+
+    if (!result.success) {
+      throw new Error(`Stage ${stage.id} failed: ${result.error}`);
+    }
+
+    // 오케스트레이터 판단
+    const decision = await this.orchestrator.evaluate(
+      stage.id,
+      result.output || '',
+      this.sharedContext
+    );
+
+    console.log(`[OrderSession] Orchestrator decision for ${stage.id}:`, decision);
+
+    return this.handleOrchestratorDecision(
+      decision,
+      stage.id,
+      executionPlan,
+      batchIndex,
+      cwd
+    );
+  }
+
+  /**
+   * 오케스트레이터 결정 처리
+   */
+  private async handleOrchestratorDecision(
+    decision: OrchestratorDecision,
+    stageId: string,
+    executionPlan: StageConfig[][],
+    batchIndex: number,
+    cwd: string
+  ): Promise<'proceed' | 'awaiting' | 'retry'> {
+    switch (decision.action) {
+      case 'await_user':
+        this.status = 'awaiting_input';
+        this.awaitingState = {
+          stageId,
+          questions: decision.questions,
+          message: decision.userMessage,
+          remainingPlan: executionPlan.slice(batchIndex + 1),
+          batchIndex: batchIndex + 1,
+          cwd,
+        };
+        this.emit('session:awaiting', {
+          orderId: this.orderId,
+          stageId,
+          questions: decision.questions,
+          message: decision.userMessage,
+        });
+        return 'awaiting';
+
+      case 'skip_next':
+        if (decision.skipStages) {
+          for (const skipId of decision.skipStages) {
+            this.skipStages.add(skipId);
+          }
+          console.log(`[OrderSession] Skipping stages: ${decision.skipStages.join(', ')}`);
+        }
+        return 'proceed';
+
+      case 'retry':
+        console.log(`[OrderSession] Retry requested for stage ${stageId}: ${decision.reason}`);
+        // 재시도는 orchestrator 내부에서 카운트 관리
+        return 'retry';
+
+      case 'proceed':
+      default:
+        return 'proceed';
+    }
+  }
+
+  /**
+   * 대기 상태에서 사용자 입력 후 재개
+   */
+  async resume(userInput: string): Promise<void> {
+    if (this.status !== 'awaiting_input' || !this.awaitingState) {
+      throw new Error(`Session ${this.orderId} is not awaiting input`);
+    }
+
+    console.log(`[OrderSession] Resuming session with user input`);
+
+    // 사용자 입력을 SharedContext에 저장
+    this.sharedContext.setVar('userInput', userInput);
+    this.sharedContext.setVar(`userInput_${this.awaitingState.stageId}`, userInput);
+
+    const { remainingPlan, batchIndex, cwd } = this.awaitingState;
+
+    // 상태 초기화
+    this.awaitingState = null;
+    this.status = 'running';
+
+    this.emit('session:resumed', { orderId: this.orderId, userInput });
+
+    try {
+      // 남은 계획 실행
+      await this.executeWithOrchestrator(remainingPlan, cwd, 0);
+    } catch (error) {
+      this.status = 'failed';
+      this.error = error instanceof Error ? error.message : String(error);
+      this.emit('session:failed', {
+        orderId: this.orderId,
+        error: this.error,
+      });
+      throw error;
+    } finally {
+      if ((this.status as SessionStatus) !== 'awaiting_input') {
+        this.completedAt = new Date();
+      }
+    }
+  }
+
+  /**
+   * 대기 상태 정보 조회
+   */
+  getAwaitingState(): AwaitingState | null {
+    return this.awaitingState;
   }
 
   /**

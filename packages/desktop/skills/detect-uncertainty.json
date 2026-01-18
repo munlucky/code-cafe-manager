@@ -7,5 +7,6 @@
   "context": "fork",
   "isBuiltIn": true,
   "createdAt": "2026-01-16T10:06:17.269Z",
-  "updatedAt": "2026-01-16T10:06:17.269Z"
+  "updatedAt": "2026-01-16T10:06:17.269Z",
+  "instructions": "# PM Uncertainty Detection\n\n## Inputs\n- `analysisContext.request.userMessage`\n- `analysisContext.request.keywords`\n- `analysisContext.request.taskType`\n- `analysisContext.signals.hasContextMd`\n\n## Triggers and questions\n- UI/version: if UI/screen keywords exist, confirm design spec version\n- API: if API keyword exists, confirm endpoint, request/response schema, error format\n- Date range: if date/period keywords exist, confirm single vs range\n- Paging: if list/table keywords exist, confirm server vs client paging\n- Error handling: for new features, confirm alert/toast/inline policy\n\n## Output (patch)\n```yaml\nmissingInfo:\n  - category: api-spec\n    priority: HIGH\n    question: \"Please share the API endpoint, request/response schema, and error format.\"\n    reason: \"A stable contract is required for mock and type definitions.\"\n```\n\n## Signals (REQUIRED)\n작업 완료 후 반드시 다음 signals 블록 출력:\n```yaml\nsignals:\n  nextAction: await_user  # proceed if no questions, await_user if questions exist\n  needsUserInput: true    # true if missingInfo is not empty\n  uncertainties:          # list of questions for user\n    - \"API endpoint와 스키마를 알려주세요\"\n  complexity: medium\n```"
 }

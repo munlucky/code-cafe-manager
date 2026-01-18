@@ -7,5 +7,6 @@
   "context": "fork",
   "isBuiltIn": true,
   "createdAt": "2026-01-16T10:06:17.270Z",
-  "updatedAt": "2026-01-16T10:06:17.270Z"
+  "updatedAt": "2026-01-16T10:06:17.270Z",
+  "instructions": "# PM Sequence Decision\n\n## Phase rules\n1. hasPendingQuestions == true -> planning\n2. implementationComplete == true && (complexity == complex or (apiSpecConfirmed && hasMockImplementation)) -> integration\n3. implementationComplete == true -> verification\n4. requirementsClear && hasContextMd && implementationReady -> implementation\n5. otherwise -> planning\n\n## Chain rules\nInclude only stages to run **after moonshot-decide-sequence** (do not include moonshot-* skills).\n\n- simple: implementation-runner -> verify-changes.sh\n- medium: requirements-analyzer -> implementation-runner -> codex-review-code -> efficiency-tracker\n- complex: pre-flight-check -> requirements-analyzer -> context-builder -> codex-validate-plan -> implementation-runner -> codex-review-code -> codex-test-integration -> efficiency-tracker -> session-logger\n\n## Output (patch)\n```yaml\nphase: planning\ndecisions.skillChain:\n  - pre-flight-check\n  - requirements-analyzer\n  - context-builder\nnotes:\n  - \"phase=planning, chain=complex\"\n```\n\n## Signals (REQUIRED)\n```yaml\nsignals:\n  nextAction: proceed  # always proceed to next stage\n  needsUserInput: false\n  complexity: medium   # from previous evaluation\n```"
 }

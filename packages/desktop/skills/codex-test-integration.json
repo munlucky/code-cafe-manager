@@ -7,5 +7,6 @@
   "context": "fork",
   "isBuiltIn": true,
   "createdAt": "2026-01-16T10:06:17.275Z",
-  "updatedAt": "2026-01-16T10:06:17.275Z"
+  "updatedAt": "2026-01-16T10:06:17.275Z",
+  "instructions": "# Codex Integration Validation\n\n## When to use\n- `complexity`: `complex` (always)\n- OR `apiSpecConfirmed == true && hasMockImplementation == true`\n- Integration with external APIs\n- Multi-component changes\n\n## Procedure\n1. Summarize change scope, endpoints, and integration points\n2. Capture the context.md path and read relevant code\n3. Build delegation prompt (integration-focused)\n4. Try Codex first, fallback to Claude if unavailable\n5. Record regression risks and additional test scenarios\n\n## Focus Areas\n- Identify regression risks across all integration points\n- Verify contract compliance (request/response schemas)\n- Check edge cases and error handling for each endpoint\n- Assess performance implications of integration changes\n- Identify missing test scenarios\n\n## Output (patch)\n```yaml\nnotes:\n  - \"codex-integration: [PASS/FAIL], regression-risks=[count], extra-tests=[count]\"\n```"
 }

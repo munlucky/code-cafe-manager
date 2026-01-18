@@ -21,11 +21,29 @@ export type {
 export { OrderSession } from './order-session';
 export type {
   WorkflowConfig,
-  SessionStatus
+  SessionStatus,
+  AwaitingState
 } from './order-session';
 
 // Session 내부 StageConfig (외부 StageConfig와 이름 충돌 방지)
 export type { StageConfig as SessionStageConfig } from './order-session';
+
+// Stage Orchestrator
+export { StageOrchestrator, createOrchestrator } from './stage-orchestrator';
+export type { OrchestratorConfig } from './stage-orchestrator';
+
+// Stage Signals
+export type {
+  StageSignals,
+  OrchestratorDecision,
+  NextAction,
+  ComplexityLevel
+} from './stage-signals';
+export { DEFAULT_SIGNALS, isValidSignals } from './stage-signals';
+
+// Signal Parser
+export { SignalParser, signalParser } from './signal-parser';
+export type { ParseResult } from './signal-parser';
 
 export { CafeSessionManager } from './cafe-session-manager';
 export type {
@@ -83,4 +101,18 @@ export interface StageFailedEvent {
   orderId: string;
   stageId: string;
   error: string;
+}
+
+/** session:awaiting 이벤트 페이로드 */
+export interface SessionAwaitingEvent {
+  orderId: string;
+  stageId: string;
+  questions?: string[];
+  message?: string;
+}
+
+/** session:resumed 이벤트 페이로드 */
+export interface SessionResumedEvent {
+  orderId: string;
+  userInput: string;
 }

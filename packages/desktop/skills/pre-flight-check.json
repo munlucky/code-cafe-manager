@@ -7,5 +7,6 @@
   "context": "fork",
   "isBuiltIn": true,
   "createdAt": "2026-01-16T10:06:17.271Z",
-  "updatedAt": "2026-01-16T10:06:17.271Z"
+  "updatedAt": "2026-01-16T10:06:17.271Z",
+  "instructions": "# Pre-Flight Check Skill\n\n**Role**: Check essential info and project status before starting work to reduce omissions.\n\n## Inputs\n- Feature name/branch name (optional)\n- Required doc paths: CLAUDE.md, context.md, etc.\n\n## Checklist\n- UI spec version/design assets availability\n- API spec availability\n- Similar feature references\n- git status/branch, build status\n- context.md freshness, unresolved items in pending-questions.md\n\n## Output (example)\n```markdown\n# Pre-flight Check Results\n\n## Required Info\nOK UI spec: v3 (YYYY-MM-DD)\nOK API spec: draft available\nWARN similar feature reference: not found\n\n## Project Status\nOK git status: clean\nOK branch: feature/{feature-name}\nOK build status: success\n\n## Recommended Actions\n1. [HIGH] Create context.md\n2. [MEDIUM] Verify design assets\n```"
 }
