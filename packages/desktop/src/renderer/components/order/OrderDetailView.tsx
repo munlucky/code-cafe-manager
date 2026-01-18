@@ -35,6 +35,7 @@ export function OrderDetailView({
   const [completedStages, setCompletedStages] = useState<Set<string>>(new Set());
   const [retryOptions, setRetryOptions] = useState<RetryOption[] | null>(null);
   const [selectedRetryStage, setSelectedRetryStage] = useState<string>('');
+  const [retryType, setRetryType] = useState<'stage' | 'beginning'>('stage');
   const [isRetrying, setIsRetrying] = useState(false);
   const isRunning = currentOrder.status === OrderStatus.RUNNING;
   const isPending = currentOrder.status === OrderStatus.PENDING;
@@ -129,8 +130,8 @@ export function OrderDetailView({
     }
   }, [order.id]);
 
-  // 재시도 처리
-  const handleRetry = useCallback(async () => {
+  // 재시도 처리 (선택한 stage부터)
+  const handleRetryFromStage = useCallback(async () => {
     if (!selectedRetryStage) return;
 
     setIsRetrying(true);
@@ -148,6 +149,25 @@ export function OrderDetailView({
       setIsRetrying(false);
     }
   }, [order.id, selectedRetryStage]);
+
+  // 처음부터 재시도 (이전 시도 컨텍스트 포함)
+  const handleRetryFromBeginning = useCallback(async () => {
+    setIsRetrying(true);
+    try {
+      const response = await window.codecafe.order.retryFromBeginning(order.id, true);
+      if (!response.success) {
+        throw new Error(response.error?.message || 'Failed to retry order from beginning');
+      }
+      // 성공 시 상태 초기화
+      setRetryOptions(null);
+      setSelectedRetryStage('');
+      setRetryType('stage');
+    } catch (error) {
+      console.error('Failed to retry order from beginning:', error);
+    } finally {
+      setIsRetrying(false);
+    }
+  }, [order.id]);
 
   // Stage 정보 계산
   const stages: StageInfo[] = (workflow?.stages || ['Plan', 'Code', 'Test']).map(
@@ -310,32 +330,68 @@ export function OrderDetailView({
                 Retry Options
               </h3>
               <div className="space-y-3">
-                <div>
-                  <label className="block text-xs text-gray-400 mb-1">
-                    Retry from stage:
-                  </label>
-                  <select
-                    value={selectedRetryStage}
-                    onChange={(e) => setSelectedRetryStage(e.target.value)}
-                    className="w-full px-2 py-1.5 text-sm bg-gray-800 border border-gray-600 rounded text-bone focus:outline-none focus:border-coffee"
+                {/* 재시도 타입 선택 */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setRetryType('stage')}
+                    className={`flex-1 px-2 py-1.5 text-xs rounded border transition-colors ${
+                      retryType === 'stage'
+                        ? 'bg-coffee/20 border-coffee text-coffee'
+                        : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-500'
+                    }`}
                   >
-                    {retryOptions.map((option) => (
-                      <option key={option.stageId} value={option.stageId}>
-                        {option.stageName}
-                      </option>
-                    ))}
-                  </select>
+                    특정 Stage부터
+                  </button>
+                  <button
+                    onClick={() => setRetryType('beginning')}
+                    className={`flex-1 px-2 py-1.5 text-xs rounded border transition-colors ${
+                      retryType === 'beginning'
+                        ? 'bg-coffee/20 border-coffee text-coffee'
+                        : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-500'
+                    }`}
+                  >
+                    처음부터 (컨텍스트 유지)
+                  </button>
                 </div>
+
+                {/* Stage 선택 (stage 타입일 때만) */}
+                {retryType === 'stage' && (
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">
+                      Retry from stage:
+                    </label>
+                    <select
+                      value={selectedRetryStage}
+                      onChange={(e) => setSelectedRetryStage(e.target.value)}
+                      className="w-full px-2 py-1.5 text-sm bg-gray-800 border border-gray-600 rounded text-bone focus:outline-none focus:border-coffee"
+                    >
+                      {retryOptions.map((option) => (
+                        <option key={option.stageId} value={option.stageId}>
+                          {option.stageName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* 처음부터 재시도 설명 */}
+                {retryType === 'beginning' && (
+                  <div className="text-xs text-gray-400 bg-gray-800/50 p-2 rounded">
+                    이전 시도의 실패 정보를 포함하여 처음부터 다시 실행합니다.
+                    AI가 이전 실패 원인을 참고하여 개선된 결과를 도출할 수 있습니다.
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <Button
                     variant="primary"
                     size="sm"
-                    onClick={handleRetry}
-                    disabled={isRetrying || !selectedRetryStage}
+                    onClick={retryType === 'stage' ? handleRetryFromStage : handleRetryFromBeginning}
+                    disabled={isRetrying || (retryType === 'stage' && !selectedRetryStage)}
                     className="flex-1 flex items-center justify-center gap-1"
                   >
                     <RefreshCw className={`w-3 h-3 ${isRetrying ? 'animate-spin' : ''}`} />
-                    {isRetrying ? 'Retrying...' : 'Retry'}
+                    {isRetrying ? 'Retrying...' : (retryType === 'stage' ? 'Retry from Stage' : 'Retry from Beginning')}
                   </Button>
                   <Button
                     variant="secondary"

@@ -644,15 +644,22 @@ export class OrderSession extends EventEmitter {
   }
 
   /**
-   * 프롬프트 변수 치환
+   * 프롬프트 변수 치환 및 이전 시도 컨텍스트 주입
    */
   private interpolatePrompt(prompt: string): string {
     const vars = this.sharedContext.getVars();
     let result = prompt;
 
+    // 변수 치환
     for (const [key, value] of Object.entries(vars)) {
       const pattern = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
       result = result.replace(pattern, String(value));
+    }
+
+    // 이전 시도 컨텍스트 주입 (재시도 시)
+    const previousAttemptContext = this.sharedContext.buildPreviousAttemptContext();
+    if (previousAttemptContext) {
+      result = previousAttemptContext + '\n' + result;
     }
 
     return result;
@@ -800,6 +807,88 @@ export class OrderSession extends EventEmitter {
 
       // 실행 재개
       await this.executeWithOrchestrator(executionPlan, cwd, startBatchIndex);
+
+    } catch (error) {
+      this.status = 'failed';
+      this.error = error instanceof Error ? error.message : String(error);
+      this.emit('session:failed', {
+        orderId: this.orderId,
+        error: this.error,
+        failedState: this.failedState,
+        canRetry: this.failedState !== null,
+      });
+      throw error;
+    } finally {
+      if ((this.status as SessionStatus) !== 'awaiting_input' && (this.status as SessionStatus) !== 'failed') {
+        this.completedAt = new Date();
+      }
+    }
+  }
+
+  /**
+   * 처음부터 재시도 (이전 시도 컨텍스트 포함)
+   * @param preserveContext true면 이전 시도 정보를 컨텍스트에 포함
+   */
+  async retryFromBeginning(preserveContext: boolean = true): Promise<void> {
+    if (this.status !== 'failed' || !this.failedState) {
+      throw new Error(`Session ${this.orderId} is not in failed state or has no retry info`);
+    }
+
+    const { executionPlan, cwd } = this.failedState;
+
+    console.log(`[OrderSession] Retrying from beginning (preserveContext: ${preserveContext})`);
+
+    // 이전 시도 정보 저장
+    if (preserveContext) {
+      this.sharedContext.addPreviousAttempt({
+        stageResults: this.sharedContext.getAllStageResults(),
+        failedStageId: this.failedState.failedStageId,
+        error: this.failedState.error,
+        timestamp: Date.now(),
+      });
+    }
+
+    // Stage 결과 초기화 (이전 시도 정보는 유지)
+    this.sharedContext.resetStages();
+    this.completedStages.clear();
+
+    // 상태 초기화
+    this.status = 'running';
+    this.error = null;
+    this.failedState = null;
+    this.completedAt = null;
+    this.startedAt = new Date();
+
+    this.emit('session:resumed', {
+      orderId: this.orderId,
+      retryType: 'beginning',
+      attemptNumber: this.sharedContext.getCurrentAttemptNumber(),
+      preserveContext,
+    });
+
+    try {
+      // TerminalGroup 재생성
+      if (this.terminalGroup) {
+        await this.terminalGroup.dispose();
+      }
+
+      const providers = this.extractProviders(executionPlan.flat());
+      this.terminalGroup = new TerminalGroup(
+        {
+          orderId: this.orderId,
+          cwd,
+          providers,
+        },
+        this.terminalPool,
+        this.sharedContext
+      );
+
+      this.terminalGroup.on('stage:output', (eventData) => {
+        this.emit('output', { orderId: this.orderId, stageId: eventData.stageId, data: eventData.data });
+      });
+
+      // 처음부터 실행
+      await this.executeWithOrchestrator(executionPlan, cwd, 0);
 
     } catch (error) {
       this.status = 'failed';

@@ -292,6 +292,7 @@ declare global {
         unsubscribeOutput: (orderId: string) => Promise<IpcResponse<{ unsubscribed: boolean }>>;
         // Retry support
         retryFromStage: (orderId: string, fromStageId?: string) => Promise<IpcResponse<{ started: boolean }>>;
+        retryFromBeginning: (orderId: string, preserveContext?: boolean) => Promise<IpcResponse<{ started: boolean }>>;
         getRetryOptions: (orderId: string) => Promise<IpcResponse<RetryOption[] | null>>;
         onEvent: (callback: (event: any) => void) => () => void;
         onAssigned: (callback: (data: any) => void) => () => void;

@@ -467,6 +467,41 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
   }
 
   /**
+   * Retry order from the beginning with previous attempt context
+   * @param orderId Order ID to retry
+   * @param preserveContext Whether to preserve previous attempt context (default: true)
+   */
+  public async retryFromBeginning(orderId: string, preserveContext: boolean = true): Promise<void> {
+    const execution = this.activeExecutions.get(orderId);
+    if (!execution?.session) {
+      console.warn(`[BaristaEngineV2] No session found for order: ${orderId}`);
+      throw new Error(`No session found for order: ${orderId}`);
+    }
+
+    console.log(`[BaristaEngineV2] Retrying order ${orderId} from beginning (preserveContext: ${preserveContext})`);
+
+    try {
+      await execution.session.retryFromBeginning(preserveContext);
+      console.log(`[BaristaEngineV2] Order ${orderId} retry from beginning completed`);
+    } catch (error) {
+      console.error(`[BaristaEngineV2] Failed to retry order ${orderId} from beginning:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get current attempt number for an order
+   */
+  public getAttemptNumber(orderId: string): number {
+    const execution = this.activeExecutions.get(orderId);
+    if (!execution?.session) {
+      return 1;
+    }
+
+    return execution.session.getContext().getCurrentAttemptNumber();
+  }
+
+  /**
    * Clean up resources
    */
   async dispose(): Promise<void> {

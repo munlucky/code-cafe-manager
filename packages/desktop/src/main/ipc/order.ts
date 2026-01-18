@@ -714,6 +714,31 @@ class OrderManager {
         }, 'order:getRetryOptions')
     );
 
+    /**
+     * 처음부터 재시도 (이전 시도 컨텍스트 포함)
+     */
+    ipcMain.handle(
+      'order:retryFromBeginning',
+      async (_, params: { orderId: string; preserveContext?: boolean }) =>
+        handleIpc(async () => {
+          const { orderId, preserveContext = true } = params;
+          console.log('[Order IPC] Retrying order from beginning:', { orderId, preserveContext });
+
+          const executionManager = getExecutionManager();
+          if (!executionManager) {
+            throw new Error('ExecutionManager not initialized');
+          }
+
+          const baristaEngine = executionManager.getBaristaEngine();
+          if (!baristaEngine) {
+            throw new Error('BaristaEngine not initialized');
+          }
+
+          await baristaEngine.retryFromBeginning(orderId, preserveContext);
+          return { started: true };
+        }, 'order:retryFromBeginning')
+    );
+
     console.log('[IPC] Order handlers registered');
   }
 

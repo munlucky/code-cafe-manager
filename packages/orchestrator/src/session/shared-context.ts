@@ -20,6 +20,17 @@ export interface StageResult {
   duration?: number;
 }
 
+/**
+ * 이전 실행 시도 정보
+ */
+export interface PreviousAttempt {
+  stageResults: Record<string, StageResult>;
+  failedStageId: string;
+  error: string;
+  timestamp: number;
+  attemptNumber: number;
+}
+
 export interface ContextSnapshot {
   orderId: string;
   vars: Record<string, unknown>;
@@ -37,6 +48,7 @@ export class SharedContext extends EventEmitter {
   private stages: Map<string, StageResult>;
   private artifacts: Map<string, unknown>;
   private updatedAt: Date;
+  private previousAttempts: PreviousAttempt[] = [];
 
   constructor(orderId: string, initialVars: Record<string, unknown> = {}) {
     super();
@@ -45,6 +57,7 @@ export class SharedContext extends EventEmitter {
     this.stages = new Map();
     this.artifacts = new Map();
     this.updatedAt = new Date();
+    this.previousAttempts = [];
   }
 
   /**
@@ -211,5 +224,79 @@ export class SharedContext extends EventEmitter {
     this.removeAllListeners();
     this.stages.clear();
     this.artifacts.clear();
+  }
+
+  /**
+   * 이전 시도 정보 추가
+   */
+  addPreviousAttempt(attempt: Omit<PreviousAttempt, 'attemptNumber'>): void {
+    this.previousAttempts.push({
+      ...attempt,
+      attemptNumber: this.previousAttempts.length + 1,
+    });
+    this.updatedAt = new Date();
+  }
+
+  /**
+   * 이전 시도 존재 여부
+   */
+  hasPreviousAttempt(): boolean {
+    return this.previousAttempts.length > 0;
+  }
+
+  /**
+   * 최근 이전 시도 조회
+   */
+  getLastPreviousAttempt(): PreviousAttempt | undefined {
+    return this.previousAttempts[this.previousAttempts.length - 1];
+  }
+
+  /**
+   * 모든 이전 시도 조회
+   */
+  getAllPreviousAttempts(): PreviousAttempt[] {
+    return [...this.previousAttempts];
+  }
+
+  /**
+   * 현재 시도 번호 (1부터 시작)
+   */
+  getCurrentAttemptNumber(): number {
+    return this.previousAttempts.length + 1;
+  }
+
+  /**
+   * Stage 결과 초기화 (재시도 시 사용)
+   */
+  resetStages(): void {
+    this.stages.clear();
+    this.updatedAt = new Date();
+  }
+
+  /**
+   * 이전 시도 컨텍스트를 프롬프트용 문자열로 생성
+   */
+  buildPreviousAttemptContext(): string {
+    if (!this.hasPreviousAttempt()) {
+      return '';
+    }
+
+    const lastAttempt = this.getLastPreviousAttempt()!;
+    const completedStages = Object.entries(lastAttempt.stageResults)
+      .filter(([_, result]) => result.status === 'completed')
+      .map(([stageId]) => stageId);
+
+    const lines = [
+      '\n## 이전 시도 정보',
+      `- 시도 횟수: ${this.getCurrentAttemptNumber()}번째 시도`,
+      `- 이전 실패 stage: ${lastAttempt.failedStageId}`,
+      `- 실패 원인: ${lastAttempt.error}`,
+      `- 완료된 stages: ${completedStages.join(', ') || '없음'}`,
+      '',
+      '이전 시도에서 발생한 문제를 참고하여 개선된 결과를 도출해주세요.',
+      '---',
+    ];
+
+    return lines.join('\n');
   }
 }
