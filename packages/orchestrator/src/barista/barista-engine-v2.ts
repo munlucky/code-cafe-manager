@@ -165,6 +165,120 @@ export class BaristaEngineV2 extends EventEmitter {
   }
 
   /**
+   * Load skill content from SKILL.md or agent .md file
+   */
+  private async loadSkillContent(skillName: string, projectRoot: string): Promise<string | null> {
+    // Map workflow skill names to actual skill folder names
+    const skillNameMap: Record<string, string> = {
+      'classify-task': 'moonshot-classify-task',
+      'evaluate-complexity': 'moonshot-evaluate-complexity',
+      'detect-uncertainty': 'moonshot-detect-uncertainty',
+      'decide-sequence': 'moonshot-decide-sequence',
+      'pre-flight-check': 'pre-flight-check',
+      'implementation-runner': 'implementation-runner',
+      'codex-review-code': 'codex-review-code',
+      'codex-test-integration': 'codex-test-integration',
+    };
+
+    // Some skills are actually agents (in agents/ folder)
+    const agentSkills = ['requirements-analyzer', 'context-builder'];
+    const isAgent = agentSkills.includes(skillName);
+
+    const actualSkillName = skillNameMap[skillName] || skillName;
+
+    // Try multiple possible paths for skill/agent files
+    const possiblePaths = isAgent
+      ? [
+          // Agent files are directly in agents/ folder as {name}.md
+          path.join(projectRoot, `.claude/agents/${skillName}.md`),
+          path.join(projectRoot, `../.claude/agents/${skillName}.md`),
+        ]
+      : [
+          // Skill files are in skills/{name}/SKILL.md
+          path.join(projectRoot, `.claude/skills/${actualSkillName}/SKILL.md`),
+          path.join(projectRoot, `../.claude/skills/${actualSkillName}/SKILL.md`),
+        ];
+
+    for (const skillPath of possiblePaths) {
+      try {
+        const content = await fs.readFile(skillPath, 'utf-8');
+        console.log(`[BaristaEngineV2] Loaded ${isAgent ? 'agent' : 'skill'}: ${skillName} from ${skillPath}`);
+        return content;
+      } catch {
+        // Try next path
+      }
+    }
+
+    console.warn(`[BaristaEngineV2] Skill/Agent not found: ${skillName}`);
+    return null;
+  }
+
+  /**
+   * Build stage prompt with skill instructions
+   */
+  private buildStagePrompt(
+    stageId: string,
+    role: string | undefined,
+    orderPrompt: string,
+    skillContents: string[]
+  ): string {
+    const roleDescriptions: Record<string, string> = {
+      analyze: 'You are an ANALYZER. Your task is to analyze the project and understand what needs to be done.',
+      plan: 'You are a PLANNER. Your task is to create a detailed implementation plan.',
+      code: 'You are a CODER. Your task is to implement the changes according to the plan.',
+      review: 'You are a REVIEWER. Your task is to review the implementation and verify quality.',
+    };
+
+    const roleInstructions: Record<string, string> = {
+      analyze: `
+IMPORTANT: You MUST perform analysis immediately. Do NOT ask questions.
+1. Read and understand the user request
+2. Analyze the codebase structure
+3. Identify files that need to be modified
+4. Output a structured analysis with: task type, complexity estimate, and affected files`,
+      plan: `
+IMPORTANT: You MUST create a plan immediately. Do NOT ask questions.
+1. Based on the analysis, create an implementation plan
+2. List specific files to create/modify
+3. Define the order of changes
+4. Output a structured plan with steps and files`,
+      code: `
+IMPORTANT: You MUST implement the changes immediately. Do NOT ask questions.
+1. Follow the plan from previous stages
+2. Create or modify files as needed
+3. Implement all required functionality
+4. Output the changes made with file paths`,
+      review: `
+IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
+1. Review all changes made in previous stages
+2. Check for bugs, security issues, and best practices
+3. Verify the implementation meets requirements
+4. Output a review summary with any issues found`,
+    };
+
+    let prompt = `# Stage: ${stageId.toUpperCase()}\n\n`;
+    prompt += `${roleDescriptions[stageId] || `You are working on stage: ${stageId}`}\n\n`;
+    prompt += `## Role Instructions\n${roleInstructions[stageId] || ''}\n\n`;
+
+    // Add skill instructions if available
+    if (skillContents.length > 0) {
+      prompt += `## Skills to Execute\n\n`;
+      prompt += `Follow these skill instructions in order:\n\n`;
+      for (const skillContent of skillContents) {
+        prompt += `---\n${skillContent}\n---\n\n`;
+      }
+    }
+
+    prompt += `## User Request\n\n${orderPrompt}\n\n`;
+    prompt += `## CRITICAL REMINDER\n`;
+    prompt += `- You are in NON-INTERACTIVE mode. Do NOT ask questions.\n`;
+    prompt += `- Make reasonable assumptions and proceed with the task.\n`;
+    prompt += `- Output structured results, not conversational responses.\n`;
+
+    return prompt;
+  }
+
+  /**
    * Load default workflow from moon.workflow.yml
    */
   private async loadDefaultWorkflow(orderPrompt: string): Promise<WorkflowConfig> {
@@ -184,20 +298,48 @@ export class BaristaEngineV2 extends EventEmitter {
         workflow: { stages: string[] };
       } & Record<string, { provider?: string; role?: string; mode?: string; on_failure?: string; skills?: string[] }>;
 
-      // Convert YAML structure to WorkflowConfig
-      const stages: StageConfig[] = parsed.workflow.stages.map((stageId: string) => {
-        const stageConfig = parsed[stageId] as { provider?: string; role?: string; mode?: string };
-        return {
-          id: stageId,
-          name: stageConfig.role || stageId,
-          provider: (stageConfig.provider || 'claude-code') as 'claude-code' | 'codex' | 'gemini' | 'grok',
-          prompt: orderPrompt, // Use order prompt for all stages
-          role: stageConfig.role,
-          mode: (stageConfig.mode || 'sequential') as 'sequential' | 'parallel',
-          dependsOn: [],
-        };
-      });
+      // Convert YAML structure to WorkflowConfig with skill loading
+      const stages: StageConfig[] = await Promise.all(
+        parsed.workflow.stages.map(async (stageId: string) => {
+          const stageConfig = parsed[stageId] as {
+            provider?: string;
+            role?: string;
+            mode?: string;
+            skills?: string[];
+          };
 
+          // Load skill contents for this stage
+          const skillContents: string[] = [];
+          if (stageConfig.skills && stageConfig.skills.length > 0) {
+            for (const skillName of stageConfig.skills) {
+              const skillContent = await this.loadSkillContent(skillName, projectRoot);
+              if (skillContent) {
+                skillContents.push(skillContent);
+              }
+            }
+          }
+
+          // Build stage prompt with role instructions and skill contents
+          const stagePrompt = this.buildStagePrompt(
+            stageId,
+            stageConfig.role,
+            orderPrompt,
+            skillContents
+          );
+
+          return {
+            id: stageId,
+            name: stageConfig.role || stageId,
+            provider: (stageConfig.provider || 'claude-code') as 'claude-code' | 'codex' | 'gemini' | 'grok',
+            prompt: stagePrompt,
+            role: stageConfig.role,
+            mode: (stageConfig.mode || 'sequential') as 'sequential' | 'parallel',
+            dependsOn: [],
+          };
+        })
+      );
+
+      console.log(`[BaristaEngineV2] Loaded workflow with ${stages.length} stages`);
       return { stages, vars: {} };
     } catch (error) {
       console.warn('[BaristaEngineV2] Failed to load default workflow:', error);
