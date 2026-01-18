@@ -17,15 +17,13 @@ import { OrderStatus, type Order } from '../../types/models';
 
 import { useCafeStore } from '../../store/useCafeStore';
 import { useViewStore } from '../../store/useViewStore';
-import { Badge } from '../ui/Badge';
+import { useOrderStore } from '../../store/useOrderStore';
 import { Button } from '../ui/Button';
-import { Card } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
 import { NewOrderDialog } from '../order/NewOrderDialog';
 import { OrderExecuteDialog } from '../order/OrderExecuteDialog';
-
-// Mock data removed in favor of real API 연동
-
+import { OrderCard as NewOrderCard, OrderModal, type TimelineEvent } from '../orders';
+import type { StageInfo } from '../order/OrderStageProgress';
 
 const STATUS_CONFIG: Record<
   OrderStatus,
@@ -37,218 +35,6 @@ const STATUS_CONFIG: Record<
   [OrderStatus.FAILED]: { label: 'Failed', variant: 'error', icon: XCircle },
   [OrderStatus.CANCELLED]: { label: 'Cancelled', variant: 'default', icon: XCircle },
 };
-
-interface OrderCardProps {
-  order: Order;
-  onViewTerminal?: (orderId: string) => void;
-  onCancelOrder?: (orderId: string) => void;
-  onDeleteOrder?: (orderId: string) => void;
-  onExecuteOrder?: (order: Order) => void;
-  onClick?: (orderId: string) => void;
-}
-
-function OrderCard({ order, onViewTerminal, onCancelOrder, onDeleteOrder, onExecuteOrder, onClick }: OrderCardProps): ReactElement {
-  const config = STATUS_CONFIG[order.status];
-  const Icon = config.icon;
-  const isPending = order.status === OrderStatus.PENDING;
-  const isRunning = order.status === OrderStatus.RUNNING;
-  const isCancellable = order.status === OrderStatus.RUNNING || order.status === OrderStatus.PENDING;
-  const isDeletable = order.status === OrderStatus.COMPLETED || order.status === OrderStatus.FAILED || order.status === OrderStatus.CANCELLED;
-
-  return (
-    <Card 
-      className="p-4 hover:border-coffee transition-colors cursor-pointer"
-      onClick={() => onClick?.(order.id)}
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1">
-          <h3 className="font-semibold text-bone mb-1">{order.workflowName}</h3>
-          <p className="text-sm text-gray-400">ID: {order.id}</p>
-        </div>
-        <Badge variant={config.variant} className="flex items-center gap-1">
-          <Icon className="w-3 h-3" />
-          {config.label}
-        </Badge>
-      </div>
-
-      {Object.keys(order.vars).length > 0 && (
-        <div className="mb-3 space-y-1">
-          {Object.entries(order.vars).map(([key, value]) => (
-            <div key={key} className="text-sm">
-              <span className="text-gray-400">{key}:</span>{' '}
-              <span className="text-bone">{String(value)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="flex items-center gap-2 mb-2 text-sm">
-        <span className="text-gray-400">Provider:</span>
-        <span className="text-bone">{order.provider}</span>
-      </div>
-
-      <div className="text-xs text-gray-500 space-y-1">
-        <div>Created: {new Date(order.createdAt).toLocaleString()}</div>
-        {order.startedAt && <div>Started: {new Date(order.startedAt).toLocaleString()}</div>}
-        {order.endedAt && <div>Ended: {new Date(order.endedAt).toLocaleString()}</div>}
-      </div>
-
-      {order.error && (
-        <div className="mt-3 p-2 bg-red-900/20 border border-red-500/50 rounded text-red-300 text-xs">
-          {order.error}
-        </div>
-      )}
-
-      <div className="mt-4 flex items-center gap-2">
-        {isPending && onExecuteOrder && (
-          <Button
-            variant="primary"
-            onClick={(e) => { e.stopPropagation(); onExecuteOrder(order); }}
-            className="flex-1 text-sm"
-          >
-            ▶ Execute
-          </Button>
-        )}
-        {isRunning && onViewTerminal && (
-          <Button
-            variant="primary"
-            onClick={(e) => { e.stopPropagation(); onViewTerminal(order.id); }}
-            className="flex-1 text-sm"
-          >
-            View Terminal
-          </Button>
-        )}
-        {isCancellable && onCancelOrder && (
-          <Button
-            variant="destructive"
-            onClick={(e) => { e.stopPropagation(); onCancelOrder(order.id); }}
-            className="flex-1 text-sm"
-          >
-            Cancel
-          </Button>
-        )}
-        {isDeletable && onDeleteOrder && (
-          <Button
-            variant="secondary"
-            onClick={(e) => { e.stopPropagation(); onDeleteOrder(order.id); }}
-            className="flex-1 text-sm text-red-400 hover:text-red-300"
-          >
-            Delete
-          </Button>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-interface OrderListProps {
-  orders: Order[];
-  onNewOrder: () => void;
-  onViewTerminal: (orderId: string) => void;
-  onCancelOrder: (orderId: string) => void;
-  onDeleteOrder: (orderId: string) => void;
-  onExecuteOrder: (order: Order) => void;
-  onClick: (orderId: string) => void;
-}
-
-function OrderList({
-  orders,
-  onNewOrder,
-  onViewTerminal,
-  onCancelOrder,
-  onDeleteOrder,
-  onExecuteOrder,
-  onClick,
-}: OrderListProps): ReactElement {
-  if (orders.length === 0) {
-    return (
-      <EmptyState
-        icon={Clock}
-        title="No Orders Yet"
-        description="Create your first order to get started"
-        action={
-          <Button onClick={onNewOrder} className="flex items-center gap-2">
-            <Plus className="w-4 h-4" />
-            New Order
-          </Button>
-        }
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {orders.map((order) => (
-        <OrderCard
-          key={order.id}
-          order={order}
-          onViewTerminal={onViewTerminal}
-          onCancelOrder={onCancelOrder}
-          onDeleteOrder={onDeleteOrder}
-          onExecuteOrder={onExecuteOrder}
-          onClick={onClick}
-        />
-      ))}
-    </div>
-  );
-}
-
-interface OrderKanbanProps {
-  orders: Order[];
-  onViewTerminal: (orderId: string) => void;
-  onCancelOrder: (orderId: string) => void;
-  onDeleteOrder: (orderId: string) => void;
-  onExecuteOrder: (order: Order) => void;
-  onClick: (orderId: string) => void;
-}
-
-function OrderKanban({ orders, onViewTerminal, onCancelOrder, onDeleteOrder, onExecuteOrder, onClick }: OrderKanbanProps): ReactElement {
-  const columns = useMemo(() => {
-    const cols: Record<OrderStatus, Order[]> = {
-      [OrderStatus.PENDING]: [],
-      [OrderStatus.RUNNING]: [],
-      [OrderStatus.COMPLETED]: [],
-      [OrderStatus.FAILED]: [],
-      [OrderStatus.CANCELLED]: [],
-    };
-
-    orders.forEach((order) => {
-      if (cols[order.status]) {
-        cols[order.status].push(order);
-      }
-    });
-    return cols;
-  }, [orders]);
-
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 h-full">
-      {(Object.entries(columns) as [OrderStatus, Order[]][]).map(([status, ordersList]) => {
-        const config = STATUS_CONFIG[status];
-        return (
-          <div key={status} className="flex flex-col min-w-0">
-            <div className="mb-3 pb-2 border-b border-border">
-              <h3 className="font-semibold text-bone text-sm sm:text-base">{config.label}</h3>
-              <p className="text-xs sm:text-sm text-gray-400">{ordersList.length} orders</p>
-            </div>
-            <div className="space-y-3 overflow-auto">
-              {ordersList.map((order) => (
-                <OrderCard
-                  key={order.id}
-                  order={order}
-                  onViewTerminal={onViewTerminal}
-                  onCancelOrder={onCancelOrder}
-                  onDeleteOrder={onDeleteOrder}
-                  onExecuteOrder={onExecuteOrder}
-                  onClick={onClick}
-                />
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 interface InfoItemProps {
   label: string;
@@ -267,13 +53,55 @@ function InfoItem({ label, value }: InfoItemProps): ReactElement {
 export function CafeDashboard(): ReactElement {
   const { getCurrentCafe, setCurrentCafe } = useCafeStore();
   const setView = useViewStore((s) => s.setView);
+  const { stageResults } = useOrderStore();
   const currentCafe = getCurrentCafe();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
+  const [viewMode, setViewMode] = useState<'grid' | 'kanban'>('kanban');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNewOrderDialog, setShowNewOrderDialog] = useState(false);
   const [executeDialogOrder, setExecuteDialogOrder] = useState<Order | null>(null);
+  const [modalOrder, setModalOrder] = useState<Order | null>(null);
+
+  // Order에 대한 Stage 정보 생성
+  const getStagesForOrder = (orderId: string): StageInfo[] => {
+    const results = stageResults[orderId];
+    if (!results) return [];
+    
+    return Object.values(results).map(r => ({
+      name: r.stageId,
+      status: r.status,
+    }));
+  };
+
+  // Order에 대한 Timeline 이벤트 생성
+  const getTimelineForOrder = (orderId: string): TimelineEvent[] => {
+    const results = stageResults[orderId];
+    if (!results) return [];
+    
+    const events: TimelineEvent[] = [];
+    Object.values(results).forEach(r => {
+      if (r.startedAt) {
+        events.push({
+          id: `${r.stageId}-start`,
+          type: 'stage_start',
+          timestamp: r.startedAt,
+          content: `Stage started`,
+          stageName: r.stageId,
+        });
+      }
+      if (r.completedAt) {
+        events.push({
+          id: `${r.stageId}-complete`,
+          type: r.status === 'failed' ? 'stage_fail' : 'stage_complete',
+          timestamp: r.completedAt,
+          content: r.error || `Stage completed`,
+          stageName: r.stageId,
+        });
+      }
+    });
+    return events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  };
 
   // Load orders from API
   useEffect(() => {
@@ -305,8 +133,6 @@ export function CafeDashboard(): ReactElement {
   useEffect(() => {
     const handleOrderEvent = (event: any) => {
       console.log('[Cafe Dashboard] Order event:', event);
-
-      // Reload orders when there's an event
       window.codecafe.getAllOrders().then((response) => {
         if (response.success && response.data) {
           setOrders(response.data);
@@ -314,22 +140,10 @@ export function CafeDashboard(): ReactElement {
       });
     };
 
-    const handleOrderAssigned = (data: any) => {
-      console.log('[Cafe Dashboard] Order assigned:', data);
-      handleOrderEvent(data);
-    };
-
-    const handleOrderCompleted = (data: any) => {
-      console.log('[Cafe Dashboard] Order completed:', data);
-      handleOrderEvent(data);
-    };
-
-    // Set up event listeners
     const cleanupOrderEvent = window.codecafe.onOrderEvent(handleOrderEvent);
-    const cleanupOrderAssigned = window.codecafe.onOrderAssigned(handleOrderAssigned);
-    const cleanupOrderCompleted = window.codecafe.onOrderCompleted(handleOrderCompleted);
+    const cleanupOrderAssigned = window.codecafe.onOrderAssigned(handleOrderEvent);
+    const cleanupOrderCompleted = window.codecafe.onOrderCompleted(handleOrderEvent);
 
-    // Cleanup function: remove listeners when component unmounts or effect re-runs
     return () => {
       cleanupOrderEvent?.();
       cleanupOrderAssigned?.();
@@ -341,6 +155,24 @@ export function CafeDashboard(): ReactElement {
     () => orders.filter((o) => o.status === OrderStatus.RUNNING).length,
     [orders]
   );
+
+  // Kanban view columns - must be before any conditional returns
+  const kanbanColumns = useMemo(() => {
+    const cols: Record<OrderStatus, Order[]> = {
+      [OrderStatus.PENDING]: [],
+      [OrderStatus.RUNNING]: [],
+      [OrderStatus.COMPLETED]: [],
+      [OrderStatus.FAILED]: [],
+      [OrderStatus.CANCELLED]: [],
+    };
+
+    orders.forEach((order) => {
+      if (cols[order.status]) {
+        cols[order.status].push(order);
+      }
+    });
+    return cols;
+  }, [orders]);
 
   if (!currentCafe) {
     return (
@@ -385,7 +217,6 @@ export function CafeDashboard(): ReactElement {
 
   const handleOrderCreated = (orderId: string): void => {
     console.log('[Cafe Dashboard] Order created:', orderId);
-    // 오더 목록 새로고침
     window.codecafe.getAllOrders().then((response) => {
       if (response.success && response.data) {
         setOrders(response.data);
@@ -393,12 +224,11 @@ export function CafeDashboard(): ReactElement {
     });
   };
 
-  const handleViewTerminal = (orderId: string): void => {
-    setView('terminals');
-  };
-
-  const handleOrderClick = (orderId: string): void => {
-    setView('orders');
+  const handleViewModal = (orderId: string): void => {
+    const order = orders.find(o => o.id === orderId);
+    if (order) {
+      setModalOrder(order);
+    }
   };
 
   const handleCancelOrder = async (orderId: string) => {
@@ -408,12 +238,12 @@ export function CafeDashboard(): ReactElement {
     try {
       const response = await window.codecafe.order.cancel(orderId);
       if (response.success) {
-        // Optimistically update UI or wait for event
         setOrders((prevOrders) =>
           prevOrders.map((o) =>
             o.id === orderId ? { ...o, status: OrderStatus.CANCELLED } : o
           )
         );
+        setModalOrder(null);
       } else {
         alert(`Failed to cancel order: ${response.error?.message}`);
       }
@@ -431,7 +261,6 @@ export function CafeDashboard(): ReactElement {
     if (!response.success) {
       throw new Error(response.error?.message || 'Failed to execute order');
     }
-    // Refresh orders
     const ordersResponse = await window.codecafe.getAllOrders();
     if (ordersResponse.success && ordersResponse.data) {
       setOrders(ordersResponse.data);
@@ -476,6 +305,7 @@ export function CafeDashboard(): ReactElement {
     }
   };
 
+
   return (
     <div className="h-full overflow-auto flex flex-col">
       {/* Header */}
@@ -497,7 +327,7 @@ export function CafeDashboard(): ReactElement {
         <div className="flex items-center gap-2 flex-wrap">
           {/* View Mode Toggle */}
           <div className="flex border border-border rounded overflow-hidden">
-            {(['list', 'kanban'] as const).map((mode) => (
+            {(['grid', 'kanban'] as const).map((mode) => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
@@ -538,27 +368,81 @@ export function CafeDashboard(): ReactElement {
 
       {/* Orders */}
       <div className="flex-1 overflow-auto">
-        {viewMode === 'list' ? (
-          <OrderList
-            orders={orders}
-            onNewOrder={handleNewOrder}
-            onViewTerminal={handleViewTerminal}
-            onCancelOrder={handleCancelOrder}
-            onDeleteOrder={handleDeleteOrder}
-            onExecuteOrder={handleExecuteOrder}
-            onClick={handleOrderClick}
+        {orders.length === 0 ? (
+          <EmptyState
+            icon={Clock}
+            title="No Orders Yet"
+            description="Create your first order to get started"
+            action={
+              <Button onClick={handleNewOrder} className="flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                New Order
+              </Button>
+            }
           />
+        ) : viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {orders.map((order) => (
+              <NewOrderCard
+                key={order.id}
+                order={order}
+                stages={getStagesForOrder(order.id)}
+                onView={handleViewModal}
+                onCancel={handleCancelOrder}
+                onDelete={handleDeleteOrder}
+                onExecute={(orderId) => {
+                  const o = orders.find(x => x.id === orderId);
+                  if (o) handleExecuteOrder(o);
+                }}
+              />
+            ))}
+          </div>
         ) : (
-          <OrderKanban
-            orders={orders}
-            onViewTerminal={handleViewTerminal}
-            onCancelOrder={handleCancelOrder}
-            onDeleteOrder={handleDeleteOrder}
-            onExecuteOrder={handleExecuteOrder}
-            onClick={handleOrderClick}
-          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 h-full">
+            {(Object.entries(kanbanColumns) as [OrderStatus, Order[]][]).map(([status, ordersList]) => {
+              const config = STATUS_CONFIG[status];
+              return (
+                <div key={status} className="flex flex-col min-w-0">
+                  <div className="mb-3 pb-2 border-b border-border">
+                    <h3 className="font-semibold text-bone text-sm sm:text-base">{config.label}</h3>
+                    <p className="text-xs sm:text-sm text-gray-400">{ordersList.length} orders</p>
+                  </div>
+                  <div className="space-y-3 overflow-auto">
+                    {ordersList.map((order) => (
+                      <NewOrderCard
+                        key={order.id}
+                        order={order}
+                        stages={getStagesForOrder(order.id)}
+                        onView={handleViewModal}
+                        onCancel={handleCancelOrder}
+                        onDelete={handleDeleteOrder}
+                        onExecute={(orderId) => {
+                          const o = orders.find(x => x.id === orderId);
+                          if (o) handleExecuteOrder(o);
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
+
+      {/* Order Modal */}
+      {modalOrder && (
+        <OrderModal
+          isOpen={!!modalOrder}
+          onClose={() => setModalOrder(null)}
+          order={modalOrder}
+          stages={getStagesForOrder(modalOrder.id)}
+          timelineEvents={getTimelineForOrder(modalOrder.id)}
+          onSendInput={async (msg) => {
+            await window.codecafe.order.sendInput(modalOrder.id, msg);
+          }}
+        />
+      )}
 
       {/* New Order Dialog */}
       <NewOrderDialog

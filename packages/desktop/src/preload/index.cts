@@ -52,6 +52,16 @@ contextBridge.exposeInMainWorld('codecafe', {
     onCompleted: (callback: (data: any) => void) => setupIpcListener('order:completed', callback),
     onFailed: (callback: (data: any) => void) => setupIpcListener('order:failed', callback),
     onOutput: (callback: (event: any) => void) => setupIpcListener('order:output', callback),
+    // Session events
+    onSessionStarted: (callback: (data: any) => void) => setupIpcListener('order:session-started', callback),
+    onSessionCompleted: (callback: (data: any) => void) => setupIpcListener('order:session-completed', callback),
+    onSessionFailed: (callback: (data: any) => void) => setupIpcListener('order:session-failed', callback),
+    // Stage events
+    onStageStarted: (callback: (data: any) => void) => setupIpcListener('order:stage-started', callback),
+    onStageCompleted: (callback: (data: any) => void) => setupIpcListener('order:stage-completed', callback),
+    onStageFailed: (callback: (data: any) => void) => setupIpcListener('order:stage-failed', callback),
+    // Awaiting input event
+    onAwaitingInput: (callback: (data: any) => void) => setupIpcListener('order:awaiting-input', callback),
   },
 
   receipt: {

@@ -286,7 +286,18 @@ declare global {
         onEvent: (callback: (event: any) => void) => () => void;
         onAssigned: (callback: (data: any) => void) => () => void;
         onCompleted: (callback: (data: any) => void) => () => void;
+        onFailed: (callback: (data: any) => void) => () => void;
         onOutput: (callback: (event: any) => void) => () => void;
+        // Session events
+        onSessionStarted: (callback: (data: { orderId: string }) => void) => () => void;
+        onSessionCompleted: (callback: (data: { orderId: string }) => void) => () => void;
+        onSessionFailed: (callback: (data: { orderId: string; error?: string }) => void) => () => void;
+        // Stage events
+        onStageStarted: (callback: (data: { orderId: string; stageId: string; provider?: string }) => void) => () => void;
+        onStageCompleted: (callback: (data: { orderId: string; stageId: string; output?: string; duration?: number }) => void) => () => void;
+        onStageFailed: (callback: (data: { orderId: string; stageId: string; error?: string }) => void) => () => void;
+        // Awaiting input event
+        onAwaitingInput: (callback: (data: { orderId: string; prompt?: string }) => void) => () => void;
       };
 
       // Order 관리 (Legacy flat API - backward compatibility)

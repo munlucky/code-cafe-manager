@@ -400,46 +400,15 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
           hasError: errorOutput.length > 0,
         });
 
-        // Only check for permission patterns if exit code is 0 but output looks incomplete
-        // These patterns indicate Claude is waiting for interactive permission input
-        const permissionPatterns = [
-          /\[y\/n\]/i,                           // Yes/No prompt
-          /\(y\/n\)/i,                           // Yes/No prompt variant
-          /allow (?:me to|this action)/i,       // Permission request
-          /continue without (?:permission|approval)/i,
-          /may i (?:proceed|continue|execute)/i,
-          /do you want (?:me to|to allow)/i,
-          /would you like (?:me to|to)/i,
-          /should i (?:proceed|continue)/i,
-          /waiting for (?:user |your )?(?:input|permission|approval)/i,
-          /press enter to continue/i,
-          /type 'yes' to confirm/i,
-        ];
-
-        // Check for permission patterns only if:
-        // 1. Exit code is 0 but output is suspiciously short (< 100 chars)
-        // 2. Or output ends with a question mark or prompt-like pattern
-        const outputTrimmed = output.trim();
-        const endsWithPrompt = /[?:]$/.test(outputTrimmed);
-        const isSuspiciouslyShort = outputTrimmed.length < 100;
-        
-        let hasPermissionPrompt = false;
-        if (code === 0 && (endsWithPrompt || isSuspiciouslyShort)) {
-          hasPermissionPrompt = permissionPatterns.some((pattern) =>
-            pattern.test(output)
-          );
-        }
-
-        if (code === 0 && !hasPermissionPrompt) {
+        // Success case: exit code 0
+        if (code === 0) {
           resolve({ success: true, output: output.trim() });
         } else {
-          const errorReason = hasPermissionPrompt
-            ? 'Incomplete: waiting for user permission'
-            : errorOutput || `Exit code: ${code}`;
+          // Non-zero exit code - actual failure
           resolve({
             success: false,
             output: output.trim(),
-            error: errorReason,
+            error: errorOutput || `Exit code: ${code}`,
           });
         }
       });

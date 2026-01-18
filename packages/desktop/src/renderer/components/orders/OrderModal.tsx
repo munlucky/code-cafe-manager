@@ -1,0 +1,205 @@
+import { type ReactElement, useState, useEffect, useRef } from 'react';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
+import { X, AlignLeft, List, Activity, Terminal } from 'lucide-react';
+import { cn } from '../../utils/cn';
+import { Button } from '../ui/Button';
+import { OrderSummaryView } from './OrderSummaryView';
+import { OrderTimelineView, type TimelineEvent } from './OrderTimelineView';
+import type { Order } from '../../types/models';
+import { OrderStatus } from '../../types/models';
+import type { StageInfo } from '../order/OrderStageProgress';
+
+interface OrderModalProps {
+  order: Order;
+  isOpen: boolean;
+  onClose: () => void;
+  stages: StageInfo[];
+  timelineEvents: TimelineEvent[];
+  // Actions
+  onSendInput?: (message: string) => void;
+  activeTab?: 'summary' | 'timeline' | 'output';
+  onTabChange?: (tab: 'summary' | 'timeline' | 'output') => void;
+}
+
+type TabType = 'summary' | 'timeline' | 'output';
+
+interface OutputLine {
+  timestamp: string;
+  type: 'stdout' | 'stderr' | 'system';
+  content: string;
+}
+
+export function OrderModal({
+  order,
+  isOpen,
+  onClose,
+  stages,
+  timelineEvents,
+  onSendInput,
+  activeTab = 'summary',
+  onTabChange,
+}: OrderModalProps): ReactElement {
+  const [internalTab, setInternalTab] = useState<TabType>('summary');
+  const [outputLines, setOutputLines] = useState<OutputLine[]>([]);
+  const outputRef = useRef<HTMLDivElement>(null);
+  
+  const currentTab = onTabChange ? activeTab : internalTab;
+  const handleTabChange = (tab: TabType) => {
+    if (onTabChange) onTabChange(tab);
+    else setInternalTab(tab);
+  };
+
+  // Subscribe to order:output events
+  useEffect(() => {
+    if (!isOpen) {
+      setOutputLines([]);
+      return;
+    }
+
+    const handleOutput = (data: { orderId: string; timestamp: string; type: string; content: string }) => {
+      if (data.orderId !== order.id) return;
+      
+      setOutputLines(prev => [...prev, {
+        timestamp: data.timestamp,
+        type: data.type as 'stdout' | 'stderr' | 'system',
+        content: data.content,
+      }]);
+    };
+
+    const cleanup = window.codecafe.order.onOutput(handleOutput);
+    return () => cleanup?.();
+  }, [isOpen, order.id]);
+
+  // Auto-scroll to bottom when new output arrives
+  useEffect(() => {
+    if (outputRef.current && currentTab === 'output') {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+    }
+  }, [outputLines, currentTab]);
+
+  return (
+    <DialogPrimitive.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm transition-opacity animate-in fade-in duration-200" />
+        <DialogPrimitive.Content 
+          className={cn(
+            "fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] duration-200",
+            "w-[90vw] max-w-4xl h-[80vh] max-h-[800px]", 
+            "bg-gray-900 border border-border shadow-2xl rounded-xl flex flex-col overflow-hidden"
+          )}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gray-800">
+            <div>
+               <DialogPrimitive.Title className="text-lg font-bold text-bone flex items-center gap-2">
+                 <Activity className="w-5 h-5 text-coffee" />
+                 {order.workflowName}
+               </DialogPrimitive.Title>
+               <DialogPrimitive.Description className="text-sm text-gray-500 font-mono mt-1">
+                 ID: {order.id}
+               </DialogPrimitive.Description>
+            </div>
+            <div className="flex items-center gap-4">
+               {/* Tabs */}
+               <div className="flex bg-gray-900 rounded-lg p-1 border border-gray-700">
+                  <button
+                    onClick={() => handleTabChange('summary')}
+                    className={cn(
+                      "px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all",
+                      currentTab === 'summary' 
+                        ? "bg-gray-700 text-bone shadow-sm" 
+                        : "text-gray-400 hover:text-gray-200"
+                    )}
+                  >
+                    <AlignLeft className="w-4 h-4" />
+                    Summary
+                  </button>
+                  <button
+                    onClick={() => handleTabChange('output')}
+                    className={cn(
+                      "px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all",
+                      currentTab === 'output' 
+                        ? "bg-gray-700 text-bone shadow-sm" 
+                        : "text-gray-400 hover:text-gray-200"
+                    )}
+                  >
+                    <Terminal className="w-4 h-4" />
+                    Output
+                    {outputLines.length > 0 && (
+                      <span className="text-xs bg-coffee text-black px-1.5 py-0.5 rounded-full">
+                        {outputLines.length}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleTabChange('timeline')}
+                    className={cn(
+                      "px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all",
+                      currentTab === 'timeline' 
+                        ? "bg-gray-700 text-bone shadow-sm" 
+                        : "text-gray-400 hover:text-gray-200"
+                    )}
+                  >
+                    <List className="w-4 h-4" />
+                    Timeline
+                  </button>
+               </div>
+
+               <DialogPrimitive.Close asChild>
+                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-white">
+                   <X className="w-5 h-5" />
+                 </Button>
+               </DialogPrimitive.Close>
+            </div>
+          </div>
+
+          {/* Content Area */}
+          <div className="flex-1 overflow-auto bg-gray-900 relative">
+             {currentTab === 'summary' && (
+               <div className="p-6 max-w-2xl mx-auto">
+                 <OrderSummaryView 
+                   stages={stages} 
+                   isRunning={order.status === OrderStatus.RUNNING}
+                   awaitingInput={{ required: false }}
+                   onSendInput={onSendInput}
+                 />
+               </div>
+             )}
+
+             {currentTab === 'output' && (
+               <div 
+                 ref={outputRef}
+                 className="h-full overflow-auto p-4 font-mono text-sm bg-black"
+               >
+                 {outputLines.length === 0 ? (
+                   <div className="text-gray-500 italic">No output yet. Execute the order to see terminal output here.</div>
+                 ) : (
+                   outputLines.map((line, idx) => (
+                     <div key={idx} className="whitespace-pre-wrap mb-1">
+                       <span className="text-gray-600 text-xs mr-2">
+                         {new Date(line.timestamp).toLocaleTimeString()}
+                       </span>
+                       <span 
+                         className={cn(
+                           line.type === 'stderr' && 'text-red-400',
+                           line.type === 'stdout' && 'text-gray-200',
+                           line.type === 'system' && 'text-yellow-400'
+                         )}
+                         dangerouslySetInnerHTML={{ __html: line.content }}
+                       />
+                     </div>
+                   ))
+                 )}
+               </div>
+             )}
+
+             {currentTab === 'timeline' && (
+               <OrderTimelineView events={timelineEvents} className="h-full" />
+             )}
+          </div>
+
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+}
