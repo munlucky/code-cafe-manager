@@ -41,6 +41,7 @@ export function OrderModal({
 }: OrderModalProps): ReactElement {
   const [internalTab, setInternalTab] = useState<TabType>('summary');
   const [outputLines, setOutputLines] = useState<OutputLine[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState<string | null>(null);
   const outputRef = useRef<HTMLDivElement>(null);
   
   const currentTab = onTabChange ? activeTab : internalTab;
@@ -49,10 +50,44 @@ export function OrderModal({
     else setInternalTab(tab);
   };
 
-  // Subscribe to order:output events
+  // Load historical logs when modal opens
   useEffect(() => {
     if (!isOpen) {
-      setOutputLines([]);
+      return;
+    }
+
+    // Load history only once per order
+    if (historyLoaded === order.id) {
+      return;
+    }
+
+    const loadHistory = async () => {
+      try {
+        const response = await window.codecafe.getOrderLog(order.id);
+        if (response.success && response.data) {
+          // Parse raw log text into output lines
+          // Since logs are plain text, we'll treat each non-empty line as stdout
+          const lines = response.data.split('\n').filter(line => line.trim());
+          const parsedLines: OutputLine[] = lines.map((line, idx) => ({
+            timestamp: new Date().toISOString(), // Logs don't have individual timestamps
+            type: 'stdout' as const,
+            content: line,
+          }));
+          setOutputLines(parsedLines);
+        }
+        setHistoryLoaded(order.id);
+      } catch (error) {
+        console.error('Failed to load order log:', error);
+        setHistoryLoaded(order.id); // Mark as loaded even on error to avoid retry loops
+      }
+    };
+
+    loadHistory();
+  }, [isOpen, order.id, historyLoaded]);
+
+  // Subscribe to real-time order:output events
+  useEffect(() => {
+    if (!isOpen) {
       return;
     }
 
