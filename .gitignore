@@ -20,6 +20,7 @@ packages/orchestrator/src/**/*.map
 .orch/
 tmpclaude-*
 .gemini/
+.agent/
 #클로드 작업파일은 커밋이 안되도록 수정
 .claude/docs/moonshot-analysis.yaml
 .claude/skills/moonshot-classify-task/context.yaml
