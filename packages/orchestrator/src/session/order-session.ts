@@ -257,6 +257,7 @@ export class OrderSession extends EventEmitter {
    * Stage 실행 계획 생성 (의존성 기반)
    *
    * 같은 배치에 있는 Stage들은 병렬 실행 가능
+   * 순차 모드에서는 원본 배열 순서를 유지
    */
   private buildExecutionPlan(stages: StageConfig[]): StageConfig[][] {
     const plan: StageConfig[][] = [];
@@ -265,10 +266,10 @@ export class OrderSession extends EventEmitter {
 
     while (remaining.length > 0) {
       const batch: StageConfig[] = [];
+      const toRemove: number[] = [];
 
-      // 역순 순회 (splice를 안전하게 사용하기 위함)
-      // unshift로 배치에 추가하여 순서 유지
-      for (let i = remaining.length - 1; i >= 0; i--) {
+      // 정순 순회하여 원본 배열 순서 유지
+      for (let i = 0; i < remaining.length; i++) {
         const stage = remaining[i];
 
         // 의존성 확인
@@ -284,9 +285,14 @@ export class OrderSession extends EventEmitter {
             }
           }
 
-          batch.unshift(stage); // 앞에 추가하여 순서 유지
-          remaining.splice(i, 1);
+          batch.push(stage);
+          toRemove.push(i);
         }
+      }
+
+      // 역순으로 제거 (인덱스 변경 방지)
+      for (let i = toRemove.length - 1; i >= 0; i--) {
+        remaining.splice(toRemove[i], 1);
       }
 
       if (batch.length === 0 && remaining.length > 0) {
