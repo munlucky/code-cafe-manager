@@ -192,6 +192,58 @@ async function getCafe(cafeId: string): Promise<Cafe | null> {
 }
 
 /**
+ * Worktree 생성 결과 타입
+ */
+interface WorktreeCreationResult {
+  path: string;
+  branch: string;
+  baseBranch: string;
+}
+
+/**
+ * Worktree 생성 및 Order 업데이트 헬퍼
+ * 공통 로직을 추출하여 중복 제거
+ */
+async function createWorktreeAndUpdateOrder(
+  order: any,
+  cafe: Cafe,
+  worktreeOptions?: { baseBranch?: string; branchPrefix?: string }
+): Promise<WorktreeCreationResult> {
+  const baseBranch = worktreeOptions?.baseBranch || cafe.settings.baseBranch;
+  const branchPrefix = worktreeOptions?.branchPrefix || 'order';
+  const branchName = `${branchPrefix}-${order.id}`;
+
+  // worktreeRoot가 상대 경로인 경우 절대 경로로 변환
+  const worktreeRoot = cafe.settings.worktreeRoot.startsWith('/')
+    ? cafe.settings.worktreeRoot
+    : join(cafe.path, cafe.settings.worktreeRoot);
+
+  const worktreePath = join(worktreeRoot, branchName);
+
+  console.log('[Order IPC] Creating worktree:', { orderId: order.id, worktreePath, baseBranch });
+
+  await WorktreeManager.createWorktree({
+    repoPath: cafe.path,
+    baseBranch,
+    newBranch: branchName,
+    worktreePath,
+  });
+
+  // Order 객체 업데이트 (AI agent가 worktree 경로에서 실행되도록)
+  order.worktreeInfo = {
+    path: worktreePath,
+    branch: branchName,
+    baseBranch,
+  };
+  order.vars = { ...order.vars, PROJECT_ROOT: worktreePath };
+  order.counter = worktreePath;
+
+  console.log('[Order IPC] Worktree created and order updated:', worktreePath);
+
+  return { path: worktreePath, branch: branchName, baseBranch };
+}
+
+/**
  * 오더 생성 + 워크트리 자동 생성 요청 파라미터
  */
 export interface CreateOrderWithWorktreeParams {
@@ -291,44 +343,25 @@ class OrderManager {
           params.vars ? { ...params.vars, PROJECT_ROOT: cafe.path } : { PROJECT_ROOT: cafe.path }
         );
 
-        let worktreeInfo = null;
+        let worktreeInfo: { path: string; branch: string } | undefined;
 
         // 2. 워크트리 생성 (선택적)
         if (params.createWorktree) {
           try {
-            const baseBranch = params.worktreeOptions?.baseBranch || cafe.settings.baseBranch;
-            const branchPrefix = params.worktreeOptions?.branchPrefix || 'order';
-            const branchName = `${branchPrefix}-${order.id}`;
-
-            // worktreeRoot가 상대 경로인 경우 절대 경로로 변환
-            const worktreeRoot = cafe.settings.worktreeRoot.startsWith('/')
-              ? cafe.settings.worktreeRoot
-              : join(cafe.path, cafe.settings.worktreeRoot);
-
-            const worktreePath = join(worktreeRoot, branchName);
-
-            await WorktreeManager.createWorktree({
-              repoPath: cafe.path,
-              baseBranch,
-              newBranch: branchName,
-              worktreePath,
-            });
-
-            worktreeInfo = { path: worktreePath, branch: branchName };
-
-            console.log('[Order IPC] Worktree created:', worktreeInfo);
+            const result = await createWorktreeAndUpdateOrder(order, cafe, params.worktreeOptions);
+            worktreeInfo = { path: result.path, branch: result.branch };
           } catch (wtError: any) {
             console.error('[Order IPC] Failed to create worktree:', wtError);
-            // 워크트리 생성 실패해도 오더는 유지
+            // handleIpc에서 일관된 에러 응답을 생성하도록 에러를 던짐
+            // order 객체를 details에 포함하여 클라이언트가 재시도 등에 활용할 수 있도록 함
+            const error = new Error(`Failed to create worktree: ${wtError.message || 'Unknown error'}`);
+            (error as any).code = 'WORKTREE_CREATION_FAILED';
+            (error as any).details = { order };
+            throw error;
           }
         }
 
-        const result: CreateOrderWithWorktreeResult = {
-          order,
-          worktree: worktreeInfo || undefined,
-        };
-
-        return result;
+        return { order, worktree: worktreeInfo };
       }, 'order:createWithWorktree')
   );
 
@@ -382,9 +415,27 @@ class OrderManager {
 
     /**
      * 오더 삭제 (단일)
+     * worktree가 있으면 함께 정리
      */
     ipcMain.handle('order:delete', async (_, orderId: string) =>
       handleIpc(async () => {
+        // Order 조회 (삭제 전에 worktree 정보 확인)
+        const order = orchestrator.getOrder(orderId);
+
+        // Worktree 정리 (있는 경우)
+        if (order?.worktreeInfo?.path && existsSync(order.worktreeInfo.path)) {
+          try {
+            await WorktreeManager.removeWorktree({
+              worktreePath: order.worktreeInfo.path,
+              force: true, // 미커밋 변경사항도 강제 삭제
+            });
+            console.log('[Order IPC] Worktree removed:', order.worktreeInfo.path);
+          } catch (wtError: any) {
+            console.error('[Order IPC] Failed to remove worktree:', wtError);
+            // worktree 삭제 실패해도 order 삭제는 진행
+          }
+        }
+
         const deleted = await orchestrator.deleteOrder(orderId);
         return { deleted };
       }, 'order:delete')
@@ -392,9 +443,26 @@ class OrderManager {
 
     /**
      * 오더 삭제 (다중)
+     * worktree가 있으면 함께 정리
      */
     ipcMain.handle('order:deleteMany', async (_, orderIds: string[]) =>
       handleIpc(async () => {
+        // 각 order의 worktree 정리
+        for (const orderId of orderIds) {
+          const order = orchestrator.getOrder(orderId);
+          if (order?.worktreeInfo?.path && existsSync(order.worktreeInfo.path)) {
+            try {
+              await WorktreeManager.removeWorktree({
+                worktreePath: order.worktreeInfo.path,
+                force: true,
+              });
+              console.log('[Order IPC] Worktree removed:', order.worktreeInfo.path);
+            } catch (wtError: any) {
+              console.error('[Order IPC] Failed to remove worktree:', wtError);
+            }
+          }
+        }
+
         return await orchestrator.deleteOrders(orderIds);
       }, 'order:deleteMany')
     );
@@ -519,6 +587,53 @@ class OrderManager {
 
         return { unsubscribed: true };
       }, 'order:unsubscribeOutput')
+    );
+
+    /**
+     * Worktree 재생성 시도
+     * 기존 order에 대해 worktree 생성을 다시 시도
+     */
+    ipcMain.handle(
+      'order:retryWorktree',
+      async (_, params: { orderId: string; cafeId: string; worktreeOptions?: { baseBranch?: string; branchPrefix?: string } }) =>
+        handleIpc(async () => {
+          const { orderId, cafeId, worktreeOptions } = params;
+
+          // Order 조회
+          const order = orchestrator.getOrder(orderId);
+          if (!order) {
+            throw new Error(`Order not found: ${orderId}`);
+          }
+
+          // Cafe 조회
+          const cafe = await getCafe(cafeId);
+          if (!cafe) {
+            throw new Error(`Cafe not found: ${cafeId}`);
+          }
+
+          // 이미 worktree가 있는 경우
+          if (order.worktreeInfo?.path && existsSync(order.worktreeInfo.path)) {
+            console.log('[Order IPC] Worktree already exists:', order.worktreeInfo.path);
+            return {
+              worktree: {
+                path: order.worktreeInfo.path,
+                branch: order.worktreeInfo.branch,
+              },
+              message: 'Worktree already exists',
+            };
+          }
+
+          // Worktree 생성 시도 (헬퍼 함수 사용)
+          const result = await createWorktreeAndUpdateOrder(order, cafe, worktreeOptions);
+
+          return {
+            worktree: {
+              path: result.path,
+              branch: result.branch,
+            },
+            message: 'Worktree created successfully',
+          };
+        }, 'order:retryWorktree')
     );
 
     console.log('[IPC] Order handlers registered');
