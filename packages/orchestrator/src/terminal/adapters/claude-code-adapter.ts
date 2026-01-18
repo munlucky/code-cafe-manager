@@ -111,6 +111,18 @@ class ChildProcessWrapper implements IPty {
   }
 }
 
+const DEFAULT_SYSTEM_PROMPT = `
+You are running in non-interactive CLI mode.
+You cannot ask follow-up questions or wait for user input.
+If the user's request is ambiguous or lacks details:
+1. Make reasonable assumptions based on common software development practices.
+2. Proceed with the task execution immediately (e.g., creating files, analyzing code).
+3. If you absolutely cannot proceed, list the missing information as a structured error report, but try to execute as much as possible first.
+`.trim();
+
+/**
+ * Claude Code CLI Adapter
+ */
 export class ClaudeCodeAdapter implements IProviderAdapter {
   readonly providerType: ProviderType = 'claude-code';
   private config: ClaudeCodeAdapterConfig;
@@ -297,10 +309,13 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       ? { prompt: context, cwd }
       : { ...context, cwd };
 
-    // Apply adapter config
-    if (this.config.systemPrompt && !ctx.systemPrompt) {
-      ctx.systemPrompt = this.config.systemPrompt;
-    }
+    // Apply default system prompt if needed
+    // Prepend default prompt to ensure non-interactive behavior
+    const userSystemPrompt = ctx.systemPrompt || this.config.systemPrompt;
+    ctx.systemPrompt = userSystemPrompt 
+      ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userSystemPrompt}` 
+      : DEFAULT_SYSTEM_PROMPT;
+
     if (this.config.continueSession && ctx.continueSession === undefined) {
       ctx.continueSession = this.config.continueSession;
     }
@@ -321,7 +336,7 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       const childProc = spawn(claudePath, args, {
         cwd,
         env: process.env,
-        shell: true,
+        shell: false, // Fix: Changed to false to prevent argument truncation on Windows
       });
 
       wrapper.setProcess(childProc);

@@ -2,15 +2,12 @@
 import { spawn } from 'child_process';
 import * as path from 'path';
 
-// c:\dev\code-cafe-manager\packages\orchestrator\scripts\verify-claude-hang.ts
+// c:\dev\code-cafe-manager\packages\orchestrator\scripts\verify-shell-false.ts
 
-async function test(useShell: boolean) {
-  console.log(`\n=== Testing claude -p execution (shell: ${useShell}) ===`);
+async function test(useShell: boolean, prompt: string) {
+  console.log(`\n=== Testing claude -p (shell: ${useShell}, prompt: "${prompt}") ===`);
   
   const claudePath = 'C:\\Users\\moon\\.local\\bin\\claude.exe';
-  const prompt = '프로젝트 전체 리팩토링 react, ts, tailwind/css 스펙으로 진행'; // 공백 포함 한글 프롬프트
-
-  console.log(`Prompt: "${prompt}"`);
 
   const child = spawn(claudePath, ['-p', prompt], {
     shell: useShell,
@@ -28,7 +25,7 @@ async function test(useShell: boolean) {
       console.log(`[shell:${useShell}] TIMEOUT! Killing process...`);
       child.kill();
       resolve(false);
-    }, 15000);
+    }, 10000);
     
     child.on('close', code => {
       console.log(`[shell:${useShell}] Process exited with code:`, code);
@@ -40,11 +37,8 @@ async function test(useShell: boolean) {
 
 async function run() {
   console.log('Starting verification...');
-  // Test 1: shell: true (현행 - 문제 재현 예상)
-  await test(true);
-  
-  // Test 2: shell: false (수정안 - 해결 예상)
-  await test(false);
+  // Test case: shell: false with simple prompt (should act like Test 1 in previous phase)
+  await test(false, 'hello');
 }
 
 run().catch(console.error);
