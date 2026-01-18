@@ -192,6 +192,58 @@ async function getCafe(cafeId: string): Promise<Cafe | null> {
 }
 
 /**
+ * Worktree 생성 결과 타입
+ */
+interface WorktreeCreationResult {
+  path: string;
+  branch: string;
+  baseBranch: string;
+}
+
+/**
+ * Worktree 생성 및 Order 업데이트 헬퍼
+ * 공통 로직을 추출하여 중복 제거
+ */
+async function createWorktreeAndUpdateOrder(
+  order: any,
+  cafe: Cafe,
+  worktreeOptions?: { baseBranch?: string; branchPrefix?: string }
+): Promise<WorktreeCreationResult> {
+  const baseBranch = worktreeOptions?.baseBranch || cafe.settings.baseBranch;
+  const branchPrefix = worktreeOptions?.branchPrefix || 'order';
+  const branchName = `${branchPrefix}-${order.id}`;
+
+  // worktreeRoot가 상대 경로인 경우 절대 경로로 변환
+  const worktreeRoot = cafe.settings.worktreeRoot.startsWith('/')
+    ? cafe.settings.worktreeRoot
+    : join(cafe.path, cafe.settings.worktreeRoot);
+
+  const worktreePath = join(worktreeRoot, branchName);
+
+  console.log('[Order IPC] Creating worktree:', { orderId: order.id, worktreePath, baseBranch });
+
+  await WorktreeManager.createWorktree({
+    repoPath: cafe.path,
+    baseBranch,
+    newBranch: branchName,
+    worktreePath,
+  });
+
+  // Order 객체 업데이트 (AI agent가 worktree 경로에서 실행되도록)
+  order.worktreeInfo = {
+    path: worktreePath,
+    branch: branchName,
+    baseBranch,
+  };
+  order.vars = { ...order.vars, PROJECT_ROOT: worktreePath };
+  order.counter = worktreePath;
+
+  console.log('[Order IPC] Worktree created and order updated:', worktreePath);
+
+  return { path: worktreePath, branch: branchName, baseBranch };
+}
+
+/**
  * 오더 생성 + 워크트리 자동 생성 요청 파라미터
  */
 export interface CreateOrderWithWorktreeParams {
@@ -291,61 +343,25 @@ class OrderManager {
           params.vars ? { ...params.vars, PROJECT_ROOT: cafe.path } : { PROJECT_ROOT: cafe.path }
         );
 
-        let worktreeInfo = null;
+        let worktreeInfo: { path: string; branch: string } | undefined;
 
         // 2. 워크트리 생성 (선택적)
         if (params.createWorktree) {
           try {
-            const baseBranch = params.worktreeOptions?.baseBranch || cafe.settings.baseBranch;
-            const branchPrefix = params.worktreeOptions?.branchPrefix || 'order';
-            const branchName = `${branchPrefix}-${order.id}`;
-
-            // worktreeRoot가 상대 경로인 경우 절대 경로로 변환
-            const worktreeRoot = cafe.settings.worktreeRoot.startsWith('/')
-              ? cafe.settings.worktreeRoot
-              : join(cafe.path, cafe.settings.worktreeRoot);
-
-            const worktreePath = join(worktreeRoot, branchName);
-
-            await WorktreeManager.createWorktree({
-              repoPath: cafe.path,
-              baseBranch,
-              newBranch: branchName,
-              worktreePath,
-            });
-
-            worktreeInfo = { path: worktreePath, branch: branchName };
-
-            // Worktree 정보를 order 객체에 업데이트 (AI agent가 worktree 경로에서 실행되도록)
-            order.worktreeInfo = {
-              path: worktreePath,
-              branch: branchName,
-              baseBranch,
-            };
-            // PROJECT_ROOT를 worktree 경로로 업데이트
-            order.vars = { ...order.vars, PROJECT_ROOT: worktreePath };
-            order.counter = worktreePath;
-
-            console.log('[Order IPC] Worktree created:', worktreeInfo);
-            console.log('[Order IPC] Order updated with worktree path:', worktreePath);
+            const result = await createWorktreeAndUpdateOrder(order, cafe, params.worktreeOptions);
+            worktreeInfo = { path: result.path, branch: result.branch };
           } catch (wtError: any) {
             console.error('[Order IPC] Failed to create worktree:', wtError);
-            // 워크트리 생성 실패 시 에러 정보 포함하여 반환
-            const result: CreateOrderWithWorktreeResult & { worktreeError?: string } = {
-              order,
-              worktree: undefined,
-              worktreeError: wtError.message || 'Unknown worktree creation error',
-            };
-            return result;
+            // handleIpc에서 일관된 에러 응답을 생성하도록 에러를 던짐
+            // order 객체를 details에 포함하여 클라이언트가 재시도 등에 활용할 수 있도록 함
+            const error = new Error(`Failed to create worktree: ${wtError.message || 'Unknown error'}`);
+            (error as any).code = 'WORKTREE_CREATION_FAILED';
+            (error as any).details = { order };
+            throw error;
           }
         }
 
-        const result: CreateOrderWithWorktreeResult = {
-          order,
-          worktree: worktreeInfo || undefined,
-        };
-
-        return result;
+        return { order, worktree: worktreeInfo };
       }, 'order:createWithWorktree')
   );
 
@@ -564,7 +580,6 @@ class OrderManager {
           if (order.worktreeInfo?.path && existsSync(order.worktreeInfo.path)) {
             console.log('[Order IPC] Worktree already exists:', order.worktreeInfo.path);
             return {
-              success: true,
               worktree: {
                 path: order.worktreeInfo.path,
                 branch: order.worktreeInfo.branch,
@@ -573,42 +588,13 @@ class OrderManager {
             };
           }
 
-          // Worktree 생성 시도
-          const baseBranch = worktreeOptions?.baseBranch || cafe.settings.baseBranch;
-          const branchPrefix = worktreeOptions?.branchPrefix || 'order';
-          const branchName = `${branchPrefix}-${orderId}`;
-
-          const worktreeRoot = cafe.settings.worktreeRoot.startsWith('/')
-            ? cafe.settings.worktreeRoot
-            : join(cafe.path, cafe.settings.worktreeRoot);
-
-          const worktreePath = join(worktreeRoot, branchName);
-
-          console.log('[Order IPC] Retrying worktree creation:', { orderId, worktreePath, baseBranch });
-
-          await WorktreeManager.createWorktree({
-            repoPath: cafe.path,
-            baseBranch,
-            newBranch: branchName,
-            worktreePath,
-          });
-
-          // Order 업데이트
-          order.worktreeInfo = {
-            path: worktreePath,
-            branch: branchName,
-            baseBranch,
-          };
-          order.vars = { ...order.vars, PROJECT_ROOT: worktreePath };
-          order.counter = worktreePath;
-
-          console.log('[Order IPC] Worktree retry successful:', worktreePath);
+          // Worktree 생성 시도 (헬퍼 함수 사용)
+          const result = await createWorktreeAndUpdateOrder(order, cafe, worktreeOptions);
 
           return {
-            success: true,
             worktree: {
-              path: worktreePath,
-              branch: branchName,
+              path: result.path,
+              branch: result.branch,
             },
             message: 'Worktree created successfully',
           };
