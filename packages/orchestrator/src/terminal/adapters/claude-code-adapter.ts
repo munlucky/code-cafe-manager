@@ -465,11 +465,20 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
 
   /**
    * Send prompt to terminal with escaping
+   * C5: Use \n for prompt submission (Claude CLI expects newline to execute)
    */
   async sendPrompt(ptyProcess: IPtyProcess, prompt: string): Promise<boolean> {
-    // Send raw prompt with a single carriage return at the end
-    const dataToWrite = prompt + '\r';
-    
+    // C5: Use \n instead of \r - Claude CLI requires newline to execute prompt
+    // \r only moves cursor, \n actually submits the prompt
+    const lineEnding = '\n';
+    const dataToWrite = prompt + lineEnding;
+
+    this.log('sendPrompt', {
+      promptLength: prompt.length,
+      promptPreview: prompt.substring(0, 50),
+      lineEnding: '\\n',
+    });
+
     // Simple verification check (remove newlines for check)
     const checkStr = prompt.substring(0, Math.min(20, prompt.length)).replace(/\r|\n/g, '');
 
