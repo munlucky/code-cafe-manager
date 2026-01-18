@@ -404,10 +404,12 @@ export class OrderSession extends EventEmitter {
       }
     }
 
-    // 이전 완료된 stage들도 재시도 옵션에 추가 (사용자가 선택 가능)
+    // 완료된 stage들도 재시도 옵션에 추가 (사용자가 선택 가능)
+    // 실행되지 않은 stage는 제외
     for (let i = 0; i < executionPlan.length; i++) {
       for (const stage of executionPlan[i]) {
-        if (stage.id !== failedStageId) {
+        // 완료된 stage만 포함 (실패한 stage는 위에서 이미 추가됨)
+        if (this.completedStages.has(stage.id) && stage.id !== failedStageId) {
           retryOptions.push({
             stageId: stage.id,
             stageName: stage.name,

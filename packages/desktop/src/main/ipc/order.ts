@@ -313,6 +313,24 @@ async function handleIpc<T>(
 }
 
 /**
+ * Get BaristaEngine from ExecutionManager
+ * Helper function to reduce duplication in retry-related handlers
+ */
+function getBaristaEngine() {
+  const executionManager = getExecutionManager();
+  if (!executionManager) {
+    throw new Error('ExecutionManager not initialized');
+  }
+
+  const baristaEngine = executionManager.getBaristaEngine();
+  if (!baristaEngine) {
+    throw new Error('BaristaEngine not initialized');
+  }
+
+  return baristaEngine;
+}
+
+/**
  * Order Manager (Interval 관리)
  */
 class OrderManager {
@@ -675,18 +693,9 @@ class OrderManager {
           const { orderId, fromStageId } = params;
           console.log('[Order IPC] Retrying order from stage:', { orderId, fromStageId });
 
-          const executionManager = getExecutionManager();
-          if (!executionManager) {
-            throw new Error('ExecutionManager not initialized');
-          }
-
-          const baristaEngine = executionManager.getBaristaEngine();
-          if (!baristaEngine) {
-            throw new Error('BaristaEngine not initialized');
-          }
-
+          const baristaEngine = getBaristaEngine();
           await baristaEngine.retryFromStage(orderId, fromStageId);
-          return { retried: true };
+          return { started: true };
         }, 'order:retryFromStage')
     );
 
@@ -700,17 +709,13 @@ class OrderManager {
         handleIpc(async () => {
           console.log('[Order IPC] Getting retry options for order:', orderId);
 
-          const executionManager = getExecutionManager();
-          if (!executionManager) {
+          try {
+            const baristaEngine = getBaristaEngine();
+            return baristaEngine.getRetryOptions(orderId);
+          } catch {
+            // ExecutionManager or BaristaEngine not initialized
             return null;
           }
-
-          const baristaEngine = executionManager.getBaristaEngine();
-          if (!baristaEngine) {
-            return null;
-          }
-
-          return baristaEngine.getRetryOptions(orderId);
         }, 'order:getRetryOptions')
     );
 
@@ -724,16 +729,7 @@ class OrderManager {
           const { orderId, preserveContext = true } = params;
           console.log('[Order IPC] Retrying order from beginning:', { orderId, preserveContext });
 
-          const executionManager = getExecutionManager();
-          if (!executionManager) {
-            throw new Error('ExecutionManager not initialized');
-          }
-
-          const baristaEngine = executionManager.getBaristaEngine();
-          if (!baristaEngine) {
-            throw new Error('BaristaEngine not initialized');
-          }
-
+          const baristaEngine = getBaristaEngine();
           await baristaEngine.retryFromBeginning(orderId, preserveContext);
           return { started: true };
         }, 'order:retryFromBeginning')

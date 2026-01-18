@@ -331,8 +331,10 @@ export function OrderDetailView({
               </h3>
               <div className="space-y-3">
                 {/* 재시도 타입 선택 */}
-                <div className="flex gap-2">
+                <div className="flex gap-2" role="radiogroup" aria-label="Retry type selection">
                   <button
+                    role="radio"
+                    aria-checked={retryType === 'stage'}
                     onClick={() => setRetryType('stage')}
                     className={`flex-1 px-2 py-1.5 text-xs rounded border transition-colors ${
                       retryType === 'stage'
@@ -343,6 +345,8 @@ export function OrderDetailView({
                     특정 Stage부터
                   </button>
                   <button
+                    role="radio"
+                    aria-checked={retryType === 'beginning'}
                     onClick={() => setRetryType('beginning')}
                     className={`flex-1 px-2 py-1.5 text-xs rounded border transition-colors ${
                       retryType === 'beginning'
