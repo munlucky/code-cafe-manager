@@ -364,10 +364,14 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       let output = '';
       let errorOutput = '';
 
+      // Use Windows cmd.exe explicitly to prevent Bun from intercepting on Windows
+      // Bun v1.3.5 has a segfault bug when spawning child processes on Windows
+      const isWindows = os.platform() === 'win32';
       const childProc = spawn(claudePath, args, {
         cwd,
         env: process.env,
-        shell: false, // Fix: Changed to false to prevent argument truncation on Windows
+        shell: isWindows ? 'cmd.exe' : false, // Use explicit shell on Windows
+        windowsHide: true, // Hide window on Windows
       });
 
       wrapper.setProcess(childProc);
