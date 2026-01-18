@@ -538,6 +538,83 @@ class OrderManager {
       }, 'order:unsubscribeOutput')
     );
 
+    /**
+     * Worktree 재생성 시도
+     * 기존 order에 대해 worktree 생성을 다시 시도
+     */
+    ipcMain.handle(
+      'order:retryWorktree',
+      async (_, params: { orderId: string; cafeId: string; worktreeOptions?: { baseBranch?: string; branchPrefix?: string } }) =>
+        handleIpc(async () => {
+          const { orderId, cafeId, worktreeOptions } = params;
+
+          // Order 조회
+          const order = orchestrator.getOrder(orderId);
+          if (!order) {
+            throw new Error(`Order not found: ${orderId}`);
+          }
+
+          // Cafe 조회
+          const cafe = await getCafe(cafeId);
+          if (!cafe) {
+            throw new Error(`Cafe not found: ${cafeId}`);
+          }
+
+          // 이미 worktree가 있는 경우
+          if (order.worktreeInfo?.path && existsSync(order.worktreeInfo.path)) {
+            console.log('[Order IPC] Worktree already exists:', order.worktreeInfo.path);
+            return {
+              success: true,
+              worktree: {
+                path: order.worktreeInfo.path,
+                branch: order.worktreeInfo.branch,
+              },
+              message: 'Worktree already exists',
+            };
+          }
+
+          // Worktree 생성 시도
+          const baseBranch = worktreeOptions?.baseBranch || cafe.settings.baseBranch;
+          const branchPrefix = worktreeOptions?.branchPrefix || 'order';
+          const branchName = `${branchPrefix}-${orderId}`;
+
+          const worktreeRoot = cafe.settings.worktreeRoot.startsWith('/')
+            ? cafe.settings.worktreeRoot
+            : join(cafe.path, cafe.settings.worktreeRoot);
+
+          const worktreePath = join(worktreeRoot, branchName);
+
+          console.log('[Order IPC] Retrying worktree creation:', { orderId, worktreePath, baseBranch });
+
+          await WorktreeManager.createWorktree({
+            repoPath: cafe.path,
+            baseBranch,
+            newBranch: branchName,
+            worktreePath,
+          });
+
+          // Order 업데이트
+          order.worktreeInfo = {
+            path: worktreePath,
+            branch: branchName,
+            baseBranch,
+          };
+          order.vars = { ...order.vars, PROJECT_ROOT: worktreePath };
+          order.counter = worktreePath;
+
+          console.log('[Order IPC] Worktree retry successful:', worktreePath);
+
+          return {
+            success: true,
+            worktree: {
+              path: worktreePath,
+              branch: branchName,
+            },
+            message: 'Worktree created successfully',
+          };
+        }, 'order:retryWorktree')
+    );
+
     console.log('[IPC] Order handlers registered');
   }
 
