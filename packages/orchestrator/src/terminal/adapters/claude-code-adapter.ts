@@ -326,13 +326,20 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
 
       wrapper.setProcess(childProc);
 
+      // Explicitly close stdin to prevent hanging if CLI waits for input
+      childProc.stdin?.end();
+
       childProc.stdout?.on('data', (data: Buffer) => {
         const chunk = data.toString();
+        // Debug log (limit chunk size)
+        this.log('stdout-chunk', { chunk: chunk.substring(0, 200) });
         output += chunk;
         if (onData) onData(chunk);
       });
 
       childProc.stderr?.on('data', (data: Buffer) => {
+        const chunk = data.toString();
+        this.log('stderr-chunk', { chunk });
         errorOutput += data.toString();
       });
 
