@@ -158,75 +158,24 @@ export class StageOrchestrator extends EventEmitter {
   }
 
   /**
-   * AI 기반 판단 (복잡한 경우 폴백)
+   * AI 기반 판단 (신호 파싱 실패 시 폴백)
+   *
+   * signals 블록이 없으면 기본적으로 await_user 처리.
+   * Claude가 작업을 제대로 수행했다면 signals 블록을 출력해야 함.
    */
   private async evaluateWithAI(
     stageId: string,
     output: string,
     context?: SharedContext
   ): Promise<OrchestratorDecision> {
-    console.log(`[StageOrchestrator] AI evaluation for stage ${stageId}`);
+    console.log(`[StageOrchestrator] AI evaluation for stage ${stageId} (no signals block found)`);
 
-    const questionCount = (output.match(/\?/g) || []).length;
-    const hasErrorKeywords = /error|fail|exception|cannot|unable/i.test(output);
-
-    // 1. 작업 미수행 패턴 감지 (Claude가 질문만 하고 실제 작업을 안 한 경우)
-    const nonProductivePatterns = [
-      /무엇을.*도와/i,                          // 한글: "무엇을 도와드릴까요"
-      /어떤.*작업/i,                            // 한글: "어떤 작업을"
-      /what would you like/i,                  // 영어: "What would you like to work on"
-      /how can i help/i,                       // 영어: "How can I help"
-      /i'm ready to help/i,                    // 영어: "I'm ready to help"
-      /please provide/i,                       // 영어: "Please provide more details"
-      /could you clarify/i,                    // 영어: "Could you clarify"
-      /사용자.*메시지.*없/i,                     // 한글: "사용자의 메시지가 없습니다"
-    ];
-
-    const isNonProductive = nonProductivePatterns.some(pattern => pattern.test(output));
-
-    // 출력이 너무 짧으면 작업을 수행하지 않았을 가능성 높음
-    const outputTooShort = output.trim().length < 200;
-
-    // 2. 작업 미수행 판정
-    if (isNonProductive || (outputTooShort && questionCount > 0)) {
-      console.log(`[StageOrchestrator] Non-productive output detected for stage ${stageId}`, {
-        isNonProductive,
-        outputTooShort,
-        questionCount,
-        outputLength: output.length,
-      });
-
-      return {
-        action: 'await_user',
-        reason: 'Stage output indicates no actual work was performed',
-        userMessage: `Stage ${stageId} did not produce expected output. The AI may need clearer instructions or the request may be ambiguous.`,
-        usedAI: true,
-      };
-    }
-
-    // 3. 에러 키워드 또는 질문 5개 이상
-    if (questionCount >= 5 || hasErrorKeywords) {
-      return {
-        action: 'await_user',
-        reason: 'AI analysis detected uncertainty or errors',
-        userMessage: 'The stage output contains questions or errors. Please review.',
-        usedAI: true,
-      };
-    }
-
-    // 4. 불확실성 패턴 감지
-    if (this.hasUncertaintyIndicators(output)) {
-      return {
-        action: 'await_user',
-        reason: 'AI analysis detected uncertainty indicators',
-        userMessage: 'The stage output contains uncertainty. Please review.',
-        usedAI: true,
-      };
-    }
-
+    // signals 블록이 없다는 것 자체가 작업 미완료를 의미
+    // 명시적으로 await_user 처리
     return {
-      action: 'proceed',
-      reason: 'AI analysis found no blocking issues',
+      action: 'await_user',
+      reason: 'No signals block found in stage output',
+      userMessage: `Stage ${stageId} did not produce a signals block. The stage may not have completed properly.`,
       usedAI: true,
     };
   }
