@@ -270,7 +270,7 @@ export class WorktreeManager {
       );
       console.log(`[WorktreeManager] Added safe.directory: ${absolutePath}`);
     } catch (error: any) {
-      console.error(`[WorktreeManager] Failed to add safe.directory: ${error.message}`);
+      console.error(`[WorktreeManager] Failed to add safe.directory '${absolutePath}': ${error.message}`);
       // 설정 실패해도 worktree 생성 시도는 계속 진행
     }
   }

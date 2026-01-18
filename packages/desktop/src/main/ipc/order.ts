@@ -358,7 +358,7 @@ class OrderManager {
               await orchestrator.deleteOrder(order.id);
               console.log('[Order IPC] Order rolled back due to worktree failure:', order.id);
             } catch (deleteError: any) {
-              console.error('[Order IPC] Failed to rollback order:', deleteError);
+              console.error(`[Order IPC] Failed to rollback order ${order.id}:`, deleteError);
             }
 
             // handleIpc에서 일관된 에러 응답을 생성하도록 에러를 던짐
