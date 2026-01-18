@@ -7,5 +7,6 @@
   "context": "fork",
   "isBuiltIn": true,
   "createdAt": "2026-01-16T10:06:17.268Z",
-  "updatedAt": "2026-01-16T10:06:17.268Z"
+  "updatedAt": "2026-01-16T10:06:17.268Z",
+  "instructions": "# PM Complexity Evaluation\n\n## Inputs\n- `analysisContext.estimates.estimatedFiles`\n- `analysisContext.estimates.estimatedLines`\n- `analysisContext.estimates.estimatedTime`\n- `analysisContext.request.taskType`\n\n## Criteria\n- `simple`: 1-2 files, <= 100 lines, <= 1 hour\n- `medium`: 3-5 files, 100-300 lines, 1-3 hours\n- `complex`: 6+ files, 300+ lines, 3+ hours\n\nIf estimates are missing, infer from taskType keywords and note low confidence.\n\n## Output (patch)\n```yaml\ncomplexity: medium\nestimates.estimatedFiles: 4\nestimates.estimatedLines: 180\nestimates.estimatedTime: 2h\nnotes:\n  - \"complexity=medium, estimated=heuristic\"\n```"
 }

@@ -7,5 +7,6 @@
   "context": "fork",
   "isBuiltIn": true,
   "createdAt": "2026-01-16T10:06:17.274Z",
-  "updatedAt": "2026-01-16T10:06:17.274Z"
+  "updatedAt": "2026-01-16T10:06:17.274Z",
+  "instructions": "# Codex Code Review\n\n## When to use\n- After implementation for complex tasks\n- Refactoring work\n- API changes\n- Before merging significant changes\n\n## Procedure\n1. Summarize change scope, changed files, and key behaviors\n2. Capture the context.md path and read relevant code\n3. Build delegation prompt using the 7-section format\n4. Try Codex first, fallback to Claude if unavailable\n5. Record critical issues, warnings, and suggestions\n\n## Focus Areas\n- Prioritize: Correctness → Security → Performance → Maintainability\n- Check logic/flow errors and edge cases\n- Validate type safety and error handling\n- Verify API contract and data model consistency\n\n## Output (patch)\n```yaml\nnotes:\n  - \"codex-review: [APPROVE/REJECT], critical=[count], warnings=[count]\"\n```"
 }

@@ -165,51 +165,45 @@ export class BaristaEngineV2 extends EventEmitter {
   }
 
   /**
-   * Load skill content from SKILL.md or agent .md file
+   * Load skill content from desktop/skills/*.json (instructions field)
    */
   private async loadSkillContent(skillName: string, projectRoot: string): Promise<string | null> {
-    // Map workflow skill names to actual skill folder names
+    // Map workflow skill names to JSON file names
     const skillNameMap: Record<string, string> = {
-      'classify-task': 'moonshot-classify-task',
-      'evaluate-complexity': 'moonshot-evaluate-complexity',
-      'detect-uncertainty': 'moonshot-detect-uncertainty',
-      'decide-sequence': 'moonshot-decide-sequence',
+      'classify-task': 'classify-task',
+      'evaluate-complexity': 'evaluate-complexity',
+      'detect-uncertainty': 'detect-uncertainty',
+      'decide-sequence': 'decide-sequence',
       'pre-flight-check': 'pre-flight-check',
       'implementation-runner': 'implementation-runner',
       'codex-review-code': 'codex-review-code',
       'codex-test-integration': 'codex-test-integration',
+      'requirements-analyzer': 'requirements-analyzer',
+      'context-builder': 'context-builder',
     };
 
-    // Some skills are actually agents (in agents/ folder)
-    const agentSkills = ['requirements-analyzer', 'context-builder'];
-    const isAgent = agentSkills.includes(skillName);
+    const jsonFileName = skillNameMap[skillName] || skillName;
 
-    const actualSkillName = skillNameMap[skillName] || skillName;
-
-    // Try multiple possible paths for skill/agent files
-    const possiblePaths = isAgent
-      ? [
-          // Agent files are directly in agents/ folder as {name}.md
-          path.join(projectRoot, `.claude/agents/${skillName}.md`),
-          path.join(projectRoot, `../.claude/agents/${skillName}.md`),
-        ]
-      : [
-          // Skill files are in skills/{name}/SKILL.md
-          path.join(projectRoot, `.claude/skills/${actualSkillName}/SKILL.md`),
-          path.join(projectRoot, `../.claude/skills/${actualSkillName}/SKILL.md`),
-        ];
+    // Load from desktop/skills/*.json (bundled with app)
+    const possiblePaths = [
+      path.join(projectRoot, `desktop/skills/${jsonFileName}.json`),
+      path.join(projectRoot, `packages/desktop/skills/${jsonFileName}.json`),
+    ];
 
     for (const skillPath of possiblePaths) {
       try {
         const content = await fs.readFile(skillPath, 'utf-8');
-        console.log(`[BaristaEngineV2] Loaded ${isAgent ? 'agent' : 'skill'}: ${skillName} from ${skillPath}`);
-        return content;
+        const skillData = JSON.parse(content) as { instructions?: string };
+        if (skillData.instructions) {
+          console.log(`[BaristaEngineV2] Loaded skill instructions: ${skillName} from ${skillPath}`);
+          return skillData.instructions;
+        }
       } catch {
         // Try next path
       }
     }
 
-    console.warn(`[BaristaEngineV2] Skill/Agent not found: ${skillName}`);
+    console.warn(`[BaristaEngineV2] Skill not found or no instructions: ${skillName}`);
     return null;
   }
 

@@ -7,5 +7,6 @@
   "context": "fork",
   "isBuiltIn": true,
   "createdAt": "2026-01-16T10:06:17.266Z",
-  "updatedAt": "2026-01-16T10:06:17.267Z"
+  "updatedAt": "2026-01-16T10:06:17.267Z",
+  "instructions": "# PM Task Classification\n\n## Inputs\n- `analysisContext.request.userMessage`\n\n## Procedure\n1. Identify intent keywords from the user message.\n2. Select one taskType: `feature | modification | bugfix | refactor`.\n3. Set confidence: `high | medium | low`.\n\n## Heuristics\n- feature: \"new\", \"add\", \"implement\", \"create\", \"build\"\n- modification: \"change\", \"modify\", \"improve\", \"adjust\", \"remove\"\n- bugfix: \"bug\", \"error\", \"broken\", \"fails\"\n- refactor: \"refactor\", \"clean up\", \"restructure\", \"remove duplication\"\n\n## Output (patch)\n```yaml\nrequest.taskType: feature\nrequest.keywords:\n  - implement\n  - batch\nnotes:\n  - \"taskType=feature, confidence=high\"\n```"
 }
