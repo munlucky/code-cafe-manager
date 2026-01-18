@@ -78,7 +78,7 @@ export class SignalParser {
             ...DEFAULT_SIGNALS,
             nextAction: 'await_user',
             needsUserInput: true,
-            uncertainties: ['출력에서 명시적 시그널을 찾지 못함 (질문 다수 감지)'],
+            uncertainties: ['Explicit signals not found in output (multiple questions detected)'],
           },
           error: 'No signals block found, inferred from question marks',
         };

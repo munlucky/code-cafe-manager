@@ -198,7 +198,12 @@ export class BaristaEngineV2 extends EventEmitter {
           console.log(`[BaristaEngineV2] Loaded skill instructions: ${skillName} from ${skillPath}`);
           return skillData.instructions;
         }
-      } catch {
+      } catch (error: unknown) {
+        // Log errors other than file not found to aid in debugging
+        const err = error as { code?: string };
+        if (err.code !== 'ENOENT') {
+          console.warn(`[BaristaEngineV2] Error loading skill "${skillName}" from ${skillPath}:`, error);
+        }
         // Try next path
       }
     }
@@ -212,7 +217,6 @@ export class BaristaEngineV2 extends EventEmitter {
    */
   private buildStagePrompt(
     stageId: string,
-    role: string | undefined,
     orderPrompt: string,
     skillContents: string[]
   ): string {
@@ -316,7 +320,6 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
           // Build stage prompt with role instructions and skill contents
           const stagePrompt = this.buildStagePrompt(
             stageId,
-            stageConfig.role,
             orderPrompt,
             skillContents
           );

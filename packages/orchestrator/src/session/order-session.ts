@@ -240,6 +240,8 @@ export class OrderSession extends EventEmitter {
     cwd: string,
     startFromBatch: number = 0
   ): Promise<void> {
+    const MAX_RETRIES = 2;
+
     for (let batchIndex = startFromBatch; batchIndex < executionPlan.length; batchIndex++) {
       const batch = executionPlan[batchIndex];
 
@@ -251,13 +253,28 @@ export class OrderSession extends EventEmitter {
       }
 
       if (filteredBatch.length === 1) {
-        // 순차 실행 + 오케스트레이터 판단
+        // 순차 실행 + 오케스트레이터 판단 (with retry support)
         const stage = filteredBatch[0];
-        const decision = await this.executeStageWithOrchestrator(stage, executionPlan, batchIndex, cwd);
+        let retries = 0;
+        let result: 'proceed' | 'awaiting' | 'retry';
 
-        if (decision?.action === 'await_user') {
+        do {
+          result = await this.executeStageWithOrchestrator(stage, executionPlan, batchIndex, cwd);
+
+          if (result === 'retry') {
+            retries++;
+            console.log(`[OrderSession] Retrying stage ${stage.id} (${retries}/${MAX_RETRIES})...`);
+          }
+        } while (result === 'retry' && retries < MAX_RETRIES);
+
+        if (result === 'awaiting') {
           // 대기 상태로 전환 - 실행 중단
           return;
+        }
+
+        if (result === 'retry') {
+          // 재시도 한도 초과
+          throw new Error(`Stage ${stage.id} failed after ${MAX_RETRIES} retries`);
         }
       } else {
         // 병렬 실행
@@ -278,24 +295,24 @@ export class OrderSession extends EventEmitter {
           );
         }
 
-        // 병렬 실행 후에도 오케스트레이터 판단 (마지막 결과 기준)
-        const lastResult = results[results.length - 1];
-        if (lastResult) {
+        // 병렬 실행 후 모든 결과의 시그널 확인
+        for (const result of results) {
           const decision = await this.orchestrator.evaluate(
-            lastResult.stageId,
-            lastResult.output || '',
+            result.stageId,
+            result.output || '',
             this.sharedContext
           );
 
           const handled = await this.handleOrchestratorDecision(
             decision,
-            lastResult.stageId,
+            result.stageId,
             executionPlan,
             batchIndex,
             cwd
           );
 
           if (handled === 'awaiting') {
+            // 어떤 병렬 stage라도 사용자 입력 필요 시 중단
             return;
           }
         }
@@ -312,13 +329,14 @@ export class OrderSession extends EventEmitter {
 
   /**
    * 단일 Stage 실행 및 오케스트레이터 판단
+   * @returns 'proceed' | 'awaiting' | 'retry'
    */
   private async executeStageWithOrchestrator(
     stage: StageConfig,
     executionPlan: StageConfig[][],
     batchIndex: number,
     cwd: string
-  ): Promise<OrchestratorDecision | null> {
+  ): Promise<'proceed' | 'awaiting' | 'retry'> {
     const interpolatedPrompt = this.interpolatePrompt(stage.prompt);
     const result = await this.terminalGroup!.executeStage(
       stage.id,
@@ -340,19 +358,13 @@ export class OrderSession extends EventEmitter {
 
     console.log(`[OrderSession] Orchestrator decision for ${stage.id}:`, decision);
 
-    const handled = await this.handleOrchestratorDecision(
+    return this.handleOrchestratorDecision(
       decision,
       stage.id,
       executionPlan,
       batchIndex,
       cwd
     );
-
-    if (handled === 'awaiting') {
-      return decision;
-    }
-
-    return null;
   }
 
   /**

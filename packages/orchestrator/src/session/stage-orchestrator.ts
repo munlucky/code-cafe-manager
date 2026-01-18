@@ -117,7 +117,7 @@ export class StageOrchestrator extends EventEmitter {
         action: 'await_user',
         reason: `Too many uncertainties (${signals.uncertainties.length} >= ${this.config.uncertaintyThreshold})`,
         questions: signals.uncertainties,
-        userMessage: `다음 사항에 대한 확인이 필요합니다:\n${signals.uncertainties.map((u, i) => `${i + 1}. ${u}`).join('\n')}`,
+        userMessage: `The following items require confirmation:\n${signals.uncertainties.map((u, i) => `${i + 1}. ${u}`).join('\n')}`,
       };
     }
 
@@ -190,13 +190,13 @@ export class StageOrchestrator extends EventEmitter {
   }
 
   /**
-   * 불확실성 징후 감지
+   * Detect uncertainty indicators in output
    */
   private hasUncertaintyIndicators(output: string): boolean {
     const indicators = [
-      /\?\s*$/gm,                    // 줄 끝의 물음표
-      /확인.*필요/g,                  // "확인이 필요"
-      /명확하지 않/g,                 // "명확하지 않"
+      /\?\s*$/gm,                    // Question mark at end of line
+      /확인.*필요/g,                  // Korean: "confirmation needed"
+      /명확하지 않/g,                 // Korean: "not clear"
       /clarification needed/gi,
       /please confirm/gi,
       /not sure/gi,
