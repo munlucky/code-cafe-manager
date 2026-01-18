@@ -353,8 +353,9 @@ class OrderManager {
           } catch (wtError: any) {
             console.error('[Order IPC] Failed to create worktree:', wtError);
 
-            // Worktree 생성 실패 시 order 롤백 (생성된 order 삭제)
+            // Worktree 생성 실패 시 order 롤백 (먼저 취소 후 삭제)
             try {
+              await orchestrator.cancelOrder(order.id);
               await orchestrator.deleteOrder(order.id);
               console.log('[Order IPC] Order rolled back due to worktree failure:', order.id);
             } catch (deleteError: any) {

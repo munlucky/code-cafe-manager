@@ -12,6 +12,14 @@ import {
 const execFileAsync = promisify(execFile);
 
 /**
+ * 경로를 슬래시 형식으로 정규화 (Windows 호환)
+ * Git은 슬래시 형식 경로를 기대하므로 백슬래시를 슬래시로 변환
+ */
+function normalizePath(p: string): string {
+  return p.replace(/\\/g, '/');
+}
+
+/**
  * Git Worktree 관리 클래스
  * 보안: execFile 사용으로 command injection 방지
  */
@@ -76,7 +84,9 @@ export class WorktreeManager {
     worktreePath: string
   ): Promise<WorktreeInfo> {
     const worktrees = await this.listWorktrees(repoPath);
-    const info = worktrees.find((wt) => wt.path === worktreePath);
+    // 경로 비교 시 슬래시 형식으로 정규화 (Windows 호환)
+    const normalizedWorktreePath = normalizePath(worktreePath);
+    const info = worktrees.find((wt) => normalizePath(wt.path) === normalizedWorktreePath);
 
     if (!info) {
       throw new Error(`Worktree not found: ${worktreePath}`);
@@ -238,7 +248,8 @@ export class WorktreeManager {
    * dubious ownership 저장소에서 cwd로 실행하면 명령 자체가 실패함
    */
   private static async ensureSafeDirectory(repoPath: string): Promise<void> {
-    const absolutePath = path.resolve(repoPath);
+    // Git은 슬래시 형식 경로를 기대하므로 Windows 백슬래시를 슬래시로 변환
+    const absolutePath = path.resolve(repoPath).replace(/\\/g, '/');
     let safeDirectories: string[] = [];
 
     // 1. 현재 safe.directory 목록 확인 (cwd 없이 실행 - global 설정이므로)
@@ -253,9 +264,9 @@ export class WorktreeManager {
       // 정상적인 경우이므로 빈 배열로 진행
     }
 
-    // 2. 이미 등록되어 있으면 스킵 (대소문자 무시, Windows 호환)
+    // 2. 이미 등록되어 있으면 스킵 (대소문자 무시, 슬래시 정규화)
     const isAlreadySafe = safeDirectories.some(
-      (dir: string) => dir.toLowerCase() === absolutePath.toLowerCase() || dir === '*'
+      (dir: string) => dir.replace(/\\/g, '/').toLowerCase() === absolutePath.toLowerCase() || dir === '*'
     );
 
     if (isAlreadySafe) {
