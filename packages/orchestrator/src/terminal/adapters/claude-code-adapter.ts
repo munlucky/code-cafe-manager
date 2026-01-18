@@ -1,8 +1,10 @@
 /**
  * Claude Code CLI Adapter (Print Mode)
- * 
+ *
  * child_process.spawn 기반 -p 모드 구현
  * PTY 의존성 제거, stdin/stdout 직접 통신
+ *
+ * 중요: 긴 프롬프트는 stdin을 통해 전달하여 인자 길이 제한을 회피합니다.
  */
 
 import { spawn, ChildProcess } from 'child_process';
@@ -203,11 +205,16 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
 
   /**
    * Build CLI arguments for -p mode
+   *
+   * 참고: 프롬프트는 stdin을 통해 전달하므로 인자에 포함하지 않습니다.
+   * 이를 통해 OS 인자 길이 제한(~8191자 on Windows)을 회피합니다.
    */
-  private buildArgs(ctx: ExecutionContext): string[] {
-    // Sanitize prompt to remove any CLI command patterns
+  private buildArgs(ctx: ExecutionContext): { args: string[]; prompt: string } {
+    // 프롬프트는 별도로 반환 (stdin 전달용)
     const cleanPrompt = this.sanitizePrompt(ctx.prompt);
-    const args: string[] = ['-p', cleanPrompt];
+
+    // 인자에는 프롬프트를 포함하지 않음
+    const args: string[] = ['-p'];  // -p만 지정, stdin에서 입력을 읽음
 
     // Always use verbose for better output
     args.push('--verbose');
@@ -227,7 +234,7 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       args.push('--output-format=stream-json');
     }
 
-    return args;
+    return { args, prompt: cleanPrompt };
   }
 
   /**
@@ -326,6 +333,8 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
 
   /**
    * Main execution method - runs claude -p
+   *
+   * 프롬프트는 stdin을 통해 전달하여 인자 길이 제한을 회피합니다.
    */
   async execute(
     ptyProcess: IPty,
@@ -343,8 +352,8 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
     // Apply default system prompt if needed
     // Prepend default prompt to ensure non-interactive behavior
     const userSystemPrompt = ctx.systemPrompt || this.config.systemPrompt;
-    ctx.systemPrompt = userSystemPrompt 
-      ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userSystemPrompt}` 
+    ctx.systemPrompt = userSystemPrompt
+      ? `${DEFAULT_SYSTEM_PROMPT}\n\n${userSystemPrompt}`
       : DEFAULT_SYSTEM_PROMPT;
 
     if (this.config.continueSession && ctx.continueSession === undefined) {
@@ -352,11 +361,12 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
     }
 
     const claudePath = this.findClaude();
-    const args = this.buildArgs(ctx);
+    const { args, prompt: stdinPrompt } = this.buildArgs(ctx);
 
     this.log('execute-start', {
       claudePath,
       args,
+      promptLength: stdinPrompt.length,
       cwd,
     });
 
@@ -364,20 +374,26 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       let output = '';
       let errorOutput = '';
 
-      // Use Windows cmd.exe explicitly to prevent Bun from intercepting on Windows
-      // Bun v1.3.5 has a segfault bug when spawning child processes on Windows
-      const isWindows = os.platform() === 'win32';
+      // stdin을 통한 프롬프트 전달 방식:
+      // 1. shell 사용 안 함 (escaping 문제 회피)
+      // 2. stdin을 명시적으로 파이프로 설정
+      // 3. 프롬프트를 stdin에 직접 쓰기
       const childProc = spawn(claudePath, args, {
         cwd,
         env: process.env,
-        shell: isWindows ? 'cmd.exe' : false, // Use explicit shell on Windows
-        windowsHide: true, // Hide window on Windows
+        shell: false,        // shell 사용 안 함 (escaping 문제 해결)
+        windowsHide: true,   // Hide window on Windows
+        stdio: ['pipe', 'pipe', 'pipe'],  // 명시적 파이프 설정
       });
 
       wrapper.setProcess(childProc);
 
-      // Explicitly close stdin to prevent hanging if CLI waits for input
-      childProc.stdin?.end();
+      // 프롬프트를 stdin에 쓰고 EOF 전송
+      // 이 방식으로 인자 길이 제한(~8191자 on Windows)을 완전히 회피
+      if (childProc.stdin) {
+        childProc.stdin.write(stdinPrompt, 'utf-8');
+        childProc.stdin.end();  // EOF 전송
+      }
 
       childProc.stdout?.on('data', (data: Buffer) => {
         const chunk = data.toString();
