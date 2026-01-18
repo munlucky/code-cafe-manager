@@ -483,11 +483,15 @@ export class ExecutionManager {
 
       // Session 상태 확인 - awaiting_input이면 완료하지 않음
       const sessionStatus = this.baristaEngine.getSessionStatus();
+      console.log(`[ExecutionManager] Session status for order ${orderId}:`, JSON.stringify(sessionStatus, null, 2));
+      
       const isAwaitingInput = sessionStatus && 
         typeof sessionStatus === 'object' &&
         'sessions' in sessionStatus &&
         Array.isArray(sessionStatus.sessions) &&
         sessionStatus.sessions.some((s: any) => s.orderId === orderId && s.status === 'awaiting_input');
+
+      console.log(`[ExecutionManager] isAwaitingInput check: ${isAwaitingInput}`);
 
       if (isAwaitingInput) {
         console.log(`[ExecutionManager] Order ${orderId} is awaiting user input - not completing`);
