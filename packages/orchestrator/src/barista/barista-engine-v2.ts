@@ -9,6 +9,7 @@ import { TerminalPool, TerminalLease } from '../terminal/terminal-pool';
 import { ProviderAdapterFactory } from '../terminal/provider-adapter';
 import { RoleManager } from '../role/role-manager';
 import { Role } from '../types';
+import * as path from 'path';
 import {
   OrderSession,
   CafeSessionManager,
@@ -16,6 +17,9 @@ import {
   SessionStageConfig,
   SessionStatusSummary
 } from '../session';
+import { RecipeContext } from '../recipe/recipe-context';
+import { RecipeExecutor, RecipeStage } from '../recipe/recipe-executor'; // RecipeExecutor 임포트
+
 
 import { EventEmitter } from 'events';
 
@@ -112,7 +116,7 @@ export class BaristaEngineV2 extends EventEmitter {
       if (this.hasSteps(order)) {
         await this.executeSteps(order.id, order.steps, barista, lease, role);
       } else {
-        await this.executeLegacyOrder(order, barista, lease, role);
+        await this.executeLegacyOrder(order, barista, lease, role, cwd);
       }
 
       console.log(`BaristaEngineV2: Order ${order.id} completed successfully`);
@@ -399,29 +403,59 @@ export class BaristaEngineV2 extends EventEmitter {
     order: Order,
     barista: Barista,
     lease: TerminalLease,
-    role: Role | null
+    role: Role | null,
+    cwd: string
   ): Promise<void> {
     console.log(`BaristaEngineV2: Executing legacy order ${order.id}`);
 
-    // order.prompt는 ExecutionManager에서 추가됨 (Order 인터페이스에 이미 정의됨)
-    const prompt = order.prompt;
-    if (!prompt) {
-      throw new Error(`No prompt found for legacy order ${order.id}`);
+    // RecipeExecutor 사용을 위한 설정
+    // 1. Context 초기화
+    const recipeContext = new RecipeContext({
+      contextPath: path.join(cwd, 'context.yaml')
+    });
+    
+    try {
+      await recipeContext.load();
+      // 메모리 파일 생성 보장
+      await recipeContext.save();
+      console.log(`[BaristaEngineV2] RecipeContext loaded and saved for ${cwd}`);
+    } catch (err) {
+      console.warn(`[BaristaEngineV2] Failed to load RecipeContext:`, err);
     }
 
-    console.log(`BaristaEngineV2: Sending prompt to terminal: ${prompt.substring(0, 100)}...`);
-
-    const adapter = ProviderAdapterFactory.get(barista.provider);
-    // 프롬프트를 직접 문자열로 전달 (JSON.stringify 방지)
-    const result = await adapter.execute(lease.terminal.process, prompt, (data) => {
-      this.emit('order:output', { orderId: order.id, data });
+    // 2. Executor 생성
+    const executor = new RecipeExecutor({
+      cwd,
+      context: recipeContext,
+      // Adapter는 Executor 내부에서 팩토리 또는 인스턴스 사용해야 함.
+      // 현재 Executor 생성자는 'adapter' 옵션을 받음 (ClaudeCodeAdapter 인스턴스)
+      // ProviderAdapterFactory.get()은 IProviderAdapter를 반환하므로 캐스팅 필요
+      adapter: ProviderAdapterFactory.get(barista.provider) as any, 
+      onOutput: (stageId: string, data: string) => {
+        this.emit('order:output', { orderId: order.id, data });
+      }
     });
 
+    // 3. Stage 구성 (Role 포함)
+    const stage: RecipeStage = {
+      id: `legacy-${order.id}`,
+      name: 'Execute Legacy Order',
+      prompt: order.prompt || '',
+      role: role ? {
+        name: role.name,
+        template: role.template
+      } : undefined
+    };
+
+    console.log(`[BaristaEngineV2] Delegating execution to RecipeExecutor with role: ${role?.name}`);
+
+    // 4. 실행
+    const result = await executor.executeStage(stage);
+
     if (!result.success) {
-      throw new Error(`Legacy order execution failed: ${result.error}`);
+      throw new Error(`Legacy order execution failed via RecipeExecutor: ${result.error}`);
     }
   }
-
   private async releaseLease(orderId: string, lease: TerminalLease): Promise<void> {
     await lease.release();
     this.activeExecutions.delete(orderId);

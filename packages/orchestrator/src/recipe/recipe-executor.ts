@@ -19,6 +19,10 @@ export interface RecipeStage {
   systemPrompt?: string;
   continueSession?: boolean;
   timeout?: number;
+  role?: {
+    name: string;
+    template?: string;
+  };
 }
 
 export interface RecipeStageResult {
@@ -280,8 +284,20 @@ export class RecipeExecutor {
   private buildSystemPrompt(stage: RecipeStage): string {
     const contextSection = this.context.toSystemPromptSection();
     const stagePrompt = stage.systemPrompt || '';
+    
+    // Role Template 적용
+    let roleSection = '';
+    if (stage.role) {
+      if (stage.role.template) {
+        roleSection = stage.role.template;
+      } else {
+        roleSection = `You are acting as ${stage.role.name}.`;
+      }
+    }
 
     return `
+${roleSection}
+
 ${stagePrompt}
 
 ${contextSection}
