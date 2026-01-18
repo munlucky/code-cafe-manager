@@ -19,7 +19,12 @@
     "dev": "tsc --watch",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "test:cli": "npx tsx scripts/test-claude-cli.ts",
+    "test:cli:spawn": "npx tsx scripts/test-claude-cli.ts spawn",
+    "test:cli:prompt": "npx tsx scripts/test-claude-cli.ts prompt",
+    "test:cli:full": "npx tsx scripts/test-claude-cli.ts full",
+    "test:cli:i": "npx tsx scripts/test-claude-cli.ts interactive"
   },
   "dependencies": {
     "@codecafe/core": "workspace:*",
@@ -44,6 +49,7 @@
     "@types/react": "^18.2.0",
     "@vitest/coverage-v8": "^1.2.0",
     "ajv": "^8.17.1",
+    "tsx": "^4.7.0",
     "typescript": "^5.3.0",
     "vitest": "^1.2.0"
   },
