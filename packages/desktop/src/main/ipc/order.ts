@@ -415,9 +415,27 @@ class OrderManager {
 
     /**
      * 오더 삭제 (단일)
+     * worktree가 있으면 함께 정리
      */
     ipcMain.handle('order:delete', async (_, orderId: string) =>
       handleIpc(async () => {
+        // Order 조회 (삭제 전에 worktree 정보 확인)
+        const order = orchestrator.getOrder(orderId);
+
+        // Worktree 정리 (있는 경우)
+        if (order?.worktreeInfo?.path && existsSync(order.worktreeInfo.path)) {
+          try {
+            await WorktreeManager.removeWorktree({
+              worktreePath: order.worktreeInfo.path,
+              force: true, // 미커밋 변경사항도 강제 삭제
+            });
+            console.log('[Order IPC] Worktree removed:', order.worktreeInfo.path);
+          } catch (wtError: any) {
+            console.error('[Order IPC] Failed to remove worktree:', wtError);
+            // worktree 삭제 실패해도 order 삭제는 진행
+          }
+        }
+
         const deleted = await orchestrator.deleteOrder(orderId);
         return { deleted };
       }, 'order:delete')
@@ -425,9 +443,26 @@ class OrderManager {
 
     /**
      * 오더 삭제 (다중)
+     * worktree가 있으면 함께 정리
      */
     ipcMain.handle('order:deleteMany', async (_, orderIds: string[]) =>
       handleIpc(async () => {
+        // 각 order의 worktree 정리
+        for (const orderId of orderIds) {
+          const order = orchestrator.getOrder(orderId);
+          if (order?.worktreeInfo?.path && existsSync(order.worktreeInfo.path)) {
+            try {
+              await WorktreeManager.removeWorktree({
+                worktreePath: order.worktreeInfo.path,
+                force: true,
+              });
+              console.log('[Order IPC] Worktree removed:', order.worktreeInfo.path);
+            } catch (wtError: any) {
+              console.error('[Order IPC] Failed to remove worktree:', wtError);
+            }
+          }
+        }
+
         return await orchestrator.deleteOrders(orderIds);
       }, 'order:deleteMany')
     );
