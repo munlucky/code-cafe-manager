@@ -316,10 +316,27 @@ class OrderManager {
 
             worktreeInfo = { path: worktreePath, branch: branchName };
 
+            // Worktree 정보를 order 객체에 업데이트 (AI agent가 worktree 경로에서 실행되도록)
+            order.worktreeInfo = {
+              path: worktreePath,
+              branch: branchName,
+              baseBranch,
+            };
+            // PROJECT_ROOT를 worktree 경로로 업데이트
+            order.vars = { ...order.vars, PROJECT_ROOT: worktreePath };
+            order.counter = worktreePath;
+
             console.log('[Order IPC] Worktree created:', worktreeInfo);
+            console.log('[Order IPC] Order updated with worktree path:', worktreePath);
           } catch (wtError: any) {
             console.error('[Order IPC] Failed to create worktree:', wtError);
-            // 워크트리 생성 실패해도 오더는 유지
+            // 워크트리 생성 실패 시 에러 정보 포함하여 반환
+            const result: CreateOrderWithWorktreeResult & { worktreeError?: string } = {
+              order,
+              worktree: undefined,
+              worktreeError: wtError.message || 'Unknown worktree creation error',
+            };
+            return result;
           }
         }
 
