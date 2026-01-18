@@ -234,9 +234,10 @@ async function createWorktreeAndUpdateOrder(
     path: worktreePath,
     branch: branchName,
     baseBranch,
+    repoPath: cafe.path,  // 원본 카페 경로 저장 (worktree 삭제 시 사용)
   };
   order.vars = { ...order.vars, PROJECT_ROOT: worktreePath };
-  order.counter = worktreePath;
+  // order.counter는 원래 카페 경로 유지 (worktree 삭제 시 repoPath로 사용)
 
   console.log('[Order IPC] Worktree created and order updated:', worktreePath);
 
@@ -432,9 +433,19 @@ class OrderManager {
 
         // Worktree 정리 (있는 경우)
         if (order?.worktreeInfo?.path && existsSync(order.worktreeInfo.path)) {
+          console.log('[Order IPC] Cleaning up worktree for order:', orderId);
+          
           try {
+            // 1. 먼저 실행 중인 프로세스 강제 종료 (파일 잠금 해제)
+            await orchestrator.cancelOrder(orderId).catch(() => {});
+            
+            // 2. 프로세스가 완전히 종료되고 파일 잠금이 풀리도록 잠시 대기
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // 3. Worktree 삭제
             await WorktreeManager.removeWorktree({
               worktreePath: order.worktreeInfo.path,
+              repoPath: order.worktreeInfo?.repoPath || order.counter, // 원본 카페 경로 사용
               force: true, // 미커밋 변경사항도 강제 삭제
             });
             console.log('[Order IPC] Worktree removed:', order.worktreeInfo.path);
@@ -460,8 +471,16 @@ class OrderManager {
           const order = orchestrator.getOrder(orderId);
           if (order?.worktreeInfo?.path && existsSync(order.worktreeInfo.path)) {
             try {
+              // 1. 실행 중인 프로세스 강제 종료
+              await orchestrator.cancelOrder(orderId).catch(() => {});
+              
+              // 2. 잠시 대기
+              await new Promise(resolve => setTimeout(resolve, 500));
+
+              // 3. Worktree 삭제
               await WorktreeManager.removeWorktree({
                 worktreePath: order.worktreeInfo.path,
+                repoPath: order.worktreeInfo?.repoPath || order.counter, // 원본 카페 경로 사용
                 force: true,
               });
               console.log('[Order IPC] Worktree removed:', order.worktreeInfo.path);

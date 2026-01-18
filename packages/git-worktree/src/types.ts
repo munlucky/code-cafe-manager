@@ -34,5 +34,6 @@ export interface PatchExportOptions {
  */
 export interface WorktreeRemoveOptions {
   worktreePath: string;
+  repoPath?: string; // git 실행 경로 (기본: worktreePath의 부모 디렉터리)
   force?: boolean; // 미커밋 변경사항이 있어도 강제 삭제
 }

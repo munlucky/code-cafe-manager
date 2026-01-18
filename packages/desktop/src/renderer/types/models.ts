@@ -43,6 +43,7 @@ export interface Order {
     path: string;
     branch: string;
     baseBranch: string;
+    repoPath?: string;  // 원본 카페 경로 (worktree 삭제 시 Git 컨텍스트 제공)
   };
 }
 

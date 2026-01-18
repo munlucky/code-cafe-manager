@@ -4,11 +4,8 @@
  * Phase 3: Session-based multi-terminal orchestration
  */
 
-import { Barista, Order, Step } from '@codecafe/core';
-import { TerminalPool, TerminalLease } from '../terminal/terminal-pool';
-import { ProviderAdapterFactory } from '../terminal/provider-adapter';
-import { RoleManager } from '../role/role-manager';
-import { Role } from '../types';
+import { Barista, Order } from '@codecafe/core';
+import { TerminalPool } from '../terminal/terminal-pool';
 import * as path from 'path';
 import {
   OrderSession,
@@ -17,8 +14,8 @@ import {
   SessionStageConfig,
   SessionStatusSummary
 } from '../session';
-import { RecipeContext } from '../recipe/recipe-context';
-import { RecipeExecutor, RecipeStage } from '../recipe/recipe-executor'; // RecipeExecutor 임포트
+import * as yaml from 'yaml';
+import * as fs from 'fs/promises';
 
 
 import { EventEmitter } from 'events';
@@ -36,23 +33,20 @@ type StageConfig = SessionStageConfig;
 
 interface ActiveExecution {
   baristaId: string;
-  lease?: TerminalLease;
-  session?: OrderSession;
+  session: OrderSession;
 }
 
 /**
- * Barista Engine V2 - Terminal Pool based execution with Session support
+ * Barista Engine V2 - Session-based multi-terminal orchestration
  */
 export class BaristaEngineV2 extends EventEmitter {
   private readonly terminalPool: TerminalPool;
-  private readonly roleManager: RoleManager;
   private readonly sessionManager: CafeSessionManager;
   private readonly activeExecutions = new Map<string, ActiveExecution>();
 
-  constructor(terminalPool: TerminalPool, roleManager?: RoleManager) {
+  constructor(terminalPool: TerminalPool) {
     super();
     this.terminalPool = terminalPool;
-    this.roleManager = roleManager || new RoleManager();
 
     // Session Manager 초기화
     this.sessionManager = new CafeSessionManager({
@@ -85,47 +79,22 @@ export class BaristaEngineV2 extends EventEmitter {
   }
 
   /**
-   * Execute an order using Terminal Pool or Session (for workflows)
+   * Execute an order using Session (all orders go through session-based execution)
    */
   async executeOrder(order: Order, barista: Barista): Promise<void> {
     console.log(`BaristaEngineV2: Executing order ${order.id} with barista ${barista.id}`);
 
-    // Extract CWD from order variables if available
     const cwd = order.vars?.['PROJECT_ROOT'] || process.cwd();
     const cafeId = order.cafeId || 'default';
 
-    // 워크플로우 설정이 있는 경우 Session 사용
-    const workflowConfig = (order as OrderWithWorkflow).workflowConfig;
-    if (workflowConfig && workflowConfig.stages && workflowConfig.stages.length > 0) {
-      await this.executeWithSession(order, barista, cafeId, cwd, workflowConfig);
-      return;
+    // Use provided workflow config or load default
+    let workflowConfig = (order as OrderWithWorkflow).workflowConfig;
+    if (!workflowConfig || workflowConfig.stages.length === 0) {
+      workflowConfig = await this.loadDefaultWorkflow(order.prompt || '');
     }
 
-    // 기존 방식 (Legacy 또는 Steps)
-    const role = this.getRoleForBarista(barista);
-
-    if (cwd) {
-      console.log(`[BaristaEngineV2] Using requested CWD for order ${order.id}: ${cwd}`);
-    }
-
-    const lease = await this.terminalPool.acquireLease(barista.provider, barista.id, cwd);
-
-    try {
-      this.activeExecutions.set(order.id, { baristaId: barista.id, lease });
-
-      if (this.hasSteps(order)) {
-        await this.executeSteps(order.id, order.steps, barista, lease, role);
-      } else {
-        await this.executeLegacyOrder(order, barista, lease, role, cwd);
-      }
-
-      console.log(`BaristaEngineV2: Order ${order.id} completed successfully`);
-    } catch (error) {
-      console.error(`BaristaEngineV2: Order ${order.id} failed:`, error);
-      throw error;
-    } finally {
-      await this.releaseLease(order.id, lease);
-    }
+    // Always use session-based execution
+    await this.executeWithSession(order, barista, cafeId, cwd, workflowConfig);
   }
 
   /**
@@ -196,33 +165,71 @@ export class BaristaEngineV2 extends EventEmitter {
   }
 
   /**
+   * Load default workflow from moon.workflow.yml
+   */
+  private async loadDefaultWorkflow(orderPrompt: string): Promise<WorkflowConfig> {
+    // Get path relative to this file (works in both dev and built environments)
+    // In dev: packages/orchestrator/src/barista/ -> need ../../../desktop/workflows
+    // In prod: packages/orchestrator/dist/barista/ -> need ../../../../desktop/workflows
+    // Use project root by going up from dist/src
+    const projectRoot = path.join(__dirname, '../../..');
+    const workflowPath = path.join(
+      projectRoot,
+      'desktop/workflows/moon.workflow.yml'
+    );
+
+    try {
+      const content = await fs.readFile(workflowPath, 'utf-8');
+      const parsed = yaml.parse(content) as {
+        workflow: { stages: string[] };
+      } & Record<string, { provider?: string; role?: string; mode?: string; on_failure?: string; skills?: string[] }>;
+
+      // Convert YAML structure to WorkflowConfig
+      const stages: StageConfig[] = parsed.workflow.stages.map((stageId: string) => {
+        const stageConfig = parsed[stageId] as { provider?: string; role?: string; mode?: string };
+        return {
+          id: stageId,
+          name: stageConfig.role || stageId,
+          provider: (stageConfig.provider || 'claude-code') as 'claude-code' | 'codex' | 'gemini' | 'grok',
+          prompt: orderPrompt, // Use order prompt for all stages
+          role: stageConfig.role,
+          mode: (stageConfig.mode || 'sequential') as 'sequential' | 'parallel',
+          dependsOn: [],
+        };
+      });
+
+      return { stages, vars: {} };
+    } catch (error) {
+      console.warn('[BaristaEngineV2] Failed to load default workflow:', error);
+      // Fallback to single-stage workflow with order prompt
+      return {
+        stages: [{
+          id: 'main',
+          name: 'Main',
+          provider: 'claude-code',
+          prompt: orderPrompt,
+          mode: 'sequential',
+          dependsOn: [],
+        }],
+        vars: {},
+      };
+    }
+  }
+
+  /**
    * Cancel order execution
    */
   async cancelOrder(orderId: string): Promise<boolean> {
     const execution = this.activeExecutions.get(orderId);
-    if (!execution) {
+    if (!execution?.session) {
       return false;
     }
 
     try {
-      // Session 기반 실행인 경우
-      if (execution.session) {
-        await execution.session.cancel();
-        this.activeExecutions.delete(orderId);
-        console.log(`BaristaEngineV2: Order ${orderId} cancelled (session)`);
-        return true;
-      }
-
-      // Legacy 실행인 경우
-      if (execution.lease) {
-        const adapter = ProviderAdapterFactory.get(execution.lease.terminal.provider);
-        await adapter.kill(execution.lease.terminal.process);
-        await this.releaseLease(orderId, execution.lease);
-        console.log(`BaristaEngineV2: Order ${orderId} cancelled (legacy)`);
-        return true;
-      }
-
-      return false;
+      await execution.session.cancel();
+      this.activeExecutions.delete(orderId);
+      console.log(`BaristaEngineV2: Order ${orderId} cancelled`);
+      return true;
     } catch (error) {
       console.error(`BaristaEngineV2: Failed to cancel order ${orderId}:`, error);
       return false;
@@ -241,25 +248,13 @@ export class BaristaEngineV2 extends EventEmitter {
    */
   public async sendInput(orderId: string, message: string): Promise<void> {
     const execution = this.activeExecutions.get(orderId);
-    if (!execution) {
-      console.warn(`[BaristaEngineV2] No active execution for order to send input: ${orderId}`);
+    if (!execution?.session) {
+      console.warn(`[BaristaEngineV2] No active session for order: ${orderId}`);
       return;
     }
 
     try {
-      // Session 기반 실행인 경우
-      if (execution.session) {
-        await execution.session.sendInput(message);
-        return;
-      }
-
-      // Legacy 실행인 경우
-      if (execution.lease) {
-        execution.lease.terminal.process.write(message + '\n');
-        return;
-      }
-
-      console.warn(`[BaristaEngineV2] No active terminal for order: ${orderId}`);
+      await execution.session.sendInput(message);
     } catch (error) {
       console.error(`[BaristaEngineV2] Failed to send input to order ${orderId}:`, error);
       throw error;
@@ -291,173 +286,5 @@ export class BaristaEngineV2 extends EventEmitter {
    */
   getSessionStatus(): SessionStatusSummary {
     return this.sessionManager.getStatusSummary();
-  }
-
-  private getRoleForBarista(barista: Barista): Role | null {
-    if (!barista.role) {
-      return null;
-    }
-
-    const role = this.roleManager.loadRole(barista.role);
-    if (!role) {
-      throw new Error(`Role '${barista.role}' not found for barista ${barista.id}`);
-    }
-
-    return role;
-  }
-
-  private hasSteps(order: Order): order is Order & { steps: Step[] } {
-    return Array.isArray(order.steps) && order.steps.length > 0;
-  }
-
-  private async executeSteps(
-    orderId: string,
-    steps: Step[],
-    barista: Barista,
-    lease: TerminalLease,
-    role: Role | null
-  ): Promise<void> {
-    for (const step of steps) {
-      await this.executeStep(orderId, step, barista, lease, role);
-    }
-  }
-
-  /**
-   * Execute a single step
-   */
-  private async executeStep(
-    orderId: string,
-    step: Step,
-    barista: Barista,
-    lease: TerminalLease,
-    role: Role | null
-  ): Promise<void> {
-    console.log(`BaristaEngineV2: Executing step ${step.id}`);
-
-    const adapter = ProviderAdapterFactory.get(barista.provider);
-
-    try {
-      const context = this.prepareExecutionContext(step, role);
-      const result = await adapter.execute(lease.terminal.process, context, (data) => {
-        this.emit('order:output', { orderId, data });
-      });
-
-      if (result.success) {
-        console.log(`BaristaEngineV2: Step ${step.id} completed`);
-        // TODO: Store step result in order history
-      } else {
-        throw new Error(`Step ${step.id} failed: ${result.error}`);
-      }
-    } catch (error) {
-      console.error(`BaristaEngineV2: Step ${step.id} failed:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Prepare execution context from step and role
-   */
-  private prepareExecutionContext(step: Step, role: Role | null): Record<string, unknown> {
-    const context: Record<string, unknown> = {
-      stepId: step.id,
-      task: step.task,
-      parameters: step.parameters || {},
-    };
-
-    this.addRoleContextToRecord(context, role);
-
-    if (role?.template && step.parameters) {
-      context.systemPrompt = this.interpolateTemplate(role.template, step.parameters);
-    }
-
-    return context;
-  }
-
-  private buildRoleContext(role: Role) {
-    return {
-      id: role.id,
-      name: role.name,
-      template: role.template,
-      skills: role.inputs || [],
-    };
-  }
-
-  private addRoleContextToRecord(context: Record<string, unknown>, role: Role | null): void {
-    if (role) {
-      Object.assign(context, { role: this.buildRoleContext(role) });
-    }
-  }
-
-  private interpolateTemplate(template: string, parameters: Record<string, unknown>): string {
-    let result = template;
-    for (const [key, value] of Object.entries(parameters)) {
-      result = result.replace(new RegExp(`{{${key}}}`, 'g'), String(value));
-    }
-    return result;
-  }
-
-  /**
-   * Legacy order execution (for backward compatibility)
-   */
-  private async executeLegacyOrder(
-    order: Order,
-    barista: Barista,
-    lease: TerminalLease,
-    role: Role | null,
-    cwd: string
-  ): Promise<void> {
-    console.log(`BaristaEngineV2: Executing legacy order ${order.id}`);
-
-    // RecipeExecutor 사용을 위한 설정
-    // 1. Context 초기화
-    const recipeContext = new RecipeContext({
-      contextPath: path.join(cwd, 'context.yaml')
-    });
-    
-    try {
-      await recipeContext.load();
-      // 메모리 파일 생성 보장
-      await recipeContext.save();
-      console.log(`[BaristaEngineV2] RecipeContext loaded and saved for ${cwd}`);
-    } catch (err) {
-      console.warn(`[BaristaEngineV2] Failed to load RecipeContext:`, err);
-    }
-
-    // 2. Executor 생성
-    const executor = new RecipeExecutor({
-      cwd,
-      context: recipeContext,
-      // Adapter는 Executor 내부에서 팩토리 또는 인스턴스 사용해야 함.
-      // 현재 Executor 생성자는 'adapter' 옵션을 받음 (ClaudeCodeAdapter 인스턴스)
-      // ProviderAdapterFactory.get()은 IProviderAdapter를 반환하므로 캐스팅 필요
-      adapter: ProviderAdapterFactory.get(barista.provider) as any, 
-      onOutput: (stageId: string, data: string) => {
-        this.emit('order:output', { orderId: order.id, data });
-      }
-    });
-
-    // 3. Stage 구성 (Role 포함)
-    const stage: RecipeStage = {
-      id: `legacy-${order.id}`,
-      name: 'Execute Legacy Order',
-      prompt: order.prompt || '',
-      role: role ? {
-        name: role.name,
-        template: role.template
-      } : undefined
-    };
-
-    console.log(`[BaristaEngineV2] Delegating execution to RecipeExecutor with role: ${role?.name}`);
-
-    // 4. 실행
-    const result = await executor.executeStage(stage);
-
-    if (!result.success) {
-      throw new Error(`Legacy order execution failed via RecipeExecutor: ${result.error}`);
-    }
-  }
-  private async releaseLease(orderId: string, lease: TerminalLease): Promise<void> {
-    await lease.release();
-    this.activeExecutions.delete(orderId);
   }
 }

@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import {
   WorktreeInfo,
   WorktreeCreateOptions,
@@ -96,31 +97,95 @@ export class WorktreeManager {
   }
 
   /**
+   * Worktree 내부의 .git 파일에서 원본 저장소 경로 추출
+   */
+  private static async getRepoPathFromWorktree(worktreePath: string): Promise<string> {
+    try {
+      const gitFile = path.join(worktreePath, '.git');
+      const content = await fsPromises.readFile(gitFile, 'utf-8');
+      const match = content.match(/^gitdir: (.+?)(?:\.git-worktrees\/[^/\s]+)?$/m);
+      if (match) {
+        const gitdir = match[1].trim();
+        // gitdir이 절대 경로인지 확인
+        if (path.isAbsolute(gitdir)) {
+          // .git/worktrees/<branch> 형태라면 상위로 올라감
+          const worktreesMatch = gitdir.match(/^(.+)\.git-worktrees\/[^/]+$/);
+          if (worktreesMatch) {
+            return worktreesMatch[1];
+          }
+          return gitdir;
+        }
+        // 상대 경로인 경우 worktreePath 기준으로 계산
+        return path.resolve(worktreePath, gitdir);
+      }
+    } catch {
+      // .git 파일을 읽을 수 없으면 fallback
+    }
+    throw new Error('Cannot determine repository path from worktree');
+  }
+
+  /**
    * Worktree 삭제
    */
   static async removeWorktree(options: WorktreeRemoveOptions): Promise<void> {
-    const { worktreePath, force } = options;
+    const { worktreePath, repoPath, force } = options;
 
-    try {
-      // 1. 미커밋 변경사항 확인 (force=false 일 때)
-      if (!force) {
-        const hasChanges = await this.hasUncommittedChanges(worktreePath);
-        if (hasChanges) {
-          throw new Error(
-            'Worktree has uncommitted changes. Use force=true to delete anyway.'
-          );
-        }
+    // repoPath가 없으면 worktree 내부의 .git 파일에서 찾기
+    let effectiveRepoPath = repoPath;
+    if (!effectiveRepoPath) {
+      try {
+        effectiveRepoPath = await this.getRepoPathFromWorktree(worktreePath);
+      } catch {
+        // fallback: path.dirname(worktreePath) 사용 (거의 작동하지 않음)
+        effectiveRepoPath = path.dirname(worktreePath);
       }
-
-      // 2. Git worktree remove 실행 (보안: execFile 사용)
-      const args = force
-        ? ['worktree', 'remove', '--force', worktreePath]
-        : ['worktree', 'remove', worktreePath];
-
-      await execFileAsync('git', args, { cwd: worktreePath });
-    } catch (error: any) {
-      throw new Error(`Failed to remove worktree: ${error.message}`);
     }
+
+    // Windows 파일 잠금(Permission denied) 대응을 위한 재시도 로직
+    const maxRetries = 5;
+    const retryDelay = 1000;
+    let lastError: any;
+
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        // 1. 미커밋 변경사항 확인 (force=false 일 때) - 첫 시도에만 확인하거나 매번 확인해도 무방
+        if (!force && i === 0) {
+          const hasChanges = await this.hasUncommittedChanges(worktreePath);
+          if (hasChanges) {
+            throw new Error(
+              'Worktree has uncommitted changes. Use force=true to delete anyway.'
+            );
+          }
+        }
+
+        // 2. Git worktree remove 실행 (repoPath를 -C 옵션으로 지정)
+        const args = [
+          '-C', effectiveRepoPath,
+          'worktree', 'remove',
+          ...(force ? ['--force'] : []),
+          worktreePath
+        ];
+
+        await execFileAsync('git', args);
+        return; // 성공 시 종료
+
+      } catch (error: any) {
+        lastError = error;
+        const msg = error.message || '';
+        
+        // 권한 문제나 잠금 문제인 경우 재시도
+        if (msg.includes('Permission denied') || msg.includes('locked') || msg.includes('unlink')) {
+          console.warn(`[WorktreeManager] Remove failed (attempt ${i + 1}/${maxRetries}): ${msg}. Retrying in ${retryDelay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          continue;
+        }
+
+        // 그 외 에러는 즉시 throw
+        throw new Error(`Failed to remove worktree: ${msg}`);
+      }
+    }
+
+    throw new Error(`Failed to remove worktree after ${maxRetries} attempts: ${lastError?.message}`);
   }
 
   /**

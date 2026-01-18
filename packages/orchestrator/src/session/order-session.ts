@@ -266,6 +266,8 @@ export class OrderSession extends EventEmitter {
     while (remaining.length > 0) {
       const batch: StageConfig[] = [];
 
+      // 역순 순회 (splice를 안전하게 사용하기 위함)
+      // unshift로 배치에 추가하여 순서 유지
       for (let i = remaining.length - 1; i >= 0; i--) {
         const stage = remaining[i];
 
@@ -282,7 +284,7 @@ export class OrderSession extends EventEmitter {
             }
           }
 
-          batch.push(stage);
+          batch.unshift(stage); // 앞에 추가하여 순서 유지
           remaining.splice(i, 1);
         }
       }

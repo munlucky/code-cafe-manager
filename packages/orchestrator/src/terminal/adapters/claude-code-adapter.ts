@@ -42,6 +42,7 @@ export interface ExecutionContext {
   continueSession?: boolean;
   streaming?: boolean;
   cwd?: string;
+  skipPermissions?: boolean;  // 권한 요청 건너뛰기
 }
 
 /**
@@ -176,13 +177,43 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
   }
 
   /**
+   * Remove CLI command patterns from prompt
+   * Users may accidentally include CLI commands in their prompts
+   */
+  private sanitizePrompt(prompt: string): string {
+    let cleaned = prompt;
+
+    // Remove "claude" command prefix with any flags
+    // Matches: "claude", "claude -p", "claude --dangerously-skip-permissions", etc.
+    cleaned = cleaned.replace(/^claude\s+(?:--?[\w-]+\s*)*/i, '').trim();
+
+    // Remove standalone CLI-like flags that may have been left
+    cleaned = cleaned.replace(/^--?[\w-]+\s*/g, '').trim();
+
+    // If nothing left after cleaning, use a default message
+    if (!cleaned) {
+      this.log('prompt-sanitized-empty', { original: prompt });
+      cleaned = 'Analyze the current project and provide insights.';
+    } else if (cleaned !== prompt) {
+      this.log('prompt-sanitized', { original: prompt, cleaned });
+    }
+
+    return cleaned;
+  }
+
+  /**
    * Build CLI arguments for -p mode
    */
   private buildArgs(ctx: ExecutionContext): string[] {
-    const args: string[] = ['-p', ctx.prompt];
+    // Sanitize prompt to remove any CLI command patterns
+    const cleanPrompt = this.sanitizePrompt(ctx.prompt);
+    const args: string[] = ['-p', cleanPrompt];
 
     // Always use verbose for better output
     args.push('--verbose');
+
+    // Skip permission prompts for automated execution
+    args.push('--dangerously-skip-permissions');
 
     if (ctx.systemPrompt) {
       args.push('--system-prompt', ctx.systemPrompt);
@@ -365,13 +396,46 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
           hasError: errorOutput.length > 0,
         });
 
-        if (code === 0) {
+        // Only check for permission patterns if exit code is 0 but output looks incomplete
+        // These patterns indicate Claude is waiting for interactive permission input
+        const permissionPatterns = [
+          /\[y\/n\]/i,                           // Yes/No prompt
+          /\(y\/n\)/i,                           // Yes/No prompt variant
+          /allow (?:me to|this action)/i,       // Permission request
+          /continue without (?:permission|approval)/i,
+          /may i (?:proceed|continue|execute)/i,
+          /do you want (?:me to|to allow)/i,
+          /would you like (?:me to|to)/i,
+          /should i (?:proceed|continue)/i,
+          /waiting for (?:user |your )?(?:input|permission|approval)/i,
+          /press enter to continue/i,
+          /type 'yes' to confirm/i,
+        ];
+
+        // Check for permission patterns only if:
+        // 1. Exit code is 0 but output is suspiciously short (< 100 chars)
+        // 2. Or output ends with a question mark or prompt-like pattern
+        const outputTrimmed = output.trim();
+        const endsWithPrompt = /[?:]$/.test(outputTrimmed);
+        const isSuspiciouslyShort = outputTrimmed.length < 100;
+        
+        let hasPermissionPrompt = false;
+        if (code === 0 && (endsWithPrompt || isSuspiciouslyShort)) {
+          hasPermissionPrompt = permissionPatterns.some((pattern) =>
+            pattern.test(output)
+          );
+        }
+
+        if (code === 0 && !hasPermissionPrompt) {
           resolve({ success: true, output: output.trim() });
         } else {
+          const errorReason = hasPermissionPrompt
+            ? 'Incomplete: waiting for user permission'
+            : errorOutput || `Exit code: ${code}`;
           resolve({
             success: false,
             output: output.trim(),
-            error: errorOutput || `Exit code: ${code}`,
+            error: errorReason,
           });
         }
       });

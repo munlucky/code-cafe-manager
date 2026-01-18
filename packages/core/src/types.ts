@@ -68,6 +68,7 @@ export interface Order {
     path: string;
     branch: string;
     baseBranch: string;
+    repoPath?: string;  // 원본 카페 경로 (worktree 삭제 시 Git 컨텍스트 제공)
   };
   // Session-based execution을 위한 cafeId (다중 터미널 관리)
   cafeId?: string;

@@ -40,9 +40,9 @@ export function registerWorktreeHandlers(): void {
       }, 'exportPatch')
   );
 
-  ipcMain.handle('removeWorktree', async (_, worktreePath: string, force?: boolean) =>
+  ipcMain.handle('removeWorktree', async (_, worktreePath: string, repoPath: string, force?: boolean) =>
     handleIpc(async () => {
-      await WorktreeManager.removeWorktree({ worktreePath, force });
+      await WorktreeManager.removeWorktree({ worktreePath, repoPath, force });
       return { success: true };
     }, 'removeWorktree')
   );
