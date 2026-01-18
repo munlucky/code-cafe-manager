@@ -207,8 +207,8 @@ export class OrderSession extends EventEmitter {
       );
 
       // 터미널 출력 이벤트 전파
-      this.terminalGroup.on('stage:output', (data) => {
-        this.emit('output', { orderId: this.orderId, stageId: data.stageId, data: data.data });
+      this.terminalGroup.on('stage:output', (eventData) => {
+        this.emit('output', { orderId: this.orderId, stageId: eventData.stageId, data: eventData.data });
       });
 
       // Stage 실행 계획 생성

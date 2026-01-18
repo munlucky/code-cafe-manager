@@ -481,6 +481,20 @@ export class ExecutionManager {
       // BaristaEngineV2를 통해 실행
       await this.baristaEngine.executeOrder(executionOrder as Order, barista);
 
+      // Session 상태 확인 - awaiting_input이면 완료하지 않음
+      const sessionStatus = this.baristaEngine.getSessionStatus();
+      const isAwaitingInput = sessionStatus && 
+        typeof sessionStatus === 'object' &&
+        'sessions' in sessionStatus &&
+        Array.isArray(sessionStatus.sessions) &&
+        sessionStatus.sessions.some((s: any) => s.orderId === orderId && s.status === 'awaiting_input');
+
+      if (isAwaitingInput) {
+        console.log(`[ExecutionManager] Order ${orderId} is awaiting user input - not completing`);
+        // activeExecutions에 유지
+        return;
+      }
+
       // 성공 처리
       await this.orchestrator.completeOrder(orderId, true);
 
@@ -503,7 +517,17 @@ export class ExecutionManager {
         error: true,
       });
     } finally {
-      this.activeExecutions.delete(orderId);
+      // Session이 awaiting_input 상태인 경우 activeExecutions에서 삭제하지 않음
+      const sessionStatus = this.baristaEngine?.getSessionStatus();
+      const isAwaitingInput = sessionStatus && 
+        typeof sessionStatus === 'object' &&
+        'sessions' in sessionStatus &&
+        Array.isArray(sessionStatus.sessions) &&
+        sessionStatus.sessions.some((s: any) => s.orderId === orderId && s.status === 'awaiting_input');
+
+      if (!isAwaitingInput) {
+        this.activeExecutions.delete(orderId);
+      }
     }
   }
 
