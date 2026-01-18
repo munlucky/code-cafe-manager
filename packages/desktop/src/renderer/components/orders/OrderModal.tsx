@@ -50,6 +50,15 @@ export function OrderModal({
     else setInternalTab(tab);
   };
 
+  // Wrap onSendInput with order status validation
+  const handleSendInput = (message: string) => {
+    if (order.status !== OrderStatus.RUNNING) {
+      console.warn(`[OrderModal] Cannot send input: order ${order.id} is not running (status: ${order.status})`);
+      return;
+    }
+    onSendInput?.(message);
+  };
+
   // Load historical logs when modal opens
   useEffect(() => {
     if (!isOpen) {
@@ -181,7 +190,7 @@ export function OrderModal({
                      stages={stages} 
                      isRunning={order.status === OrderStatus.RUNNING}
                      awaitingInput={{ required: false }}
-                     onSendInput={onSendInput}
+                     onSendInput={handleSendInput}
                    />
                  </div>
 
