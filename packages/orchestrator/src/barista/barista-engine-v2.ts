@@ -98,6 +98,36 @@ export class BaristaEngineV2 extends EventEmitter {
   }
 
   /**
+   * Handle session execution with common logic for status checking and cleanup
+   */
+  private async _handleSessionExecution(
+    order: Order,
+    session: OrderSession,
+    executionFn: () => Promise<void>
+  ): Promise<void> {
+    try {
+      await executionFn();
+
+      const sessionStatus = session.getStatus().status;
+
+      if (sessionStatus === 'awaiting_input') {
+        console.log(`BaristaEngineV2: Order ${order.id} awaiting user input`);
+        return; // Keep in activeExecutions
+      }
+
+      console.log(`BaristaEngineV2: Order ${order.id} completed via Session`);
+    } catch (error) {
+      console.error(`BaristaEngineV2: Order ${order.id} failed via Session:`, error);
+      throw error;
+    } finally {
+      // Clean up only if the session is not waiting for input
+      if (session.getStatus().status !== 'awaiting_input') {
+        this.activeExecutions.delete(order.id);
+      }
+    }
+  }
+
+  /**
    * Execute order using Session (multi-terminal support)
    */
   private async executeWithSession(
@@ -121,31 +151,7 @@ export class BaristaEngineV2 extends EventEmitter {
     // Active execution 등록
     this.activeExecutions.set(order.id, { baristaId: barista.id, session });
 
-    try {
-      // 워크플로우 실행
-      await session.execute(cwd);
-
-      // 세션 상태 확인
-      const sessionStatus = session.getStatus().status;
-
-      if (sessionStatus === 'awaiting_input') {
-        // 사용자 입력 대기 상태 - 완료 처리하지 않음
-        console.log(`BaristaEngineV2: Order ${order.id} awaiting user input`);
-        // activeExecutions는 유지 (사용자 입력 후 계속 실행 가능)
-        return;
-      }
-
-      console.log(`BaristaEngineV2: Order ${order.id} completed via Session`);
-    } catch (error) {
-      console.error(`BaristaEngineV2: Order ${order.id} failed via Session:`, error);
-      throw error;
-    } finally {
-      // awaiting 상태가 아닐 때만 activeExecutions에서 삭제
-      const finalStatus = session.getStatus().status;
-      if (finalStatus !== 'awaiting_input') {
-        this.activeExecutions.delete(order.id);
-      }
-    }
+    await this._handleSessionExecution(order, session, () => session.execute(cwd));
   }
 
   /**
@@ -167,30 +173,7 @@ export class BaristaEngineV2 extends EventEmitter {
     // Active execution 등록
     this.activeExecutions.set(order.id, { baristaId: barista.id, session });
 
-    try {
-      // 프롬프트 실행
-      await session.executePrompt(prompt, cwd);
-
-      // 세션 상태 확인
-      const sessionStatus = session.getStatus().status;
-
-      if (sessionStatus === 'awaiting_input') {
-        // 사용자 입력 대기 상태 - 완료 처리하지 않음
-        console.log(`BaristaEngineV2: Order ${order.id} awaiting user input`);
-        return;
-      }
-
-      console.log(`BaristaEngineV2: Order ${order.id} completed via Session`);
-    } catch (error) {
-      console.error(`BaristaEngineV2: Order ${order.id} failed via Session:`, error);
-      throw error;
-    } finally {
-      // awaiting 상태가 아닐 때만 activeExecutions에서 삭제
-      const finalStatus = session.getStatus().status;
-      if (finalStatus !== 'awaiting_input') {
-        this.activeExecutions.delete(order.id);
-      }
-    }
+    await this._handleSessionExecution(order, session, () => session.executePrompt(prompt, cwd));
   }
 
   /**
