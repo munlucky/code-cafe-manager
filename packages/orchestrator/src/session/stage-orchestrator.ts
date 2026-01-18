@@ -74,12 +74,11 @@ export class StageOrchestrator extends EventEmitter {
     // 2. 규칙 기반 판단
     const decision = this.evaluateWithRules(stageId, parseResult, context);
 
-    // 3. 규칙으로 결정 불가 + AI 폴백 활성화 시
+    // 3. 신호 파싱 실패 시 무조건 AI 폴백 호출
+    //    (이전에는 hasUncertaintyIndicators 조건이 있었으나,
+    //     Claude가 signals 블록 없이 질문만 할 때 proceed로 넘어가는 버그가 있었음)
     if (decision.action === 'proceed' && !parseResult.success && this.config.enableAIFallback) {
-      // 출력에 불확실성 징후가 있는지 추가 확인
-      if (this.hasUncertaintyIndicators(output)) {
-        return this.evaluateWithAI(stageId, output, context);
-      }
+      return this.evaluateWithAI(stageId, output, context);
     }
 
     this.emit('decision', { stageId, decision });
@@ -159,32 +158,24 @@ export class StageOrchestrator extends EventEmitter {
   }
 
   /**
-   * AI 기반 판단 (복잡한 경우 폴백)
+   * AI 기반 판단 (신호 파싱 실패 시 폴백)
+   *
+   * signals 블록이 없으면 기본적으로 await_user 처리.
+   * Claude가 작업을 제대로 수행했다면 signals 블록을 출력해야 함.
    */
   private async evaluateWithAI(
     stageId: string,
     output: string,
     context?: SharedContext
   ): Promise<OrchestratorDecision> {
-    // TODO: 실제 AI 호출 구현
-    // 현재는 휴리스틱 기반 판단
-    console.log(`[StageOrchestrator] AI evaluation for stage ${stageId}`);
+    console.log(`[StageOrchestrator] AI evaluation for stage ${stageId} (no signals block found)`);
 
-    const questionCount = (output.match(/\?/g) || []).length;
-    const hasErrorKeywords = /error|fail|exception|cannot|unable/i.test(output);
-
-    if (questionCount >= 5 || hasErrorKeywords) {
-      return {
-        action: 'await_user',
-        reason: 'AI analysis detected uncertainty or errors',
-        userMessage: 'The stage output contains questions or errors. Please review.',
-        usedAI: true,
-      };
-    }
-
+    // signals 블록이 없다는 것 자체가 작업 미완료를 의미
+    // 명시적으로 await_user 처리
     return {
-      action: 'proceed',
-      reason: 'AI analysis found no blocking issues',
+      action: 'await_user',
+      reason: 'No signals block found in stage output',
+      userMessage: `Stage ${stageId} did not produce a signals block. The stage may not have completed properly.`,
       usedAI: true,
     };
   }
