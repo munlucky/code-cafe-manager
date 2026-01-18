@@ -97,18 +97,20 @@ function findClaude(): string {
 }
 
 /**
- * Step 1: Spawn PTY and start Claude CLI
+ * Step 1: Spawn PTY and start Claude CLI directly
+ * 해결책 3: PowerShell을 거치지 않고 claude.exe를 직접 PTY로 spawn
+ * 중간 쉘이 끼면 입력/라인엔딩/에코가 꼬일 확률이 높아서 직접 실행이 더 안정적
  */
 async function testSpawn(cwd?: string): Promise<pty.IPty> {
   log('spawn-start', { cwd: cwd || process.cwd() });
 
-  const isWindows = os.platform() === 'win32';
-  const shell = isWindows ? 'powershell.exe' : process.env.SHELL || '/bin/bash';
-  const shellArgs = isWindows
-    ? ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass']
-    : ['--login'];
+  // claude.exe 경로 찾기
+  const claudePath = findClaude();
+  
+  log('spawning-claude-directly', { claudePath });
 
-  const ptyProcess = pty.spawn(shell, shellArgs, {
+  // PTY로 claude.exe 직접 실행 (PowerShell 중간 레이어 제거)
+  const ptyProcess = pty.spawn(claudePath, [], {
     name: 'xterm-256color',
     cols: CONFIG.TERM_COLS,
     rows: CONFIG.TERM_ROWS,
@@ -120,7 +122,7 @@ async function testSpawn(cwd?: string): Promise<pty.IPty> {
     },
   });
 
-  log('pty-spawned', { pid: ptyProcess.pid, shell });
+  log('pty-spawned', { pid: ptyProcess.pid, command: claudePath });
 
   // Buffer for output
   let buffer = '';
@@ -135,18 +137,9 @@ async function testSpawn(cwd?: string): Promise<pty.IPty> {
     }
   });
 
-  // Wait for shell ready
-  log('waiting-shell-ready');
-  await new Promise(resolve => setTimeout(resolve, 2000));
-
-  // Start Claude CLI
-  const claudePath = findClaude();
-  const claudeCmd = isWindows ? `& "${claudePath}"` : claudePath;
-
-  log('starting-claude', { claudeCmd });
-  ptyProcess.write(claudeCmd + getLineEnding());
-
-  // Wait for Claude prompt
+  // Wait for Claude prompt (no shell init needed since we're running claude directly)
+  log('waiting-claude-ready');
+  
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error(`Claude CLI init timeout. Buffer: ${buffer.slice(-500)}`));
@@ -399,31 +392,210 @@ async function main(): Promise<void> {
       await interactiveMode();
       break;
 
+    // ========== NEW: Print Mode (-p) Tests ==========
+    case 'print':
+    case 'p':
+      await testPrintMode(args[1] || TEST_PROMPT);
+      break;
+
+    case 'print-system':
+      await testPrintModeWithSystemPrompt(
+        args[1] || TEST_PROMPT,
+        args[2] || '당신은 시니어 개발자입니다. 간결하게 답변하세요.'
+      );
+      break;
+
+    case 'print-continue':
+      await testPrintModeContinue([
+        args[1] || '현재 디렉토리 파일 목록을 보여줘',
+        args[2] || '방금 말한 것 요약해줘',
+      ]);
+      break;
+
+    case 'print-stream':
+      await testPrintModeStream(args[1] || TEST_PROMPT);
+      break;
+
     default:
       console.log(`
 Usage: npx tsx scripts/test-claude-cli.ts [command]
 
 Commands:
+  === PTY Mode (Legacy) ===
   spawn         - Test PTY spawn and Claude CLI init only
-  prompt [text] - Test with \\r line ending (current behavior)
-  prompt-n      - Test with \\n line ending
-  prompt-rn     - Test with \\r\\n line ending
-  full          - Test all line endings sequentially
+  prompt [text] - Test with \\r line ending
   interactive   - Interactive mode for manual testing
 
-Interactive mode commands:
-  /spawn        - Start Claude CLI
-  /send <text>  - Send text with \\r
-  /sendn <text> - Send text with \\n
-  /sendrn <text>- Send text with \\r\\n
-  /quit         - Exit
+  === Print Mode (-p) [NEW] ===
+  print [text]              - Test basic -p mode
+  print-system [text] [sys] - Test with --system-prompt
+  print-continue [p1] [p2]  - Test --continue for session
+  print-stream [text]       - Test streaming output
 
 Examples:
-  npx tsx scripts/test-claude-cli.ts spawn
-  npx tsx scripts/test-claude-cli.ts prompt "hello"
-  npx tsx scripts/test-claude-cli.ts interactive
+  npx tsx scripts/test-claude-cli.ts print "hello"
+  npx tsx scripts/test-claude-cli.ts print-system "check code" "You are a reviewer"
+  npx tsx scripts/test-claude-cli.ts print-continue
 `);
   }
 }
 
+// ============================================================================
+// Print Mode (-p) Test Functions
+// ============================================================================
+
+import { spawn as cpSpawn, ChildProcess } from 'child_process';
+
+interface PrintModeOptions {
+  prompt: string;
+  cwd?: string;
+  systemPrompt?: string;
+  continueSession?: boolean;
+  streaming?: boolean;
+  verbose?: boolean;
+}
+
+/**
+ * Execute claude -p with options
+ */
+async function executePrintMode(options: PrintModeOptions): Promise<{ output: string; exitCode: number }> {
+  const claudePath = findClaude();
+  const args: string[] = ['-p', options.prompt];
+
+  if (options.verbose !== false) {
+    args.push('--verbose');
+  }
+  if (options.systemPrompt) {
+    args.push('--system-prompt', options.systemPrompt);
+  }
+  if (options.continueSession) {
+    args.push('--continue');
+  }
+  if (options.streaming) {
+    args.push('--output-format=stream-json');
+  }
+
+  log('print-mode-start', { claudePath, args });
+
+  return new Promise((resolve, reject) => {
+    let output = '';
+    let errorOutput = '';
+
+    const proc = cpSpawn(claudePath, args, {
+      cwd: options.cwd || process.cwd(),
+      env: { ...process.env },
+      shell: true,
+    });
+
+    proc.stdout?.on('data', (data: Buffer) => {
+      const chunk = data.toString();
+      output += chunk;
+      // Show streaming output
+      process.stdout.write(chunk);
+    });
+
+    proc.stderr?.on('data', (data: Buffer) => {
+      errorOutput += data.toString();
+    });
+
+    proc.on('close', (code) => {
+      log('print-mode-end', { exitCode: code, outputLength: output.length });
+      resolve({ output, exitCode: code || 0 });
+    });
+
+    proc.on('error', (err) => {
+      reject(err);
+    });
+
+    // Timeout
+    setTimeout(() => {
+      proc.kill();
+      reject(new Error('Print mode timeout'));
+    }, CONFIG.EXECUTE_TIMEOUT);
+  });
+}
+
+/**
+ * Test 1: Basic print mode
+ */
+async function testPrintMode(prompt: string): Promise<void> {
+  console.log('\n========================================');
+  console.log('Print Mode Test (-p)');
+  console.log('========================================\n');
+
+  try {
+    const result = await executePrintMode({ prompt });
+    console.log('\n========================================');
+    console.log(`Exit code: ${result.exitCode}`);
+    console.log(`Output length: ${result.output.length}`);
+    console.log('========================================\n');
+  } catch (error) {
+    console.error('Print mode test failed:', error);
+  }
+}
+
+/**
+ * Test 2: Print mode with system prompt
+ */
+async function testPrintModeWithSystemPrompt(prompt: string, systemPrompt: string): Promise<void> {
+  console.log('\n========================================');
+  console.log('Print Mode with System Prompt Test');
+  console.log(`System: ${systemPrompt.substring(0, 50)}...`);
+  console.log('========================================\n');
+
+  try {
+    const result = await executePrintMode({ prompt, systemPrompt });
+    console.log('\n========================================');
+    console.log(`Exit code: ${result.exitCode}`);
+    console.log('========================================\n');
+  } catch (error) {
+    console.error('Print mode with system prompt test failed:', error);
+  }
+}
+
+/**
+ * Test 3: Print mode with --continue (session)
+ */
+async function testPrintModeContinue(prompts: string[]): Promise<void> {
+  console.log('\n========================================');
+  console.log('Print Mode Continue (Session) Test');
+  console.log('========================================\n');
+
+  try {
+    // First prompt (no --continue)
+    console.log('--- Prompt 1 (new session) ---');
+    await executePrintMode({ prompt: prompts[0] });
+
+    // Second prompt (with --continue)
+    console.log('\n--- Prompt 2 (--continue) ---');
+    await executePrintMode({ prompt: prompts[1], continueSession: true });
+
+    console.log('\n========================================');
+    console.log('Session test complete');
+    console.log('========================================\n');
+  } catch (error) {
+    console.error('Continue test failed:', error);
+  }
+}
+
+/**
+ * Test 4: Print mode with streaming
+ */
+async function testPrintModeStream(prompt: string): Promise<void> {
+  console.log('\n========================================');
+  console.log('Print Mode Streaming Test');
+  console.log('========================================\n');
+
+  try {
+    const result = await executePrintMode({ prompt, streaming: true });
+    console.log('\n========================================');
+    console.log(`Exit code: ${result.exitCode}`);
+    console.log('Stream output received');
+    console.log('========================================\n');
+  } catch (error) {
+    console.error('Streaming test failed:', error);
+  }
+}
+
 main().catch(console.error);
+
