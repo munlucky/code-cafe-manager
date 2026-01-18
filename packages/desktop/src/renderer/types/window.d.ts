@@ -99,6 +99,13 @@ export interface StageResult {
   aggregationMethod?: 'first' | 'majority' | 'weighted' | 'all';
 }
 
+/** Retry option for failed stages */
+export interface RetryOption {
+  stageId: string;
+  stageName: string;
+  batchIndex: number;
+}
+
 /** Execution context shared across stages */
 export interface ExecutionContext {
   /** Input variables provided at workflow start */
@@ -283,6 +290,9 @@ declare global {
         ) => Promise<IpcResponse<CreateOrderWithWorktreeResult>>;
         subscribeOutput: (orderId: string) => Promise<IpcResponse<{ subscribed: boolean }>>;
         unsubscribeOutput: (orderId: string) => Promise<IpcResponse<{ unsubscribed: boolean }>>;
+        // Retry support
+        retryFromStage: (orderId: string, fromStageId?: string) => Promise<IpcResponse<{ started: boolean }>>;
+        getRetryOptions: (orderId: string) => Promise<IpcResponse<RetryOption[] | null>>;
         onEvent: (callback: (event: any) => void) => () => void;
         onAssigned: (callback: (data: any) => void) => () => void;
         onCompleted: (callback: (data: any) => void) => () => void;

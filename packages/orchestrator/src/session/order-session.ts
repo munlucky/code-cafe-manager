@@ -52,6 +52,26 @@ export interface AwaitingState {
 }
 
 /**
+ * 실패 상태 정보 (재시도용)
+ */
+export interface FailedState {
+  /** 실패한 stage ID */
+  failedStageId: string;
+  /** 에러 메시지 */
+  error: string;
+  /** 전체 실행 계획 */
+  executionPlan: StageConfig[][];
+  /** 실패한 batch 인덱스 */
+  failedBatchIndex: number;
+  /** 완료된 stage IDs */
+  completedStages: string[];
+  /** cwd */
+  cwd: string;
+  /** 재시도 가능한 stage 옵션 (stage ID와 이름) */
+  retryOptions: Array<{ stageId: string; stageName: string; batchIndex: number }>;
+}
+
+/**
  * OrderSession - Order 실행 세션
  */
 export class OrderSession extends EventEmitter {
@@ -70,7 +90,11 @@ export class OrderSession extends EventEmitter {
   private completedAt: Date | null = null;
   private error: string | null = null;
   private awaitingState: AwaitingState | null = null;
+  private failedState: FailedState | null = null;
   private skipStages: Set<string> = new Set();
+  private completedStages: Set<string> = new Set();
+  private currentExecutionPlan: StageConfig[][] | null = null;
+  private currentCwd: string | null = null;
 
   constructor(
     order: Order,
@@ -189,6 +213,7 @@ export class OrderSession extends EventEmitter {
 
     this.status = 'running';
     this.startedAt = new Date();
+    this.currentCwd = cwd;
     this.emit('session:started', { orderId: this.orderId, cafeId: this.cafeId });
 
     try {
@@ -211,22 +236,32 @@ export class OrderSession extends EventEmitter {
         this.emit('output', { orderId: this.orderId, stageId: eventData.stageId, data: eventData.data });
       });
 
-      // Stage 실행 계획 생성
+      // Stage 실행 계획 생성 및 저장
       const executionPlan = this.buildExecutionPlan(this.workflowConfig.stages);
+      this.currentExecutionPlan = executionPlan;
 
       // 계획에 따라 Stage 실행 (오케스트레이터 판단 포함)
       await this.executeWithOrchestrator(executionPlan, cwd);
 
     } catch (error) {
+      // 실패 상태로 전환하되 failedState 저장 (재시도 지원)
       this.status = 'failed';
       this.error = error instanceof Error ? error.message : String(error);
+
+      // failedState가 이미 설정되어 있지 않으면 (executeWithOrchestrator에서 설정되지 않은 경우)
+      if (!this.failedState && this.currentExecutionPlan) {
+        this.buildFailedState(this.error, this.currentExecutionPlan, -1, cwd);
+      }
+
       this.emit('session:failed', {
         orderId: this.orderId,
         error: this.error,
+        failedState: this.failedState,
+        canRetry: this.failedState !== null,
       });
       throw error;
     } finally {
-      if ((this.status as SessionStatus) !== 'awaiting_input') {
+      if ((this.status as SessionStatus) !== 'awaiting_input' && (this.status as SessionStatus) !== 'failed') {
         this.completedAt = new Date();
       }
     }
@@ -245,10 +280,12 @@ export class OrderSession extends EventEmitter {
     for (let batchIndex = startFromBatch; batchIndex < executionPlan.length; batchIndex++) {
       const batch = executionPlan[batchIndex];
 
-      // 스킵할 stage 필터링
-      const filteredBatch = batch.filter(stage => !this.skipStages.has(stage.id));
+      // 스킵할 stage 필터링 (이미 완료된 stage도 스킵)
+      const filteredBatch = batch.filter(stage =>
+        !this.skipStages.has(stage.id) && !this.completedStages.has(stage.id)
+      );
       if (filteredBatch.length === 0) {
-        console.log(`[OrderSession] Skipping batch ${batchIndex} - all stages skipped`);
+        console.log(`[OrderSession] Skipping batch ${batchIndex} - all stages skipped or completed`);
         continue;
       }
 
@@ -256,10 +293,17 @@ export class OrderSession extends EventEmitter {
         // 순차 실행 + 오케스트레이터 판단 (with retry support)
         const stage = filteredBatch[0];
         let retries = 0;
-        let result: 'proceed' | 'awaiting' | 'retry';
+        let result: 'proceed' | 'awaiting' | 'retry' | 'failed';
 
         do {
-          result = await this.executeStageWithOrchestrator(stage, executionPlan, batchIndex, cwd);
+          try {
+            result = await this.executeStageWithOrchestrator(stage, executionPlan, batchIndex, cwd);
+          } catch (stageError) {
+            // Stage 실행 중 에러 발생 - failedState 설정
+            const errorMsg = stageError instanceof Error ? stageError.message : String(stageError);
+            this.buildFailedState(errorMsg, executionPlan, batchIndex, cwd, stage.id);
+            throw stageError;
+          }
 
           if (result === 'retry') {
             retries++;
@@ -273,9 +317,14 @@ export class OrderSession extends EventEmitter {
         }
 
         if (result === 'retry') {
-          // 재시도 한도 초과
-          throw new Error(`Stage ${stage.id} failed after ${MAX_RETRIES} retries`);
+          // 재시도 한도 초과 - failedState 설정
+          const errorMsg = `Stage ${stage.id} failed after ${MAX_RETRIES} retries`;
+          this.buildFailedState(errorMsg, executionPlan, batchIndex, cwd, stage.id);
+          throw new Error(errorMsg);
         }
+
+        // Stage 완료 기록
+        this.completedStages.add(stage.id);
       } else {
         // 병렬 실행
         const stagesWithPrompts = filteredBatch.map((stage) => ({
@@ -315,6 +364,9 @@ export class OrderSession extends EventEmitter {
             // 어떤 병렬 stage라도 사용자 입력 필요 시 중단
             return;
           }
+
+          // 병렬 실행 후에도 completedStages에 추가
+          this.completedStages.add(result.stageId);
         }
       }
     }
@@ -324,6 +376,65 @@ export class OrderSession extends EventEmitter {
     this.emit('session:completed', {
       orderId: this.orderId,
       context: this.sharedContext.snapshot(),
+    });
+  }
+
+  /**
+   * 실패 상태 정보 구성
+   */
+  private buildFailedState(
+    error: string,
+    executionPlan: StageConfig[][],
+    failedBatchIndex: number,
+    cwd: string,
+    failedStageId?: string
+  ): void {
+    // 재시도 가능한 stage 옵션 생성
+    const retryOptions: Array<{ stageId: string; stageName: string; batchIndex: number }> = [];
+
+    // 실패한 stage부터 재시도 가능
+    if (failedStageId) {
+      const stageConfig = executionPlan.flat().find(s => s.id === failedStageId);
+      if (stageConfig) {
+        retryOptions.push({
+          stageId: failedStageId,
+          stageName: stageConfig.name,
+          batchIndex: failedBatchIndex,
+        });
+      }
+    }
+
+    // 이전 완료된 stage들도 재시도 옵션에 추가 (사용자가 선택 가능)
+    for (let i = 0; i < executionPlan.length; i++) {
+      for (const stage of executionPlan[i]) {
+        if (stage.id !== failedStageId) {
+          retryOptions.push({
+            stageId: stage.id,
+            stageName: stage.name,
+            batchIndex: i,
+          });
+        }
+      }
+    }
+
+    // batchIndex 순서로 정렬
+    retryOptions.sort((a, b) => a.batchIndex - b.batchIndex);
+
+    this.failedState = {
+      failedStageId: failedStageId || 'unknown',
+      error,
+      executionPlan,
+      failedBatchIndex,
+      completedStages: Array.from(this.completedStages),
+      cwd,
+      retryOptions,
+    };
+
+    console.log(`[OrderSession] Built failedState for stage ${failedStageId}:`, {
+      failedStageId,
+      error,
+      completedStages: Array.from(this.completedStages),
+      retryOptions: retryOptions.map(o => o.stageId),
     });
   }
 
@@ -614,6 +725,97 @@ export class OrderSession extends EventEmitter {
    */
   getContext(): SharedContext {
     return this.sharedContext;
+  }
+
+  /**
+   * 실패 상태 조회
+   */
+  getFailedState(): FailedState | null {
+    return this.failedState;
+  }
+
+  /**
+   * 특정 stage부터 재시도
+   * @param fromStageId 재시도 시작할 stage ID (null이면 실패한 stage부터)
+   */
+  async retryFromStage(fromStageId?: string): Promise<void> {
+    if (this.status !== 'failed' || !this.failedState) {
+      throw new Error(`Session ${this.orderId} is not in failed state or has no retry info`);
+    }
+
+    const { executionPlan, cwd, retryOptions } = this.failedState;
+
+    // 재시도 시작 batch 인덱스 결정
+    let startBatchIndex = 0;
+    if (fromStageId) {
+      const option = retryOptions.find(o => o.stageId === fromStageId);
+      if (!option) {
+        throw new Error(`Stage ${fromStageId} not found in retry options`);
+      }
+      startBatchIndex = option.batchIndex;
+
+      // 해당 stage 이후의 완료된 stage들은 completedStages에서 제거
+      const stageIndex = retryOptions.findIndex(o => o.stageId === fromStageId);
+      for (let i = stageIndex; i < retryOptions.length; i++) {
+        this.completedStages.delete(retryOptions[i].stageId);
+      }
+    } else {
+      // 실패한 stage부터 재시도
+      startBatchIndex = this.failedState.failedBatchIndex;
+      this.completedStages.delete(this.failedState.failedStageId);
+    }
+
+    console.log(`[OrderSession] Retrying from stage ${fromStageId || this.failedState.failedStageId} (batch ${startBatchIndex})`);
+
+    // 상태 초기화
+    this.status = 'running';
+    this.error = null;
+    this.failedState = null;
+    this.completedAt = null;
+
+    this.emit('session:resumed', {
+      orderId: this.orderId,
+      fromStageId: fromStageId || this.failedState?.failedStageId,
+      retryType: 'stage',
+    });
+
+    try {
+      // TerminalGroup 재생성이 필요한 경우
+      if (!this.terminalGroup) {
+        const providers = this.extractProviders(executionPlan.flat());
+        this.terminalGroup = new TerminalGroup(
+          {
+            orderId: this.orderId,
+            cwd,
+            providers,
+          },
+          this.terminalPool,
+          this.sharedContext
+        );
+
+        this.terminalGroup.on('stage:output', (eventData) => {
+          this.emit('output', { orderId: this.orderId, stageId: eventData.stageId, data: eventData.data });
+        });
+      }
+
+      // 실행 재개
+      await this.executeWithOrchestrator(executionPlan, cwd, startBatchIndex);
+
+    } catch (error) {
+      this.status = 'failed';
+      this.error = error instanceof Error ? error.message : String(error);
+      this.emit('session:failed', {
+        orderId: this.orderId,
+        error: this.error,
+        failedState: this.failedState,
+        canRetry: this.failedState !== null,
+      });
+      throw error;
+    } finally {
+      if ((this.status as SessionStatus) !== 'awaiting_input' && (this.status as SessionStatus) !== 'failed') {
+        this.completedAt = new Date();
+      }
+    }
   }
 
   /**

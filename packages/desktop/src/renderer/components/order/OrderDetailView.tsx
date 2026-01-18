@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { ArrowLeft, Terminal, Info, Clock, GitBranch, User } from 'lucide-react';
+import { ArrowLeft, Terminal, Info, Clock, GitBranch, User, RefreshCw, XCircle } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { StatusBadge } from '../ui/Badge';
@@ -13,6 +13,7 @@ import { OrderStageProgress, OrderStageProgressBar, type StageInfo, type StageSt
 import { formatRelativeTime } from '../../utils/formatters';
 import type { Order, ExtendedWorkflowInfo } from '../../types/models';
 import { OrderStatus } from '../../types/models';
+import type { RetryOption } from '../../types/window';
 
 /** Polling interval for refreshing order status */
 const ORDER_REFRESH_INTERVAL_MS = 3000;
@@ -32,6 +33,9 @@ export function OrderDetailView({
   const [workflow, setWorkflow] = useState<ExtendedWorkflowInfo | null>(null);
   const [currentStageIndex, setCurrentStageIndex] = useState(0);
   const [completedStages, setCompletedStages] = useState<Set<string>>(new Set());
+  const [retryOptions, setRetryOptions] = useState<RetryOption[] | null>(null);
+  const [selectedRetryStage, setSelectedRetryStage] = useState<string>('');
+  const [isRetrying, setIsRetrying] = useState(false);
   const isRunning = currentOrder.status === OrderStatus.RUNNING;
   const isPending = currentOrder.status === OrderStatus.PENDING;
   const isCompleted = currentOrder.status === OrderStatus.COMPLETED;
@@ -93,6 +97,30 @@ export function OrderDetailView({
     };
   }, [order.id, workflow]);
 
+  // 실패 시 재시도 옵션 가져오기
+  useEffect(() => {
+    async function fetchRetryOptions() {
+      if (isFailed) {
+        try {
+          const response = await window.codecafe.order.getRetryOptions(order.id);
+          if (response.success && response.data) {
+            setRetryOptions(response.data);
+            // 기본값으로 실패한 stage 선택
+            if (response.data.length > 0) {
+              setSelectedRetryStage(response.data[response.data.length - 1].stageId);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch retry options:', error);
+        }
+      } else {
+        setRetryOptions(null);
+        setSelectedRetryStage('');
+      }
+    }
+    fetchRetryOptions();
+  }, [order.id, isFailed]);
+
   // 사용자 입력 전송
   const handleSendInput = useCallback(async (message: string) => {
     const response = await window.codecafe.order.sendInput(order.id, message);
@@ -100,6 +128,26 @@ export function OrderDetailView({
       throw new Error(response.error?.message || 'Failed to send input');
     }
   }, [order.id]);
+
+  // 재시도 처리
+  const handleRetry = useCallback(async () => {
+    if (!selectedRetryStage) return;
+
+    setIsRetrying(true);
+    try {
+      const response = await window.codecafe.order.retryFromStage(order.id, selectedRetryStage);
+      if (!response.success) {
+        throw new Error(response.error?.message || 'Failed to retry order');
+      }
+      // 성공 시 상태 초기화
+      setRetryOptions(null);
+      setSelectedRetryStage('');
+    } catch (error) {
+      console.error('Failed to retry order:', error);
+    } finally {
+      setIsRetrying(false);
+    }
+  }, [order.id, selectedRetryStage]);
 
   // Stage 정보 계산
   const stages: StageInfo[] = (workflow?.stages || ['Plan', 'Code', 'Test']).map(
@@ -250,6 +298,55 @@ export function OrderDetailView({
               <h3 className="text-sm font-medium text-red-400 mb-2">Error</h3>
               <div className="text-sm text-red-300 whitespace-pre-wrap">
                 {currentOrder.error}
+              </div>
+            </Card>
+          )}
+
+          {/* Retry Options Card - 실패 시 재시도/종료 선택 */}
+          {isFailed && retryOptions && retryOptions.length > 0 && (
+            <Card className="p-4 border-yellow-500/50 bg-yellow-500/5">
+              <h3 className="text-sm font-medium text-yellow-400 mb-3 flex items-center gap-2">
+                <RefreshCw className="w-4 h-4" />
+                Retry Options
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">
+                    Retry from stage:
+                  </label>
+                  <select
+                    value={selectedRetryStage}
+                    onChange={(e) => setSelectedRetryStage(e.target.value)}
+                    className="w-full px-2 py-1.5 text-sm bg-gray-800 border border-gray-600 rounded text-bone focus:outline-none focus:border-coffee"
+                  >
+                    {retryOptions.map((option) => (
+                      <option key={option.stageId} value={option.stageId}>
+                        {option.stageName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleRetry}
+                    disabled={isRetrying || !selectedRetryStage}
+                    className="flex-1 flex items-center justify-center gap-1"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isRetrying ? 'animate-spin' : ''}`} />
+                    {isRetrying ? 'Retrying...' : 'Retry'}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={onBack}
+                    className="flex-1 flex items-center justify-center gap-1"
+                  >
+                    <XCircle className="w-3 h-3" />
+                    Close
+                  </Button>
+                </div>
               </div>
             </Card>
           )}
