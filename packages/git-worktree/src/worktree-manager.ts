@@ -22,6 +22,9 @@ export class WorktreeManager {
   static async createWorktree(options: WorktreeCreateOptions): Promise<WorktreeInfo> {
     const { repoPath, baseBranch, newBranch, worktreePath } = options;
 
+    // 0. Safe directory 설정 (Windows dubious ownership 에러 방지)
+    await this.ensureSafeDirectory(repoPath);
+
     // 1. 브랜치 중복 확인 (필요 시 suffix 추가)
     const finalBranchName = await this.getUniqueBranchName(repoPath, newBranch);
 
@@ -224,6 +227,57 @@ export class WorktreeManager {
     } catch (error: any) {
       // 브랜치가 없는 경우 빈 배열 반환
       return [];
+    }
+  }
+
+  /**
+   * Safe directory 설정 (Windows dubious ownership 에러 방지)
+   * Git 2.35.2+에서 다른 사용자 소유 저장소 접근 시 발생하는 보안 에러 해결
+   */
+  private static async ensureSafeDirectory(repoPath: string): Promise<void> {
+    try {
+      // 절대 경로로 변환
+      const absolutePath = path.resolve(repoPath);
+
+      // 현재 safe.directory 목록 확인
+      const { stdout } = await execFileAsync(
+        'git',
+        ['config', '--global', '--get-all', 'safe.directory'],
+        { cwd: repoPath }
+      );
+
+      const safeDirectories = stdout.trim().split('\n').filter(Boolean);
+
+      // 이미 등록되어 있으면 스킵 (대소문자 무시, Windows 호환)
+      const isAlreadySafe = safeDirectories.some(
+        (dir: string) => dir.toLowerCase() === absolutePath.toLowerCase() || dir === '*'
+      );
+
+      if (isAlreadySafe) {
+        return;
+      }
+
+      // safe.directory에 추가
+      await execFileAsync(
+        'git',
+        ['config', '--global', '--add', 'safe.directory', absolutePath],
+        { cwd: repoPath }
+      );
+    } catch (error: any) {
+      // safe.directory가 아예 없는 경우 (exit code 1) 새로 추가
+      if (error.code === 1 || error.message?.includes('exit code 1')) {
+        try {
+          const absolutePath = path.resolve(repoPath);
+          await execFileAsync(
+            'git',
+            ['config', '--global', '--add', 'safe.directory', absolutePath],
+            { cwd: repoPath }
+          );
+        } catch {
+          // 설정 실패해도 worktree 생성 시도는 계속 진행
+        }
+      }
+      // 다른 에러는 무시하고 worktree 생성 시도 계속 진행
     }
   }
 }
