@@ -15,8 +15,8 @@ const CAFE_NAV_ITEMS: Array<{ view: ViewName; label: string; icon: any }> = [
 
 // Global settings (always accessible, cafe-independent)
 const GLOBAL_NAV_ITEMS: Array<{ view: ViewName; label: string; icon: any }> = [
-  { view: 'workflows', label: 'Recipes', icon: ChefHat }, // Using ChefHat for recipes
-  { view: 'skills', label: 'Skills', icon: Zap }, // Using Zap for skills
+  { view: 'workflows', label: 'Workflow Templates', icon: ChefHat },
+  { view: 'skills', label: 'Skill Library', icon: Zap },
 ];
 
 interface SidebarProps {
