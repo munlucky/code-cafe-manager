@@ -7,14 +7,12 @@ import {
   Dashboard,
   NewOrder,
   OrderDetail,
-  Worktrees,
   Workflows,
   WorkflowDetail,
   Skills,
 } from './components/views';
 import { GlobalLobby } from './components/views/GlobalLobby';
 import { CafeDashboard } from './components/views/CafeDashboard';
-import { RoleManager } from './components/role/RoleManager';
 import { OrderTerminals } from './components/terminal/OrderTerminals';
 
 const VIEW_MAP: Record<string, React.ComponentType> = {
@@ -23,10 +21,8 @@ const VIEW_MAP: Record<string, React.ComponentType> = {
   'new-order': NewOrder,
   orders: OrderDetail,
   terminals: OrderTerminals,
-  worktrees: Worktrees,
   workflows: Workflows,
   skills: Skills,
-  roles: RoleManager,
 };
 
 

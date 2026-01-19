@@ -4,7 +4,6 @@ const VIEW_TITLES: Record<string, string> = {
   dashboard: 'Dashboard',
   'new-order': 'New Order',
   orders: 'Orders',
-  worktrees: 'Worktrees',
 };
 
 export function Header() {
