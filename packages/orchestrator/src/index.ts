@@ -81,9 +81,6 @@ export type {
   ElectronEventEmitters,
 } from './ui/types';
 
-// Export recipe execution (Phase 4 - Recipe context and parallel execution)
-export * from './recipe';
-
 // Export types
 export * from './types';
 
