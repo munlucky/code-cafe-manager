@@ -431,6 +431,77 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
   }
 
   /**
+   * Retry order from a specific stage
+   * @param orderId Order ID to retry
+   * @param fromStageId Stage ID to start from (optional, defaults to failed stage)
+   */
+  public async retryFromStage(orderId: string, fromStageId?: string): Promise<void> {
+    const execution = this.activeExecutions.get(orderId);
+    if (!execution?.session) {
+      console.warn(`[BaristaEngineV2] No session found for order: ${orderId}`);
+      throw new Error(`No session found for order: ${orderId}`);
+    }
+
+    console.log(`[BaristaEngineV2] Retrying order ${orderId} from stage ${fromStageId || 'failed stage'}`);
+
+    try {
+      await execution.session.retryFromStage(fromStageId);
+      console.log(`[BaristaEngineV2] Order ${orderId} retry completed`);
+    } catch (error) {
+      console.error(`[BaristaEngineV2] Failed to retry order ${orderId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get retry options for a failed order
+   */
+  public getRetryOptions(orderId: string): Array<{ stageId: string; stageName: string; batchIndex: number }> | null {
+    const execution = this.activeExecutions.get(orderId);
+    if (!execution?.session) {
+      return null;
+    }
+
+    const failedState = execution.session.getFailedState();
+    return failedState?.retryOptions || null;
+  }
+
+  /**
+   * Retry order from the beginning with previous attempt context
+   * @param orderId Order ID to retry
+   * @param preserveContext Whether to preserve previous attempt context (default: true)
+   */
+  public async retryFromBeginning(orderId: string, preserveContext: boolean = true): Promise<void> {
+    const execution = this.activeExecutions.get(orderId);
+    if (!execution?.session) {
+      console.warn(`[BaristaEngineV2] No session found for order: ${orderId}`);
+      throw new Error(`No session found for order: ${orderId}`);
+    }
+
+    console.log(`[BaristaEngineV2] Retrying order ${orderId} from beginning (preserveContext: ${preserveContext})`);
+
+    try {
+      await execution.session.retryFromBeginning(preserveContext);
+      console.log(`[BaristaEngineV2] Order ${orderId} retry from beginning completed`);
+    } catch (error) {
+      console.error(`[BaristaEngineV2] Failed to retry order ${orderId} from beginning:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get current attempt number for an order
+   */
+  public getAttemptNumber(orderId: string): number {
+    const execution = this.activeExecutions.get(orderId);
+    if (!execution?.session) {
+      return 1;
+    }
+
+    return execution.session.getContext().getCurrentAttemptNumber();
+  }
+
+  /**
    * Clean up resources
    */
   async dispose(): Promise<void> {

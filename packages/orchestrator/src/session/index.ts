@@ -10,7 +10,7 @@
 
 // 내부 사용용 클래스 타입 (이름 충돌 방지를 위해 별칭 사용)
 export { SharedContext } from './shared-context';
-export type { ContextSnapshot } from './shared-context';
+export type { ContextSnapshot, PreviousAttempt } from './shared-context';
 
 export { TerminalGroup } from './terminal-group';
 export type {
@@ -22,7 +22,8 @@ export { OrderSession } from './order-session';
 export type {
   WorkflowConfig,
   SessionStatus,
-  AwaitingState
+  AwaitingState,
+  FailedState
 } from './order-session';
 
 // Session 내부 StageConfig (외부 StageConfig와 이름 충돌 방지)
@@ -79,6 +80,14 @@ export interface OrderFailedEvent {
   orderId: string;
   cafeId: string;
   error: string;
+  /** 재시도 가능 여부 */
+  canRetry?: boolean;
+  /** 실패 상태 정보 (재시도용) */
+  failedState?: {
+    failedStageId: string;
+    completedStages: string[];
+    retryOptions: Array<{ stageId: string; stageName: string; batchIndex: number }>;
+  };
 }
 
 /** stage:started 이벤트 페이로드 */

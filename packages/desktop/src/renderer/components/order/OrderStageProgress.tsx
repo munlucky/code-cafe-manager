@@ -101,18 +101,34 @@ export function OrderStageProgressBar({
   const running = stages.filter((s) => s.status === 'running').length;
   const total = stages.length;
 
+  // 현재 실행 중인 stage 찾기
+  const runningStageIndex = stages.findIndex((s) => s.status === 'running');
+  const failedStageIndex = stages.findIndex((s) => s.status === 'failed');
+  const runningStage = runningStageIndex >= 0 ? stages[runningStageIndex] : null;
+  const failedStage = failedStageIndex >= 0 ? stages[failedStageIndex] : null;
+
   const completedPercent = (completed / total) * 100;
   const runningPercent = (running / total) * 100;
   const failedPercent = (failed / total) * 100;
 
+  // 직관적인 진행 상태 메시지 생성
+  const getStatusMessage = (): string => {
+    if (failed > 0 && failedStage) {
+      return `Stage ${failedStageIndex + 1}/${total} failed: ${failedStage.name}`;
+    }
+    if (running > 0 && runningStage) {
+      return `Stage ${runningStageIndex + 1}/${total}: ${runningStage.name}`;
+    }
+    if (completed === total) {
+      return `All ${total} stages completed`;
+    }
+    return `${completed}/${total} completed`;
+  };
+
   return (
     <div className={cn('w-full', className)}>
       <div className="flex justify-between text-xs text-gray-400 mb-1">
-        <span>
-          {completed}/{total} completed
-          {running > 0 && `, ${running} running`}
-          {failed > 0 && `, ${failed} failed`}
-        </span>
+        <span>{getStatusMessage()}</span>
         <span>{Math.round(completedPercent)}%</span>
       </div>
       <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden flex">

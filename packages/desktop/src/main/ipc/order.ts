@@ -10,6 +10,7 @@ import { WorktreeManager } from '@codecafe/git-worktree';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { promises as fs } from 'fs';
+import { getExecutionManager } from '../execution-manager.js';
 
 /**
  * ANSI escape 코드를 HTML로 변환
@@ -309,6 +310,24 @@ async function handleIpc<T>(
       },
     };
   }
+}
+
+/**
+ * Get BaristaEngine from ExecutionManager
+ * Helper function to reduce duplication in retry-related handlers
+ */
+function getBaristaEngine() {
+  const executionManager = getExecutionManager();
+  if (!executionManager) {
+    throw new Error('ExecutionManager not initialized');
+  }
+
+  const baristaEngine = executionManager.getBaristaEngine();
+  if (!baristaEngine) {
+    throw new Error('BaristaEngine not initialized');
+  }
+
+  return baristaEngine;
 }
 
 /**
@@ -661,6 +680,59 @@ class OrderManager {
             message: 'Worktree created successfully',
           };
         }, 'order:retryWorktree')
+    );
+
+    /**
+     * Stage 재시도 (특정 stage부터 재실행)
+     * 실패한 order를 특정 stage부터 재시도
+     */
+    ipcMain.handle(
+      'order:retryFromStage',
+      async (_, params: { orderId: string; fromStageId?: string }) =>
+        handleIpc(async () => {
+          const { orderId, fromStageId } = params;
+          console.log('[Order IPC] Retrying order from stage:', { orderId, fromStageId });
+
+          const baristaEngine = getBaristaEngine();
+          await baristaEngine.retryFromStage(orderId, fromStageId);
+          return { started: true };
+        }, 'order:retryFromStage')
+    );
+
+    /**
+     * 재시도 옵션 조회
+     * 실패한 order의 재시도 가능한 stage 목록 반환
+     */
+    ipcMain.handle(
+      'order:getRetryOptions',
+      async (_, orderId: string) =>
+        handleIpc(async () => {
+          console.log('[Order IPC] Getting retry options for order:', orderId);
+
+          try {
+            const baristaEngine = getBaristaEngine();
+            return baristaEngine.getRetryOptions(orderId);
+          } catch {
+            // ExecutionManager or BaristaEngine not initialized
+            return null;
+          }
+        }, 'order:getRetryOptions')
+    );
+
+    /**
+     * 처음부터 재시도 (이전 시도 컨텍스트 포함)
+     */
+    ipcMain.handle(
+      'order:retryFromBeginning',
+      async (_, params: { orderId: string; preserveContext?: boolean }) =>
+        handleIpc(async () => {
+          const { orderId, preserveContext = true } = params;
+          console.log('[Order IPC] Retrying order from beginning:', { orderId, preserveContext });
+
+          const baristaEngine = getBaristaEngine();
+          await baristaEngine.retryFromBeginning(orderId, preserveContext);
+          return { started: true };
+        }, 'order:retryFromBeginning')
     );
 
     console.log('[IPC] Order handlers registered');

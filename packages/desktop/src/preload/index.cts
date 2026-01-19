@@ -47,6 +47,10 @@ contextBridge.exposeInMainWorld('codecafe', {
     createWithWorktree: createIpcInvoker('order:createWithWorktree'),
     subscribeOutput: createIpcInvoker('order:subscribeOutput'),
     unsubscribeOutput: createIpcInvoker('order:unsubscribeOutput'),
+    // Retry support
+    retryFromStage: createIpcInvoker('order:retryFromStage'),
+    retryFromBeginning: createIpcInvoker('order:retryFromBeginning'),
+    getRetryOptions: createIpcInvoker('order:getRetryOptions'),
     onEvent: (callback: (event: any) => void) => setupIpcListener('order:event', callback),
     onAssigned: (callback: (data: any) => void) => setupIpcListener('order:assigned', callback),
     onCompleted: (callback: (data: any) => void) => setupIpcListener('order:completed', callback),
