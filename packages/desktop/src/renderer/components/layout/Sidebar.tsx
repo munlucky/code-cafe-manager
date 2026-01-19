@@ -14,9 +14,10 @@ const CAFE_NAV_ITEMS: Array<{ view: ViewName; label: string; icon: any }> = [
 ];
 
 // Global settings (always accessible, cafe-independent)
-const GLOBAL_NAV_ITEMS: Array<{ view: ViewName; label: string; icon: any }> = [
-  { view: 'workflows', label: 'Workflow Templates', icon: ChefHat },
-  { view: 'skills', label: 'Skill Library', icon: Zap },
+// Recipe = Workflow YAML template (Skills 조합을 정의)
+const GLOBAL_NAV_ITEMS: Array<{ view: ViewName; label: string; icon: any; tooltip?: string }> = [
+  { view: 'workflows', label: 'Recipes', icon: ChefHat, tooltip: 'Workflow YAML templates' },
+  { view: 'skills', label: 'Skill Library', icon: Zap, tooltip: 'Individual skill definitions' },
 ];
 
 interface SidebarProps {
@@ -190,10 +191,11 @@ export function Sidebar({ onClose }: SidebarProps) {
           Global Settings
         </div>
         <div className="space-y-0.5">
-          {GLOBAL_NAV_ITEMS.map(({ view, label, icon: Icon }) => (
+          {GLOBAL_NAV_ITEMS.map(({ view, label, icon: Icon, tooltip }) => (
             <button
               key={view}
               onClick={() => handleNavClick(view)}
+              title={tooltip}
               className={cn(
                 'w-full text-left px-2 py-1.5 rounded-md text-[13px] flex items-center gap-2 transition-all duration-150',
                 currentView === view
