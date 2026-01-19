@@ -6,7 +6,6 @@ import dotenv from 'dotenv';
 import { Orchestrator } from '@codecafe/core';
 
 import { registerCafeHandlers } from './ipc/cafe.js';
-import { registerRoleIpcHandlers } from './ipc/role.js';
 import { registerTerminalHandlers } from './ipc/terminal.js';
 import { registerWorktreeHandlers } from './ipc/worktree.js';
 import { registerProviderHandlers } from './ipc/provider.js';
@@ -151,7 +150,6 @@ function setupIpcHandlers(): void {
   const orchDir = resolveOrchDir();
 
   registerCafeHandlers();
-  registerRoleIpcHandlers();
   registerTerminalHandlers();
   registerWorktreeHandlers();
   registerProviderHandlers();

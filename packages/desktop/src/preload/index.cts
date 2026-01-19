@@ -117,17 +117,6 @@ contextBridge.exposeInMainWorld('codecafe', {
       list: createIpcInvoker('config:profiles:list'),
       set: createIpcInvoker('config:profiles:set'),
     },
-    roles: {
-      list: createIpcInvoker('config:roles:list'),
-    },
-  },
-
-  role: {
-    list: createIpcInvoker('role:list'),
-    get: createIpcInvoker('role:get'),
-    listDefault: createIpcInvoker('role:listDefault'),
-    listUser: createIpcInvoker('role:listUser'),
-    reload: createIpcInvoker('role:reload'),
   },
 
   terminal: {
@@ -161,16 +150,8 @@ contextBridge.exposeInMainWorld('codecafe', {
   onOrderCompleted: (callback: (data: any) => void) => setupIpcListener('order:completed', callback),
 });
 
-// Phase 2: Expose 'api' namespace for role and terminal
+// Expose 'api' namespace for terminal
 contextBridge.exposeInMainWorld('api', {
-  role: {
-    list: createIpcInvoker('role:list'),
-    get: createIpcInvoker('role:get'),
-    listDefault: createIpcInvoker('role:listDefault'),
-    listUser: createIpcInvoker('role:listUser'),
-    reload: createIpcInvoker('role:reload'),
-  },
-
   terminal: {
     init: createIpcInvoker('terminal:init'),
     getStatus: createIpcInvoker('terminal:poolStatus'),

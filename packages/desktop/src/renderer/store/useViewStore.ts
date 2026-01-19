@@ -6,11 +6,9 @@ export type ViewParams = {
   'new-order': void;
   orders: { orderId?: string };
   terminals: void;
-  worktrees: void;
   workflows: void;
   'workflow-detail': { workflowId: string };
   skills: void;
-  roles: { roleId?: string; mode?: 'list' | 'detail' | 'create' | 'edit' };
 };
 
 export type ViewName = keyof ViewParams;
