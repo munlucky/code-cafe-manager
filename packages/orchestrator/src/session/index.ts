@@ -10,7 +10,12 @@
 
 // 내부 사용용 클래스 타입 (이름 충돌 방지를 위해 별칭 사용)
 export { SharedContext } from './shared-context';
-export type { ContextSnapshot, PreviousAttempt } from './shared-context';
+export type {
+  ContextSnapshot,
+  PreviousAttempt,
+  ContextSizeOptions,
+  ArchivedContext,
+} from './shared-context';
 
 export { TerminalGroup } from './terminal-group';
 export type {

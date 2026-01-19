@@ -40,6 +40,28 @@ export interface ContextSnapshot {
 }
 
 /**
+ * 컨텍스트 크기 관리 옵션
+ */
+export interface ContextSizeOptions {
+  /** 최대 토큰 수 (기본값: 8000) */
+  maxTokens?: number;
+  /** 경고 임계값 비율 (기본값: 0.8 = 80%) */
+  warningThreshold?: number;
+  /** 자동 아카이빙 활성화 (기본값: true) */
+  autoArchive?: boolean;
+}
+
+/**
+ * 아카이브된 컨텍스트 정보
+ */
+export interface ArchivedContext {
+  version: number;
+  snapshot: ContextSnapshot;
+  archivedAt: string;
+  reason: 'token_limit' | 'manual';
+}
+
+/**
  * SharedContext - 터미널 간 결과 동기화를 위한 공유 컨텍스트
  */
 export class SharedContext extends EventEmitter {
@@ -50,7 +72,19 @@ export class SharedContext extends EventEmitter {
   private updatedAt: Date;
   private previousAttempts: PreviousAttempt[] = [];
 
-  constructor(orderId: string, initialVars: Record<string, unknown> = {}) {
+  // Context size management
+  private readonly maxTokens: number;
+  private readonly warningThreshold: number;
+  private readonly autoArchive: boolean;
+  private archives: ArchivedContext[] = [];
+  private archiveVersion: number = 0;
+  private warningEmitted: boolean = false;
+
+  constructor(
+    orderId: string,
+    initialVars: Record<string, unknown> = {},
+    sizeOptions: ContextSizeOptions = {}
+  ) {
     super();
     this.orderId = orderId;
     this.vars = { ...initialVars };
@@ -58,6 +92,11 @@ export class SharedContext extends EventEmitter {
     this.artifacts = new Map();
     this.updatedAt = new Date();
     this.previousAttempts = [];
+
+    // Context size management initialization
+    this.maxTokens = sizeOptions.maxTokens ?? 8000;
+    this.warningThreshold = sizeOptions.warningThreshold ?? 0.8;
+    this.autoArchive = sizeOptions.autoArchive ?? true;
   }
 
   /**
@@ -67,6 +106,7 @@ export class SharedContext extends EventEmitter {
     this.vars[key] = value;
     this.updatedAt = new Date();
     this.emit('var:updated', { key, value, orderId: this.orderId });
+    this.checkAndManageSize();
   }
 
   /**
@@ -126,6 +166,7 @@ export class SharedContext extends EventEmitter {
     this.vars[`stage_${stageId}_output`] = output;
 
     this.emit('stage:completed', { stageId, output, duration, orderId: this.orderId });
+    this.checkAndManageSize();
   }
 
   /**
@@ -217,6 +258,134 @@ export class SharedContext extends EventEmitter {
     return `\n\n[Previous Stage Results]\n${completedStages.join('\n')}`;
   }
 
+  // ==========================================================================
+  // Context Size Management
+  // ==========================================================================
+
+  /**
+   * 현재 컨텍스트의 토큰 수 추정
+   * 대략적인 추정: 1 토큰 ≈ 3 문자 (영어/한국어 혼합 기준)
+   */
+  estimateTokens(): number {
+    const snapshot = this.snapshot();
+    const content = JSON.stringify(snapshot);
+    return Math.ceil(content.length / 3);
+  }
+
+  /**
+   * 현재 토큰 사용률 (0.0 ~ 1.0+)
+   */
+  getTokenUsageRatio(): number {
+    return this.estimateTokens() / this.maxTokens;
+  }
+
+  /**
+   * 컨텍스트 크기 상태 조회
+   */
+  getContextSizeStatus(): {
+    currentTokens: number;
+    maxTokens: number;
+    usageRatio: number;
+    isWarning: boolean;
+    isOverLimit: boolean;
+    archiveCount: number;
+  } {
+    const currentTokens = this.estimateTokens();
+    const usageRatio = currentTokens / this.maxTokens;
+    return {
+      currentTokens,
+      maxTokens: this.maxTokens,
+      usageRatio,
+      isWarning: usageRatio >= this.warningThreshold,
+      isOverLimit: usageRatio >= 1.0,
+      archiveCount: this.archives.length,
+    };
+  }
+
+  /**
+   * 컨텍스트 크기 체크 및 관리
+   * 변수/결과 추가 후 호출하여 자동 아카이빙 트리거
+   */
+  checkAndManageSize(): void {
+    const status = this.getContextSizeStatus();
+
+    // 경고 임계값 도달 시 이벤트 발행 (한 번만)
+    if (status.isWarning && !this.warningEmitted) {
+      this.warningEmitted = true;
+      this.emit('context:size:warning', {
+        orderId: this.orderId,
+        currentTokens: status.currentTokens,
+        maxTokens: status.maxTokens,
+        usageRatio: status.usageRatio,
+      });
+    }
+
+    // 한도 초과 시 자동 아카이빙
+    if (status.isOverLimit && this.autoArchive) {
+      this.archiveAndReset('token_limit');
+    }
+  }
+
+  /**
+   * 현재 컨텍스트 아카이빙 및 리셋
+   */
+  archiveAndReset(reason: 'token_limit' | 'manual' = 'manual'): ArchivedContext {
+    const snapshot = this.snapshot();
+    this.archiveVersion++;
+
+    const archived: ArchivedContext = {
+      version: this.archiveVersion,
+      snapshot,
+      archivedAt: new Date().toISOString(),
+      reason,
+    };
+
+    this.archives.push(archived);
+
+    // 스테이지 결과 및 아티팩트 초기화 (vars는 유지)
+    const stageCount = this.stages.size;
+    const artifactCount = this.artifacts.size;
+    this.stages.clear();
+    this.artifacts.clear();
+    this.warningEmitted = false;
+    this.updatedAt = new Date();
+
+    this.emit('context:archived', {
+      orderId: this.orderId,
+      version: this.archiveVersion,
+      reason,
+      clearedStages: stageCount,
+      clearedArtifacts: artifactCount,
+    });
+
+    return archived;
+  }
+
+  /**
+   * 아카이브 목록 조회
+   */
+  getArchives(): ArchivedContext[] {
+    return [...this.archives];
+  }
+
+  /**
+   * 특정 버전의 아카이브 조회
+   */
+  getArchive(version: number): ArchivedContext | undefined {
+    return this.archives.find((a) => a.version === version);
+  }
+
+  /**
+   * 최신 아카이브 조회
+   */
+  getLatestArchive(): ArchivedContext | undefined {
+    return this.archives[this.archives.length - 1];
+  }
+
+  // ==========================================================================
+  // Lifecycle
+  // ==========================================================================
+
   /**
    * 정리
    */
@@ -224,6 +393,7 @@ export class SharedContext extends EventEmitter {
     this.removeAllListeners();
     this.stages.clear();
     this.artifacts.clear();
+    this.archives = [];
   }
 
   /**
