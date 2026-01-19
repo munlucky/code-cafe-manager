@@ -7,7 +7,6 @@ import { EmptyState } from '../ui/EmptyState';
 import { cn } from '../../utils/cn';
 import { formatDate, formatRelativeTime, truncate } from '../../utils/formatters';
 import type { Order, Receipt } from '../../types/models';
-import type { RunLogEntry, RunProgress } from '../../types/window';
 
 // --- Types & Interfaces ---
 
@@ -26,50 +25,8 @@ interface OrderViewProps {
   isRestarting: boolean;
 }
 
-interface RunSidebarProps {
-  runs: RunProgress[];
-  selectedRunId: string | null;
-  isLoading: boolean;
-  onSelect: (id: string) => void;
-  onRefresh: () => void;
-}
-
-interface RunViewProps {
-  run: RunProgress | null;
-  onResume: () => Promise<void>;
-  isResuming: boolean;
-  runLogs: RunLogEntry[];
-  isLoadingLogs: boolean;
-}
 
 // --- Custom Hooks ---
-
-function useWorkflowRuns(active: boolean) {
-  const [runs, setRuns] = useState<RunProgress[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const fetchRuns = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const response = await window.codecafe.run.list();
-      setRuns(response.data || []);
-    } catch (error) {
-      console.error('Failed to fetch workflow runs:', error);
-      setRuns([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!active) return;
-    fetchRuns();
-    const timer = setInterval(fetchRuns, 4000);
-    return () => clearInterval(timer);
-  }, [active, fetchRuns]);
-
-  return { runs, isLoading, fetchRuns };
-}
 
 function useOrderLog(orderId: string | null, status?: string) {
   const [logText, setLogText] = useState('');
@@ -104,40 +61,6 @@ function useOrderLog(orderId: string | null, status?: string) {
   }, [orderId, status, loadLog]);
 
   return { logText, isLoading, refresh: () => orderId && loadLog(orderId) };
-}
-
-function useRunLogs(runId: string | null, status?: string, active?: boolean) {
-  const [runLogs, setRunLogs] = useState<RunLogEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const loadLogs = useCallback(async (id: string) => {
-    setIsLoading(true);
-    try {
-      const response = await window.codecafe.run.getLogs(id);
-      setRunLogs(response.data || []);
-    } catch (error) {
-      console.error('Failed to load run logs:', error);
-      setRunLogs([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!active || !runId) {
-      setRunLogs([]);
-      return;
-    }
-
-    loadLogs(runId);
-
-    if (status !== 'running') return;
-
-    const timer = setInterval(() => loadLogs(runId), 3000);
-    return () => clearInterval(timer);
-  }, [active, runId, status, loadLogs]);
-
-  return { runLogs, isLoading };
 }
 
 function useOrderReceipt(orderId: string | null, status?: string) {
@@ -177,37 +100,6 @@ function useOrderReceipt(orderId: string | null, status?: string) {
   }, [orderId, status]);
 
   return receipt;
-}
-
-function useNodeProgress(runLogs: RunLogEntry[], currentStage?: string) {
-  const nodeStatusByStage = useMemo(() => {
-    const byStage: Record<string, Record<string, string>> = {};
-
-    runLogs.forEach((log) => {
-      if (!log.stage || !log.nodeId) return;
-
-      if (!byStage[log.stage]) {
-        byStage[log.stage] = {};
-      }
-
-      let status = byStage[log.stage][log.nodeId] || 'pending';
-      if (log.type === 'node_start') status = 'running';
-      else if (log.type === 'node_end') status = 'completed';
-      else if (log.type === 'error') status = 'failed';
-
-      byStage[log.stage][log.nodeId] = status;
-    });
-
-    return byStage;
-  }, [runLogs]);
-
-  const currentStageNodes = useMemo(() => {
-    if (!currentStage) return [];
-    const nodes = nodeStatusByStage[currentStage] || {};
-    return Object.entries(nodes).map(([nodeId, status]) => ({ nodeId, status }));
-  }, [nodeStatusByStage, currentStage]);
-
-  return currentStageNodes;
 }
 
 // --- Helper UI Components ---
@@ -420,198 +312,13 @@ function OrderDetailView({ order, onStop, onRestart, isStopping, isRestarting }:
   );
 }
 
-function RunSidebar({ runs, selectedRunId, isLoading, onSelect, onRefresh }: RunSidebarProps): JSX.Element {
-  const interruptedRuns = useMemo(() => runs.filter(r => r.status === 'failed' || r.status === 'paused'), [runs]);
-  const activeRuns = useMemo(() => runs.filter(r => r.status !== 'failed' && r.status !== 'paused'), [runs]);
-
-  return (
-    <Card className="flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-coffee">Workflow Runs</h3>
-        <Button variant="secondary" onClick={onRefresh} className="text-xs px-2 py-1">
-          Refresh
-        </Button>
-      </div>
-
-      {isLoading && <div className="text-xs text-gray-500 mb-2">Loading...</div>}
-
-      {runs.length === 0 ? (
-        <EmptyState message="No workflow runs yet. Start one from New Order." />
-      ) : (
-        <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-custom">
-          {interruptedRuns.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-xs uppercase tracking-wide text-gray-500">Interrupted</div>
-              {interruptedRuns.map((run) => (
-                <SidebarItem
-                  key={run.runId}
-                  id={run.runId}
-                  title={run.workflowId}
-                  status={run.status}
-                  subtitle={
-                    <>
-                      <div>Stage: {run.currentStage}</div>
-                      <div>
-                        Updated: {run.updatedAt || run.createdAt ? formatRelativeTime((run.updatedAt || run.createdAt)!) : 'Unknown'}
-                      </div>
-                    </>
-                  }
-                  active={selectedRunId === run.runId}
-                  onClick={() => onSelect(run.runId)}
-                />
-              ))}
-            </div>
-          )}
-          {activeRuns.length > 0 && (
-            <div className="space-y-2">
-              {interruptedRuns.length > 0 && <div className="text-xs uppercase tracking-wide text-gray-500">All Runs</div>}
-              {activeRuns.map((run) => (
-                <SidebarItem
-                  key={run.runId}
-                  id={run.runId}
-                  title={run.workflowId}
-                  status={run.status}
-                  subtitle={
-                    <>
-                      <div>Stage: {run.currentStage}</div>
-                      <div>
-                        Updated: {run.updatedAt || run.createdAt ? formatRelativeTime((run.updatedAt || run.createdAt)!) : 'Unknown'}
-                      </div>
-                    </>
-                  }
-                  active={selectedRunId === run.runId}
-                  onClick={() => onSelect(run.runId)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function RunDetailView({ run, onResume, isResuming, runLogs, isLoadingLogs }: RunViewProps): JSX.Element {
-  const currentStageNodes = useNodeProgress(runLogs, run?.currentStage);
-
-  if (!run) {
-    return (
-      <Card className="flex flex-col min-h-[520px]">
-        <EmptyState message="Select a run to view details" />
-      </Card>
-    );
-  }
-
-  const canResume = run.status === 'paused' || run.status === 'failed';
-
-  const getStageStatusClass = (status: RunProgress['stages'][number]['status']) => {
-    const styles: Record<string, string> = {
-      pending: 'bg-border/60 text-gray-400',
-      running: 'bg-blue-500/10 text-blue-400',
-      completed: 'bg-green-500/10 text-green-400',
-      failed: 'bg-red-500/10 text-red-400',
-    };
-    return styles[status] || 'bg-border/60 text-gray-400';
-  };
-
-  return (
-    <Card className="flex flex-col min-h-[520px]">
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div>
-          <div className="text-xs uppercase tracking-wide text-gray-500">Workflow Run</div>
-          <h3 className="text-2xl font-bold text-bone">{run.workflowId}</h3>
-          <div className="text-xs text-gray-500 mt-1">ID: {run.runId}</div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          <StatusBadge status={run.status} />
-          {canResume && (
-            <Button variant="secondary" onClick={onResume} disabled={isResuming}>
-              {isResuming ? 'Resuming...' : 'Resume'}
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <div className="space-y-2 text-sm text-gray-500">
-          <div><span className="text-bone">Stage:</span> {run.currentStage}</div>
-          <div><span className="text-bone">Iteration:</span> {run.currentIter}</div>
-          {run.createdAt && <div><span className="text-bone">Created:</span> {formatDate(run.createdAt)}</div>}
-          {run.updatedAt && <div><span className="text-bone">Updated:</span> {formatDate(run.updatedAt)}</div>}
-        </div>
-        <div className="space-y-2 text-sm text-gray-500">
-          <div><span className="text-bone">Run Status:</span> {run.status}</div>
-          {run.lastError && <div className="text-red-500">Error: {run.lastError}</div>}
-        </div>
-      </div>
-
-      <div className="space-y-4 flex-1">
-        <div>
-          <h4 className="text-lg font-semibold text-coffee mb-2">Stage Progress</h4>
-          <div className="flex flex-wrap gap-2 text-xs">
-            {run.stages.map((stage) => (
-              <span
-                key={`${run.runId}-${stage.name}`}
-                className={cn('px-2 py-1 rounded uppercase tracking-wide', getStageStatusClass(stage.status))}
-              >
-                {stage.name}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-lg font-semibold text-coffee">Node Status</h4>
-            {isLoadingLogs && <span className="text-xs text-gray-500">Loading...</span>}
-          </div>
-          {currentStageNodes.length === 0 ? (
-            <EmptyState message="No node activity yet" />
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {currentStageNodes.map((node) => (
-                <div key={node.nodeId} className="flex items-center justify-between px-3 py-2 bg-background border border-border rounded text-sm">
-                  <span className="text-bone">{node.nodeId}</span>
-                  <span className={cn(
-                    'text-xs uppercase tracking-wide',
-                    node.status === 'completed' && 'text-green-400',
-                    node.status === 'running' && 'text-blue-400',
-                    node.status === 'failed' && 'text-red-400',
-                    node.status === 'pending' && 'text-gray-400'
-                  )}>
-                    {node.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <h4 className="text-lg font-semibold text-coffee mb-2">Run Logs</h4>
-          <div className="bg-background border border-border rounded p-3 text-xs font-mono whitespace-pre-wrap max-h-[200px] overflow-y-auto scrollbar-custom">
-            {runLogs.length === 0
-              ? 'No logs yet.'
-              : runLogs.slice(-8).map((log) => `${log.timestamp} ${log.message}`).join('\n')}
-          </div>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
 // --- Main Component ---
 
 export function OrderDetail(): JSX.Element {
   const { orders, fetchOrders, cancelOrder, createOrder } = useOrders();
-  const [detailMode, setDetailMode] = useState<'orders' | 'runs'>('orders');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [isStopping, setIsStopping] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
-  const [isResuming, setIsResuming] = useState(false);
-
-  const { runs, isLoading: runsLoading, fetchRuns } = useWorkflowRuns(detailMode === 'runs');
 
   useEffect(() => {
     fetchOrders();
@@ -636,39 +343,9 @@ export function OrderDetail(): JSX.Element {
     }
   }, [sortedOrders, selectedOrderId]);
 
-  const sortedRuns = useMemo(() => {
-    return [...runs].sort((a, b) => {
-      const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
-      const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
-      return bTime - aTime;
-    });
-  }, [runs]);
-
-  useEffect(() => {
-    if (detailMode !== 'runs') return;
-    if (sortedRuns.length === 0) {
-      setSelectedRunId(null);
-      return;
-    }
-    const exists = sortedRuns.some((run) => run.runId === selectedRunId);
-    if (!selectedRunId || !exists) {
-      setSelectedRunId(sortedRuns[0].runId);
-    }
-  }, [detailMode, sortedRuns, selectedRunId]);
-
   const selectedOrder = useMemo(() => {
     return sortedOrders.find((order) => order.id === selectedOrderId) || null;
   }, [sortedOrders, selectedOrderId]);
-
-  const selectedRun = useMemo(() => {
-    return sortedRuns.find((run) => run.runId === selectedRunId) || null;
-  }, [sortedRuns, selectedRunId]);
-
-  const { runLogs, isLoading: runLogsLoading } = useRunLogs(
-    selectedRunId,
-    selectedRun?.status,
-    detailMode === 'runs'
-  );
 
   const handleStop = async () => {
     if (!selectedOrder) return;
@@ -706,78 +383,21 @@ export function OrderDetail(): JSX.Element {
     }
   };
 
-  const handleResume = async () => {
-    if (!selectedRun) return;
-    if (!confirm(`Resume run ${selectedRun.runId}?`)) return;
-
-    setIsResuming(true);
-    try {
-      await window.codecafe.run.resume(selectedRun.runId);
-      await fetchRuns();
-    } catch (error) {
-      alert(`Failed to resume run: ${error}`);
-    } finally {
-      setIsResuming(false);
-    }
-  };
-
   return (
-    <div className="space-y-4 h-full">
-      <div className="flex gap-2 flex-wrap">
-        <Button
-          type="button"
-          variant={detailMode === 'orders' ? 'primary' : 'secondary'}
-          onClick={() => setDetailMode('orders')}
-          className="text-sm"
-        >
-          Orders
-        </Button>
-        <Button
-          type="button"
-          variant={detailMode === 'runs' ? 'primary' : 'secondary'}
-          onClick={() => setDetailMode('runs')}
-          className="text-sm"
-        >
-          Workflow Runs
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] xl:grid-cols-[320px_1fr] gap-4 lg:gap-6 h-full">
-        {detailMode === 'orders' ? (
-          <>
-            <OrderSidebar
-              orders={sortedOrders}
-              selectedOrderId={selectedOrderId}
-              onSelect={setSelectedOrderId}
-              onRefresh={fetchOrders}
-            />
-            <OrderDetailView
-              order={selectedOrder}
-              onStop={handleStop}
-              onRestart={handleRestart}
-              isStopping={isStopping}
-              isRestarting={isRestarting}
-            />
-          </>
-        ) : (
-          <>
-            <RunSidebar
-              runs={sortedRuns}
-              selectedRunId={selectedRunId}
-              isLoading={runsLoading}
-              onSelect={setSelectedRunId}
-              onRefresh={fetchRuns}
-            />
-            <RunDetailView
-              run={selectedRun}
-              onResume={handleResume}
-              isResuming={isResuming}
-              runLogs={runLogs}
-              isLoadingLogs={runLogsLoading}
-            />
-          </>
-        )}
-      </div>
+    <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] xl:grid-cols-[320px_1fr] gap-4 lg:gap-6 h-full">
+      <OrderSidebar
+        orders={sortedOrders}
+        selectedOrderId={selectedOrderId}
+        onSelect={setSelectedOrderId}
+        onRefresh={fetchOrders}
+      />
+      <OrderDetailView
+        order={selectedOrder}
+        onStop={handleStop}
+        onRestart={handleRestart}
+        isStopping={isStopping}
+        isRestarting={isRestarting}
+      />
     </div>
   );
 }
