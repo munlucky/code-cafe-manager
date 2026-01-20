@@ -7,9 +7,7 @@ import { useEffect, useState } from 'react';
 import { useCafeStore } from '../../store/useCafeStore';
 import { useViewStore } from '../../store/useViewStore';
 import { CafeCard } from '../cafe/CafeCard';
-import { Button } from '../ui/Button';
-import { EmptyState } from '../ui/EmptyState';
-import { Plus, Coffee } from 'lucide-react';
+import { FolderPlus, Coffee, HardDrive, ArrowRight } from 'lucide-react';
 import type { Cafe } from '@codecafe/core';
 
 export function GlobalLobby() {
@@ -82,78 +80,99 @@ export function GlobalLobby() {
   }
 
   return (
-    <div className="h-full overflow-auto">
+    <div className="h-full overflow-auto p-10 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex justify-between items-end mb-12">
         <div>
-          <h1 className="text-3xl sm:text-4xl font-bold text-cafe-100 mb-2">Global Lobby</h1>
-          <p className="text-sm text-cafe-400">Manage your local repositories (Cafes)</p>
+          <h1 className="text-4xl font-bold text-cafe-100 mb-3 tracking-tight">Global Lobby</h1>
+          <p className="text-cafe-400 text-lg font-light">Manage your coding environments and brew new workflows.</p>
         </div>
-        <Button onClick={() => setShowAddDialog(true)} className="flex items-center gap-2 self-start sm:self-auto">
-          <Plus className="w-4 h-4" />
-          Add Cafe
-        </Button>
+        <button
+          onClick={() => setShowAddDialog(true)}
+          className="flex items-center px-5 py-3 bg-brand hover:bg-brand-hover text-white rounded-xl transition-all shadow-lg shadow-brand/20 hover:shadow-brand/40 font-medium transform hover:-translate-y-0.5"
+        >
+          <FolderPlus className="w-5 h-5 mr-2" />
+          Register Cafe
+        </button>
       </div>
 
       {/* Error Display */}
       {displayError && (
-        <div className="mb-4 p-3 bg-red-900/30 border border-red-500/50 rounded-lg text-red-300 text-sm">
+        <div className="mb-6 p-4 bg-red-900/30 border border-red-500/50 rounded-xl text-red-300 text-sm">
           {displayError}
         </div>
       )}
 
       {/* Add Cafe Dialog */}
       {showAddDialog && (
-        <div className="mb-6 p-5 bg-cafe-800 border border-cafe-700 rounded-xl shadow-lg animate-in fade-in slide-in-from-top-4">
-          <h3 className="text-lg font-semibold text-cafe-100 mb-3">Add New Cafe</h3>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newCafePath}
-              onChange={(e) => setNewCafePath(e.target.value)}
-              placeholder="Enter absolute path to git repository"
-              className="flex-1 px-3 py-2 bg-cafe-900 border border-cafe-700 rounded-lg text-cafe-100 placeholder-cafe-600 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/50"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleAddCafe();
-                if (e.key === 'Escape') {
+        <div className="mb-10 bg-cafe-800 border border-cafe-700 rounded-2xl p-8 animate-in fade-in slide-in-from-top-4 shadow-2xl shadow-black/50">
+          <div className="flex items-center mb-6">
+            <div className="p-2 bg-brand/20 rounded-lg mr-3">
+              <FolderPlus className="w-6 h-6 text-brand" />
+            </div>
+            <h3 className="text-xl font-semibold text-cafe-100">Register New Cafe</h3>
+          </div>
+          <form onSubmit={(e) => { e.preventDefault(); handleAddCafe(); }} className="flex gap-4">
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-cafe-500 mb-2 uppercase tracking-wider">Project Repository Path</label>
+              <div className="relative group">
+                <HardDrive className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-cafe-500 group-focus-within:text-brand transition-colors" />
+                <input
+                  type="text"
+                  value={newCafePath}
+                  onChange={(e) => setNewCafePath(e.target.value)}
+                  placeholder="/Users/username/dev/my-project"
+                  className="w-full bg-cafe-950 border border-cafe-700 text-cafe-200 pl-12 pr-4 py-3.5 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent outline-none font-mono text-sm transition-all"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setShowAddDialog(false);
+                      setNewCafePath('');
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="flex items-end pb-0.5">
+              <button
+                type="button"
+                onClick={() => {
                   setShowAddDialog(false);
                   setNewCafePath('');
-                }
-              }}
-            />
-            <Button onClick={handleAddCafe} disabled={loading}>Add</Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setShowAddDialog(false);
-                setNewCafePath('');
-                setLocalError(null);
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-          <p className="mt-2 text-sm text-cafe-500">
-            Example: C:\dev\my-project or /home/user/projects/my-app
-          </p>
+                  setLocalError(null);
+                }}
+                className="px-6 py-3.5 text-cafe-400 hover:text-cafe-200 mr-2 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!newCafePath || loading}
+                className="px-8 py-3.5 bg-cafe-100 hover:bg-white text-cafe-900 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors font-bold shadow-lg"
+              >
+                Connect
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
       {/* Cafe Grid */}
       {cafes.length === 0 ? (
-        <EmptyState
-          icon={Coffee}
-          title="No Cafes Yet"
-          description="Add your first repository to get started"
-          action={
-            <Button onClick={() => setShowAddDialog(true)} className="flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              Add First Cafe
-            </Button>
-          }
-        />
+        <div className="text-center py-24 border-2 border-dashed border-cafe-800 rounded-3xl bg-cafe-900/30">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-cafe-800 mb-6 shadow-inner">
+            <Coffee className="w-10 h-10 text-cafe-600" />
+          </div>
+          <h3 className="text-2xl font-bold text-cafe-200 mb-3">No Cafes Registered</h3>
+          <p className="text-cafe-500 max-w-md mx-auto mb-8 leading-relaxed">
+            Your lobby is empty. Start by registering a local Git repository to begin orchestrating your code workflows.
+          </p>
+          <button onClick={() => setShowAddDialog(true)} className="text-brand-light hover:text-brand font-semibold flex items-center justify-center mx-auto transition-colors">
+            Register your first Cafe <ArrowRight className="w-4 h-4 ml-1" />
+          </button>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {cafes.map((cafe) => (
             <CafeCard
               key={cafe.id}
