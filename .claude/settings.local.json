@@ -80,7 +80,8 @@
       "Bash(pnpm:*)",
       "Bash(node:*)",
       "Bash(cmd //c taskkill:*)",
-      "Bash(powershell.exe:*)"
+      "Bash(powershell.exe:*)",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []

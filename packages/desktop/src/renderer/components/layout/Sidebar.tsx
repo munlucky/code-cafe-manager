@@ -65,23 +65,23 @@ export function Sidebar({ onClose }: SidebarProps) {
   };
 
   return (
-    <div className="w-[240px] sm:w-[280px] lg:w-[240px] bg-[#1E1E1E] border-r border-[#333] flex flex-col h-full font-sans select-none">
+    <div className="w-[240px] sm:w-[280px] lg:w-[240px] bg-cafe-900 border-r border-cafe-800 flex flex-col h-full font-sans select-none shadow-xl">
       {/* Brand / Header */}
-      <div className="flex items-center justify-between px-4 py-5 mb-2">
+      <div className="flex items-center justify-between px-4 py-5 mb-2 border-b border-cafe-800">
         <div className="flex items-center gap-3">
-          <div className="bg-coffee/20 p-1.5 rounded-lg">
-            <Coffee className="text-coffee" size={20} />
+          <div className="bg-gradient-to-br from-brand to-brand-hover p-1.5 rounded-lg shadow-lg shadow-brand/20">
+            <Coffee className="text-white" size={20} />
           </div>
-          <h1 className="text-lg font-bold text-gray-100 tracking-tight">CodeCafe</h1>
+          <h1 className="text-lg font-bold text-cafe-100 tracking-tight">CodeCafe</h1>
         </div>
         {/* Close button for mobile */}
         {onClose && (
           <button
             onClick={onClose}
-            className="lg:hidden p-2 rounded-lg hover:bg-[#2A2A2A] transition-colors"
+            className="lg:hidden p-2 rounded-lg hover:bg-cafe-800 transition-colors"
             aria-label="Close menu"
           >
-            <X className="w-5 h-5 text-gray-400" />
+            <X className="w-5 h-5 text-cafe-400" />
           </button>
         )}
       </div>
@@ -90,7 +90,7 @@ export function Sidebar({ onClose }: SidebarProps) {
       <div className="flex-1 overflow-y-auto px-3">
         {/* Header with Manage Button */}
         <div className="flex items-center justify-between mb-2 px-1 group">
-          <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+          <span className="text-[10px] font-bold text-cafe-600 uppercase tracking-widest">
             Workspaces
           </span>
           <button
@@ -98,8 +98,8 @@ export function Sidebar({ onClose }: SidebarProps) {
             className={cn(
               'p-1 rounded opacity-0 group-hover:opacity-100 transition-all duration-200',
               currentView === 'cafes'
-                ? 'text-coffee opacity-100 bg-coffee/10'
-                : 'text-gray-400 hover:text-white hover:bg-white/10'
+                ? 'text-brand opacity-100 bg-brand/10'
+                : 'text-cafe-500 hover:text-brand-light hover:bg-cafe-800'
             )}
             title="Manage Cafes"
           >
@@ -109,7 +109,7 @@ export function Sidebar({ onClose }: SidebarProps) {
 
         <div className="space-y-1">
           {cafes.length === 0 ? (
-            <div className="text-sm text-gray-500 italic px-2 py-2">
+            <div className="text-sm text-cafe-500 italic px-2 py-2">
               No cafes yet
             </div>
           ) : (
@@ -121,8 +121,8 @@ export function Sidebar({ onClose }: SidebarProps) {
                 <div key={cafe.id} className="mb-1">
                   {/* Cafe Header Row */}
                   <div className={cn(
-                    "group flex items-center rounded-md transition-colors duration-150 pr-2",
-                    isSelected ? "bg-[#2A2A2A]" : "hover:bg-[#2A2A2A]"
+                    "group flex items-center rounded-lg transition-all duration-200 pr-2",
+                    isSelected ? "bg-cafe-800 border border-cafe-700/50 shadow-md" : "hover:bg-cafe-800/50"
                   )}>
                     {/* Toggle Arrow */}
                     <button
@@ -130,7 +130,7 @@ export function Sidebar({ onClose }: SidebarProps) {
                         e.stopPropagation();
                         toggleCafeExpand(cafe.id);
                       }}
-                      className="p-2 text-gray-500 hover:text-white transition-colors cursor-pointer"
+                      className="p-2 text-cafe-600 hover:text-cafe-100 transition-colors cursor-pointer"
                     >
                       <ChevronRight
                         size={14}
@@ -141,7 +141,10 @@ export function Sidebar({ onClose }: SidebarProps) {
                     {/* Cafe Name - Click to Select */}
                     <button
                       onClick={() => handleCafeSelect(cafe.id)}
-                      className="flex-1 text-left py-2 text-[14px] font-medium text-gray-300 group-hover:text-white truncate"
+                      className={cn(
+                        "flex-1 text-left py-2 text-[14px] font-medium truncate transition-colors",
+                        isSelected ? "text-brand-light" : "text-cafe-400 group-hover:text-cafe-200"
+                      )}
                       title={cafe.path}
                     >
                       {cafe.name}
@@ -149,7 +152,7 @@ export function Sidebar({ onClose }: SidebarProps) {
 
                     {/* Active Indicator Dot */}
                     {isSelected && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-coffee shadow-[0_0_8px_rgba(var(--coffee-rgb),0.5)]" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-brand shadow-lg shadow-brand/50" />
                     )}
                   </div>
 

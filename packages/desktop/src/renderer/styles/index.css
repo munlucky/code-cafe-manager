@@ -12,26 +12,48 @@
   *::-webkit-scrollbar {
     display: none; /* Chrome, Safari, Opera */
   }
+
+  /* Body defaults */
+  body {
+    background-color: #0c0a09; /* cafe-950 */
+    color: #e7e5e4; /* cafe-200 */
+  }
 }
 
 @layer utilities {
-  /* Optional: Custom scrollbar for elements that need visible scrollbar */
+  /* Custom scrollbar using cafe palette */
   .scrollbar-custom::-webkit-scrollbar {
     display: block;
     width: 8px;
   }
   .scrollbar-custom::-webkit-scrollbar-track {
-    background: #1a1a1a;
+    background: #1c1917; /* cafe-900 */
   }
   .scrollbar-custom::-webkit-scrollbar-thumb {
-    background: #333;
+    background: #44403c; /* cafe-700 */
     border-radius: 4px;
   }
   .scrollbar-custom::-webkit-scrollbar-thumb:hover {
-    background: #444;
+    background: #57534e; /* cafe-600 */
   }
   .scrollbar-custom {
     scrollbar-width: thin;
     -ms-overflow-style: auto;
+  }
+
+  /* Terminal-specific scrollbar */
+  .terminal-scroll::-webkit-scrollbar {
+    display: block;
+    width: 8px;
+  }
+  .terminal-scroll::-webkit-scrollbar-track {
+    background: #1c1917; /* cafe-900 */
+  }
+  .terminal-scroll::-webkit-scrollbar-thumb {
+    background: #44403c; /* cafe-700 */
+    border-radius: 4px;
+  }
+  .terminal-scroll::-webkit-scrollbar-thumb:hover {
+    background: #57534e; /* cafe-600 */
   }
 }

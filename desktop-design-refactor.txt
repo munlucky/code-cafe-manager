@@ -1,0 +1,601 @@
+                                                                                
+╭─── Claude Code v2.1.12 ──────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting        │
+│                 Welcome back Moon!                 │ started                 │
+│                                                    │ Run /init to create a … │
+│                       ▐▛███▜▌                      │ ─────────────────────── │
+│                      ▝▜█████▛▘                     │ Recent activity         │
+│                        ▘▘ ▝▝                       │ No recent activity      │
+│                                                    │                         │
+│   Opus 4.5 · Claude Pro · munlucky7@gmail.com's    │                         │
+│   Organization                                     │                         │
+│            /Users/dev/code-cafe-manager            │                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+                                                                                
+❯ Implement the following plan:                                                 
+                                                                                
+  # Desktop Design Migration Plan                                               
+                                                                                
+  ## Overview                                                                   
+                                                                                
+  **목표**: 새 디자인                                                           
+  프로젝트(`docs/desktop-design-refactor/codecafe-desktop/`)의 스타일을         
+  기존 desktop 패키지에 적용                                                    
+                                                                                
+  **전략**: 점진적 마이그레이션 (Option A) - 호환성 alias 유지하며 단계별       
+  적용                                                                          
+                                                                                
+  ---                                                                           
+                                                                                
+  ## Phase 1: Foundation (디자인 시스템)                                        
+                                                                                
+  ### 1.1 tailwind.config.cjs 업데이트                                          
+                                                                                
+  **파일**: `packages/desktop/tailwind.config.cjs`                              
+                                                                                
+  **변경 내용**:                                                                
+  - `cafe` 컬러 팔레트 추가 (950-100)                                           
+  - `brand` 액센트 컬러 추가 (amber 계열)                                       
+  - `terminal` 배경색 추가                                                      
+  - 폰트 패밀리 추가 (Inter, JetBrains Mono)                                    
+  - 기존 색상은 호환성 alias로 새 값 매핑                                       
+                                                                                
+  ```javascript                                                                 
+  colors: {                                                                     
+  cafe: { 950: '#0c0a09', 900: '#1c1917', ... },                                
+  brand: { DEFAULT: '#d97706', hover: '#b45309', light: '#fbbf24',              
+  subtle: '#78350f' },                                                          
+  terminal: { bg: '#120f0e' },                                                  
+  // Compatibility aliases                                                      
+  background: '#0c0a09', card: '#292524', coffee: '#d97706', ...                
+  }                                                                             
+  ```                                                                           
+                                                                                
+  ### 1.2 index.html 폰트 로딩 추가                                             
+                                                                                
+  **파일**: `packages/desktop/src/renderer/index.html`                          
+                                                                                
+  **변경 내용**:                                                                
+  - Google Fonts 링크 추가 (Inter, JetBrains Mono)                              
+  - CSP 헤더에 `fonts.googleapis.com`, `fonts.gstatic.com` 허용 추가            
+                                                                                
+  ### 1.3 index.css 스크롤바 스타일 업데이트                                    
+                                                                                
+  **파일**: `packages/desktop/src/renderer/styles/index.css`                    
+                                                                                
+  **변경 내용**:                                                                
+  - `terminal-scroll` 클래스 추가 (cafe 팔레트 사용)                            
+  - 기존 `scrollbar-custom` 색상을 cafe 팔레트로 업데이트                       
+  - body 기본 스타일 추가 (`bg: cafe-950`, `color: cafe-200`)                   
+                                                                                
+  ---                                                                           
+                                                                                
+  ## Phase 2: 공통 컴포넌트 마이그레이션                                        
+                                                                                
+  ### 2.1 layout/Sidebar.tsx                                                    
+                                                                                
+  **파일**: `packages/desktop/src/renderer/components/layout/Sidebar.tsx`       
+                                                                                
+  **주요 변경**:                                                                
+  | 기존 | 신규 |                                                               
+  |------|------|                                                               
+  | `bg-[#1E1E1E]` | `bg-cafe-900` |                                            
+  | `border-[#333]` | `border-cafe-800` |                                       
+  | `bg-coffee/20` | `bg-gradient-to-br from-brand to-brand-hover` |            
+  | `text-coffee` | `text-brand` |                                              
+  | `bg-coffee/10` | `bg-brand/10` |                                            
+  | `text-gray-100/300/400/500` | `text-cafe-100/300/400/600` |                 
+  | `bg-[#2A2A2A]` | `bg-cafe-800` |                                            
+  | `bg-[#191919]` | `bg-cafe-900/50` |                                         
+                                                                                
+  ### 2.2 ui/Button.tsx                                                         
+                                                                                
+  **파일**: `packages/desktop/src/renderer/components/ui/Button.tsx`            
+                                                                                
+  **변경 내용**:                                                                
+  - `primary` variant: `bg-brand hover:bg-brand-hover shadow-lg                 
+  shadow-brand/20`                                                              
+  - `secondary` variant: `bg-cafe-800 hover:bg-cafe-700`                        
+  - `outline` variant: `border-cafe-700 hover:bg-cafe-800`                      
+  - `ghost` variant: `hover:bg-cafe-800 text-cafe-300`                          
+                                                                                
+  ### 2.3 ui/Card.tsx                                                           
+                                                                                
+  **파일**: `packages/desktop/src/renderer/components/ui/Card.tsx`              
+                                                                                
+  **변경 내용**:                                                                
+  - `bg-card border-border` → `bg-cafe-800 border-cafe-700 rounded-xl           
+  shadow-lg`                                                                    
+                                                                                
+  ---                                                                           
+                                                                                
+  ## Phase 3: 뷰 컴포넌트 마이그레이션                                          
+                                                                                
+  ### 3.1 GlobalLobby.tsx                                                       
+                                                                                
+  **파일**:                                                                     
+  `packages/desktop/src/renderer/components/views/GlobalLobby.tsx`              
+                                                                                
+  **참조**: `docs/desktop-design-refactor/codecafe-desktop/components/CafeD     
+  ashboard.tsx`                                                                 
+                                                                                
+  **주요 변경**:                                                                
+  - 헤더 타이포그래피 업데이트 (`text-4xl font-bold text-cafe-100`)             
+  - CTA 버튼 스타일 (`bg-brand shadow-lg shadow-brand/20`)                      
+  - Empty state 스타일 (decorative gradient blob)                               
+  - 모달 스타일 (`animate-in fade-in slide-in-from-top-4`)                      
+                                                                                
+  ### 3.2 관련 컴포넌트 (CafeCard 등)                                           
+                                                                                
+  **파일**: `packages/desktop/src/renderer/components/cafe/CafeCard.tsx`        
+                                                                                
+  **주요 변경**:                                                                
+  - 카드 hover 효과 (`hover:-translate-y-1 hover:shadow-2xl`)                   
+  - Decorative gradient blob 추가                                               
+  - 상태 배지 색상 업데이트                                                     
+                                                                                
+  ### 3.3 Workflows.tsx                                                         
+                                                                                
+  **파일**: `packages/desktop/src/renderer/components/views/Workflows.tsx`      
+                                                                                
+  **참조**: `docs/desktop-design-refactor/codecafe-desktop/components/Recip     
+  eManager.tsx`                                                                 
+                                                                                
+  **주요 변경**:                                                                
+  - Stage 색상 체계 적용 (analyze: blue, plan: purple, code: brand, review:     
+  emerald)                                                                      
+  - 워크플로우 카드 스타일 업데이트                                             
+                                                                                
+  ### 3.4 Skills.tsx                                                            
+                                                                                
+  **파일**: `packages/desktop/src/renderer/components/views/Skills.tsx`         
+                                                                                
+  **참조**: `docs/desktop-design-refactor/codecafe-desktop/components/Skill     
+  Manager.tsx`                                                                  
+                                                                                
+  **주요 변경**:                                                                
+  - 카테고리별 색상 체계 적용                                                   
+  - 스킬 카드 hover 효과                                                        
+  - 검색 입력 스타일 업데이트                                                   
+                                                                                
+  ---                                                                           
+                                                                                
+  ## Critical Files                                                             
+                                                                                
+  1. `packages/desktop/tailwind.config.cjs`                                     
+  2. `packages/desktop/src/renderer/index.html`                                 
+  3. `packages/desktop/src/renderer/styles/index.css`                           
+  4. `packages/desktop/src/renderer/components/layout/Sidebar.tsx`              
+  5. `packages/desktop/src/renderer/components/ui/Button.tsx`                   
+  6. `packages/desktop/src/renderer/components/ui/Card.tsx`                     
+  7. `packages/desktop/src/renderer/components/views/GlobalLobby.tsx`           
+  8. `packages/desktop/src/renderer/components/cafe/CafeCard.tsx`               
+  9. `packages/desktop/src/renderer/components/views/Workflows.tsx`             
+  10. `packages/desktop/src/renderer/components/views/Skills.tsx`               
+                                                                                
+  ---                                                                           
+                                                                                
+  ## Verification Plan                                                          
+                                                                                
+  ### 각 Phase 완료 후                                                          
+                                                                                
+  ```bash                                                                       
+  cd packages/desktop                                                           
+  pnpm typecheck                                                                
+  pnpm build                                                                    
+  pnpm dev                                                                      
+  ```                                                                           
+                                                                                
+  ### 수동 검증 체크리스트                                                      
+                                                                                
+  **Phase 1**:                                                                  
+  - [ ] 폰트 로딩 확인 (개발자 도구 Network 탭)                                 
+  - [ ] body 배경색 변경 확인 (더 따뜻한 톤)                                    
+                                                                                
+  **Phase 2**:                                                                  
+  - [ ] Sidebar 하이라이트 색상 (amber 톤)                                      
+  - [ ] Button hover 효과                                                       
+  - [ ] Card border-radius, shadow                                              
+                                                                                
+  **Phase 3**:                                                                  
+  - [ ] GlobalLobby 카드 hover 효과                                             
+  - [ ] Terminal 스크롤바 동작                                                  
+  - [ ] Workflows Stage 색상 구분                                               
+  - [ ] Skills 카테고리 색상                                                    
+                                                                                
+  ---                                                                           
+                                                                                
+  ## Rollback Plan                                                              
+                                                                                
+  각 Phase 완료 시 Git 커밋:                                                    
+                                                                                
+  ```bash                                                                       
+  git add -A && git commit -m "Phase 1: Add cafe color palette and font         
+  configuration"                                                                
+  git add -A && git commit -m "Phase 2: Update common UI components"            
+  git add -A && git commit -m "Phase 3: Migrate view components"                
+  ```                                                                           
+                                                                                
+  문제 발생 시: `git revert <commit-hash>`                                      
+                                                                                
+  ---                                                                           
+                                                                                
+  ## Risk Assessment                                                            
+                                                                                
+  | 리스크 | 영향도 | 완화 방안 |                                               
+  |--------|--------|-----------|                                               
+  | CSP 위반으로 폰트 로딩 실패 | 중간 | CSP 헤더 사전 수정 |                   
+  | 하드코딩된 색상 누락 | 낮음 | grep으로 #121212 등 검색 |                    
+  | 기존 기능 영향 | 없음 | 스타일만 변경, 로직 유지 |                          
+                                                                                
+                                                                                
+  If you need specific details from before exiting plan mode (like exact        
+  code snippets, error messages, or content you generated), read the full       
+  transcript at: /Users/seokgimoon/.claude/projects/-Users-dev-code-cafe-ma     
+  nager/b89fc982-e004-4f71-9bc8-8dd666d1996c.jsonl                              
+  ⎿  Loaded .claude/CLAUDE.md                                                   
+                                                                                
+⏺ Desktop Design Migration을 시작하겠습니다. 먼저 작업 목록을 만들고 Phase 1부터
+   순차적으로 진행합니다.                                                       
+                                                                                
+⏺ 먼저 현재 파일들의 상태를 파악하겠습니다.                                     
+                                                                                
+⏺ Read(packages/desktop/tailwind.config.cjs)                                    
+  ⎿  Read 24 lines                                                              
+                                                                                
+⏺ Read(packages/desktop/src/renderer/index.html)                                
+  ⎿  Read 16 lines                                                              
+                                                                                
+⏺ Read(packages/desktop/src/renderer/styles/index.css)                          
+  ⎿  Read 38 lines                                                              
+                                                                                
+⏺ Read(docs/desktop-design-refactor/codecafe-desktop/tailwind.config.ts)        
+  ⎿  Error reading file                                                         
+                                                                                
+⏺ 새 디자인 참조 파일들을 확인해보겠습니다.                                     
+                                                                                
+⏺ Search(pattern: "docs/desktop-design-refactor/**/*.{ts,tsx,css,html}")        
+  ⎿  Found 10 files (ctrl+o to expand)                                          
+                                                                                
+⏺ Read(docs/desktop-design-refactor/codecafe-desktop/index.html)                
+  ⎿  Read 83 lines                                                              
+                                                                                
+⏺ Read(docs/desktop-design-refactor/codecafe-desktop/components/Sidebar.tsx)    
+  ⎿  Read 124 lines                                                             
+                                                                                
+⏺ Read(docs/desktop-design-refactor/codecafe-desktop/components/CafeDashboard.ts
+      x)                                                                        
+  ⎿  Read 141 lines                                                             
+                                                                                
+⏺ 추가로 RecipeManager와 SkillManager도 확인합니다.                             
+                                                                                
+⏺ Read(docs/desktop-design-refactor/codecafe-desktop/components/RecipeManager.ts
+      x)                                                                        
+  ⎿  Read 332 lines                                                             
+                                                                                
+⏺ Read(docs/desktop-design-refactor/codecafe-desktop/components/SkillManager.tsx
+      )                                                                         
+  ⎿  Read 212 lines                                                             
+                                                                                
+⏺ 이제 기존 컴포넌트 파일들을 확인하겠습니다.                                   
+                                                                                
+⏺ Read(packages/desktop/src/renderer/components/layout/Sidebar.tsx)             
+  ⎿  Read 215 lines                                                             
+                                                                                
+⏺ Read(packages/desktop/src/renderer/components/ui/Button.tsx)                  
+  ⎿  Read 50 lines                                                              
+                                                                                
+⏺ Read(packages/desktop/src/renderer/components/ui/Card.tsx)                    
+  ⎿  Read 17 lines                                                              
+                                                                                
+⏺ Phase 3 컴포넌트들도 확인합니다.                                              
+                                                                                
+⏺ Read(packages/desktop/src/renderer/components/views/GlobalLobby.tsx)          
+  ⎿  Read 170 lines                                                             
+                                                                                
+⏺ Search(pattern: "packages/desktop/src/renderer/components/cafe/CafeCard.tsx") 
+  ⎿  Found 1 file (ctrl+o to expand)                                            
+                                                                                
+⏺ Read(packages/desktop/src/renderer/components/views/Workflows.tsx)            
+  ⎿  Read 252 lines                                                             
+                                                                                
+⏺ Read(packages/desktop/src/renderer/components/views/Skills.tsx)               
+  ⎿  Read 386 lines                                                             
+                                                                                
+⏺ Read(packages/desktop/src/renderer/components/cafe/CafeCard.tsx)              
+  ⎿  Read 140 lines                                                             
+                                                                                
+⏺ 이제 Phase 1부터 시작합니다.                                                  
+                                                                                
+  Phase 1.1: tailwind.config.cjs 업데이트                                       
+                                                                                
+⏺ Update(packages/desktop/tailwind.config.cjs)                                  
+  ⎿  Added 33 lines, removed 7 lines                                            
+       6    theme: {                                                            
+       7      extend: {                                                         
+       8        colors: {                                                       
+       9 -        background: '#121212',                                        
+      10 -        card: '#1C1C1C',                                              
+       9 +        // New design palette: Warm Stone Grays                       
+      10 +        cafe: {                                                       
+      11 +          950: '#0c0a09', // Deepest Espresso                         
+      12 +          900: '#1c1917', // Dark Roast                               
+      13 +          850: '#23201d', // Panel Background                         
+      14 +          800: '#292524', // Card Background                          
+      15 +          700: '#44403c', // Borders                                  
+      16 +          600: '#57534e', // Muted Text                               
+      17 +          500: '#78716c', // Secondary Text                           
+      18 +          400: '#a8a29e', // Primary Text                             
+      19 +          300: '#d6d3d1', // High Contrast Text                       
+      20 +          200: '#e7e5e4', // Headings                                 
+      21 +          100: '#f5f5f4', // White Text                               
+      22 +        },                                                            
+      23 +        // Brand Accent: Caramel / Amber                              
+      24 +        brand: {                                                      
+      25 +          DEFAULT: '#d97706', // amber-600                            
+      26 +          hover: '#b45309',   // amber-700                            
+      27 +          light: '#fbbf24',   // amber-400                            
+      28 +          subtle: '#78350f',  // amber-900 (backgrounds)              
+      29 +        },                                                            
+      30 +        terminal: {                                                   
+      31 +          bg: '#120f0e', // Very dark warm black                      
+      32 +        },                                                            
+      33 +        // Compatibility aliases (map old names to new values)        
+      34 +        background: '#0c0a09', // cafe-950                            
+      35 +        card: '#292524',       // cafe-800                            
+      36          espresso: '#3C2218',                                          
+      12 -        coffee: '#6F4E37',                                            
+      13 -        bone: '#E6D6C8',                                              
+      14 -        sidebar: '#252525',                                           
+      15 -        border: '#333333',                                            
+      37 +        coffee: '#d97706',     // brand                               
+      38 +        bone: '#e7e5e4',       // cafe-200                            
+      39 +        sidebar: '#1c1917',    // cafe-900                            
+      40 +        border: '#44403c',     // cafe-700                            
+      41        },                                                              
+      42        fontFamily: {                                                   
+      18 -        sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI       
+         -', 'Roboto', 'sans-serif'],                                           
+      43 +        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont',        
+         +'Segoe UI', 'Roboto', 'sans-serif'],                                  
+      44 +        mono: ['JetBrains Mono', 'monospace'],                        
+      45        },                                                              
+      46      },                                                                
+      47    },                                                                  
+                                                                                
+⏺ Phase 1.2: index.html 폰트 로딩 추가                                          
+                                                                                
+⏺ Update(packages/desktop/src/renderer/index.html)                              
+  ⎿  Added 5 lines, removed 2 lines                                             
+       5      <meta name="viewport" content="width=device-width, initial-       
+          scale=1.0" />                                                         
+       6      <meta                                                             
+       7        http-equiv="Content-Security-Policy"                            
+       8 -      content="default-src 'self'; script-src 'self'; style-src       
+         - 'self' 'unsafe-inline'; img-src 'self' data:;"                       
+       8 +      content="default-src 'self'; script-src 'self'; style-src       
+         + 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src        
+         +'self' https://fonts.gstatic.com; img-src 'self' data:;"              
+       9      />                                                                
+      10 +    <link rel="preconnect" href="https://fonts.googleapis.com">       
+      11 +    <link rel="preconnect" href="https://fonts.gstatic.com" cro       
+         +ssorigin>                                                             
+      12 +    <link href="https://fonts.googleapis.com/css2?family=Inter:       
+         +wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&dis       
+         +play=swap" rel="stylesheet">                                          
+      13      <title>CodeCafe Manager</title>                                   
+      14    </head>                                                             
+      12 -  <body>                                                              
+      15 +  <body class="bg-cafe-950 text-cafe-200">                            
+      16      <div id="root"></div>                                             
+      17    </body>                                                             
+      18  </html>                                                               
+                                                                                
+⏺ Phase 1.3: index.css 스크롤바 스타일 업데이트                                 
+                                                                                
+⏺ Update(packages/desktop/src/renderer/styles/index.css)                        
+  ⎿  Added 26 lines, removed 4 lines                                            
+      12    *::-webkit-scrollbar {                                              
+      13      display: none; /* Chrome, Safari, Opera */                        
+      14    }                                                                   
+      15 +                                                                      
+      16 +  /* Body defaults */                                                 
+      17 +  body {                                                              
+      18 +    background-color: #0c0a09; /* cafe-950 */                         
+      19 +    color: #e7e5e4; /* cafe-200 */                                    
+      20 +  }                                                                   
+      21  }                                                                     
+      22                                                                        
+      23  @layer utilities {                                                    
+      18 -  /* Optional: Custom scrollbar for elements that need visible        
+         -scrollbar */                                                          
+      24 +  /* Custom scrollbar using cafe palette */                           
+      25    .scrollbar-custom::-webkit-scrollbar {                              
+      26      display: block;                                                   
+      27      width: 8px;                                                       
+      28    }                                                                   
+      29    .scrollbar-custom::-webkit-scrollbar-track {                        
+      24 -    background: #1a1a1a;                                              
+      30 +    background: #1c1917; /* cafe-900 */                               
+      31    }                                                                   
+      32    .scrollbar-custom::-webkit-scrollbar-thumb {                        
+      27 -    background: #333;                                                 
+      33 +    background: #44403c; /* cafe-700 */                               
+      34      border-radius: 4px;                                               
+      35    }                                                                   
+      36    .scrollbar-custom::-webkit-scrollbar-thumb:hover {                  
+      31 -    background: #444;                                                 
+      37 +    background: #57534e; /* cafe-600 */                               
+      38    }                                                                   
+      39    .scrollbar-custom {                                                 
+      40      scrollbar-width: thin;                                            
+      41      -ms-overflow-style: auto;                                         
+      42    }                                                                   
+      43 +                                                                      
+      44 +  /* Terminal-specific scrollbar */                                   
+      45 +  .terminal-scroll::-webkit-scrollbar {                               
+      46 +    display: block;                                                   
+      47 +    width: 8px;                                                       
+      48 +  }                                                                   
+      49 +  .terminal-scroll::-webkit-scrollbar-track {                         
+      50 +    background: #1c1917; /* cafe-900 */                               
+      51 +  }                                                                   
+      52 +  .terminal-scroll::-webkit-scrollbar-thumb {                         
+      53 +    background: #44403c; /* cafe-700 */                               
+      54 +    border-radius: 4px;                                               
+      55 +  }                                                                   
+      56 +  .terminal-scroll::-webkit-scrollbar-thumb:hover {                   
+      57 +    background: #57534e; /* cafe-600 */                               
+      58 +  }                                                                   
+      59  }                                                                     
+                                                                                
+⏺ Phase 2.1: Sidebar.tsx 마이그레이션                                           
+                                                                                
+⏺ Update(packages/desktop/src/renderer/components/layout/Sidebar.tsx)           
+  ⎿  Added 7 lines, removed 7 lines                                             
+      65    };                                                                  
+      66                                                                        
+      67    return (                                                            
+      68 -    <div className="w-[240px] sm:w-[280px] lg:w-[240px] bg-[#1E       
+         -1E1E] border-r border-[#333] flex flex-col h-full font-sans sel       
+         -ect-none">                                                            
+      68 +    <div className="w-[240px] sm:w-[280px] lg:w-[240px] bg-cafe       
+         +-900 border-r border-cafe-800 flex flex-col h-full font-sans se       
+         +lect-none shadow-xl">                                                 
+      69        {/* Brand / Header */}                                          
+      70 -      <div className="flex items-center justify-between px-4 py       
+         --5 mb-2">                                                             
+      70 +      <div className="flex items-center justify-between px-4 py       
+         +-5 mb-2 border-b border-cafe-800">                                    
+      71          <div className="flex items-center gap-3">                     
+      72 -          <div className="bg-coffee/20 p-1.5 rounded-lg">             
+      73 -            <Coffee className="text-coffee" size={20} />              
+      72 +          <div className="bg-gradient-to-br from-brand to-brand       
+         +-hover p-1.5 rounded-lg shadow-lg shadow-brand/20">                   
+      73 +            <Coffee className="text-white" size={20} />               
+      74            </div>                                                      
+      75 -          <h1 className="text-lg font-bold text-gray-100 tracki       
+         -ng-tight">CodeCafe</h1>                                               
+      75 +          <h1 className="text-lg font-bold text-cafe-100 tracki       
+         +ng-tight">CodeCafe</h1>                                               
+      76          </div>                                                        
+      77          {/* Close button for mobile */}                               
+      78          {onClose && (                                                 
+      79            <button                                                     
+      80              onClick={onClose}                                         
+      81 -            className="lg:hidden p-2 rounded-lg hover:bg-[#2A2A       
+         -2A] transition-colors"                                                
+      81 +            className="lg:hidden p-2 rounded-lg hover:bg-cafe-8       
+         +00 transition-colors"                                                 
+      82              aria-label="Close menu"                                   
+      83            >                                                           
+      84 -            <X className="w-5 h-5 text-gray-400" />                   
+      84 +            <X className="w-5 h-5 text-cafe-400" />                   
+      85            </button>                                                   
+      86          )}                                                            
+      87        </div>                                                          
+                                                                                
+⏺ Update(packages/desktop/src/renderer/components/layout/Sidebar.tsx)           
+  ⎿  Added 3 lines, removed 3 lines                                             
+      90        <div className="flex-1 overflow-y-auto px-3">                   
+      91          {/* Header with Manage Button */}                             
+      92          <div className="flex items-center justify-between mb-2        
+          px-1 group">                                                          
+      93 -          <span className="text-[11px] font-bold text-gray-500        
+         -uppercase tracking-wider">                                            
+      93 +          <span className="text-[10px] font-bold text-cafe-600        
+         +uppercase tracking-widest">                                           
+      94              Workspaces                                                
+      95            </span>                                                     
+      96            <button                                                     
+     ...                                                                        
+       98              className={cn(                                           
+       99                'p-1 rounded opacity-0 group-hover:opacity-100 t       
+           ransition-all duration-200',                                         
+      100                currentView === 'cafes'                                
+      101 -                ? 'text-coffee opacity-100 bg-coffee/10'             
+      102 -                : 'text-gray-400 hover:text-white hover:bg-whi       
+          -te/10'                                                               
+      101 +                ? 'text-brand opacity-100 bg-brand/10'               
+      102 +                : 'text-cafe-500 hover:text-brand-light hover:       
+          +bg-cafe-800'                                                         
+      103              )}                                                       
+      104              title="Manage Cafes"                                     
+      105            >                                                          
+  ⎿  Found 10 new diagnostic issues in 1 file (ctrl+o to expand)                
+                                                                                
+⏺ Update(packages/desktop/src/renderer/components/layout/Sidebar.tsx)           
+  ⎿  Added 1 line, removed 1 line                                               
+      109                                                                       
+      110          <div className="space-y-1">                                  
+      111            {cafes.length === 0 ? (                                    
+      112 -            <div className="text-sm text-gray-500 italic px-2        
+          -py-2">                                                               
+      112 +            <div className="text-sm text-cafe-500 italic px-2        
+          +py-2">                                                               
+      113                No cafes yet                                           
+      114              </div>                                                   
+      115            ) : (                                                      
+  ⎿  Found 10 new diagnostic issues in 1 file (ctrl+o to expand)                
+                                                                                
+⏺ Update(packages/desktop/src/renderer/components/layout/Sidebar.tsx)           
+  ⎿  Added 8 lines, removed 5 lines                                             
+      121                  <div key={cafe.id} className="mb-1">                 
+      122                    {/* Cafe Header Row */}                            
+      123                    <div className={cn(                                
+      124 -                    "group flex items-center rounded-md transi       
+          -tion-colors duration-150 pr-2",                                      
+      125 -                    isSelected ? "bg-[#2A2A2A]" : "hover:bg-[#       
+          -2A2A2A]"                                                             
+      124 +                    "group flex items-center rounded-lg transi       
+          +tion-all duration-200 pr-2",                                         
+      125 +                    isSelected ? "bg-cafe-800 border border-ca       
+          +fe-700/50 shadow-md" : "hover:bg-cafe-800/50"                        
+      126                    )}>                                                
+      127                      {/* Toggle Arrow */}                             
+      128                      <button                                          
+     ...                                                                        
+      130                          e.stopPropagation();                         
+      131                          toggleCafeExpand(cafe.id);                   
+      132                        }}                                             
+      133 -                      className="p-2 text-gray-500 hover:text-       
+          -white transition-colors cursor-pointer"                              
+      133 +                      className="p-2 text-cafe-600 hover:text-       
+          +cafe-100 transition-colors cursor-pointer"                           
+      134                      >                                                
+      135                        <ChevronRight                                  
+      136                          size={14}                                    
+     ...                                                                        
+      141                      {/* Cafe Name - Click to Select */}              
+      142                      <button                                          
+      143                        onClick={() => handleCafeSelect(cafe.id)       
+           }                                                                    
+      144 -                      className="flex-1 text-left py-2 text-[1       
+          -4px] font-medium text-gray-300 group-hover:text-white truncate       
+          -"                                                                    
+      144 +                      className={cn(                                 
+      145 +                        "flex-1 text-left py-2 text-[14px] fon       
+          +t-medium truncate transition-colors",                                
+      146 +                        isSelected ? "text-brand-light" : "tex       
+          +t-cafe-400 group-hover:text-cafe-200"                                
+      147 +                      )}                                             
+      148                        title={cafe.path}                              
+      149                      >                                                
+      150                        {cafe.name}                                    
+     ...                                                                        
+      152                                                                       
+      153                      {/* Active Indicator Dot */}                     
+      154                      {isSelected && (                                 
+      152 -                      <div className="w-1.5 h-1.5 rounded-full       
+          - bg-coffee shadow-[0_0_8px_rgba(var(--coffee-rgb),0.5)]" />          
+      155 +                      <div className="w-1.5 h-1.5 rounded-full       
+          + bg-brand shadow-lg shadow-brand/50" />                              
+      156                      )}                                               
+      157                    </div>                                             
+      158                                                                       
+  ⎿  Found 10 new diagnostic issues in 1 file (ctrl+o to expand)                
+  ⎿  You've hit your limit · resets 3pm (Asia/Seoul)                            
+     /upgrade to increase your usage limit.                                     
+                                                                                
+✻ Worked for 2m 47s                                                             
+
