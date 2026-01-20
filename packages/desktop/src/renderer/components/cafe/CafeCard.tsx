@@ -30,20 +30,25 @@ export function CafeCard({ cafe, onClick, onDelete }: CafeCardProps): JSX.Elemen
   return (
     <Card
       className={cn(
-        'p-4 cursor-pointer transition-colors group',
-        'hover:border-coffee'
+        'p-4 cursor-pointer transition-all duration-300 group relative overflow-hidden',
+        'hover:-translate-y-1 hover:shadow-2xl hover:border-brand/50'
       )}
       onClick={handleClick}
     >
-      <CafeHeader name={cafe.name} onDelete={handleDelete} />
+      {/* Decorative gradient blob */}
+      <div className="absolute -right-8 -top-8 w-24 h-24 bg-gradient-to-br from-brand/10 to-brand-light/5 rounded-full blur-2xl group-hover:from-brand/20 group-hover:to-brand-light/10 transition-all duration-300" />
 
-      <CafePath path={cafe.path} />
+      <div className="relative">
+        <CafeHeader name={cafe.name} onDelete={handleDelete} />
 
-      <CafeStatus currentBranch={cafe.currentBranch} isDirty={cafe.isDirty} />
+        <CafePath path={cafe.path} />
 
-      <CafeActivity activeOrders={cafe.activeOrders} />
+        <CafeStatus currentBranch={cafe.currentBranch} isDirty={cafe.isDirty} />
 
-      <CafeFooter createdAt={cafe.createdAt} />
+        <CafeActivity activeOrders={cafe.activeOrders} />
+
+        <CafeFooter createdAt={cafe.createdAt} />
+      </div>
     </Card>
   );
 }
@@ -57,16 +62,16 @@ function CafeHeader({ name, onDelete }: CafeHeaderProps): JSX.Element {
   return (
     <div className="flex items-start justify-between mb-3">
       <div className="flex items-center gap-2">
-        <Coffee className="w-5 h-5 text-coffee" />
-        <h3 className="font-semibold text-bone truncate">{name}</h3>
+        <Coffee className="w-5 h-5 text-brand" />
+        <h3 className="font-semibold text-cafe-100 truncate">{name}</h3>
       </div>
       {onDelete && (
         <button
           onClick={onDelete}
           className={cn(
             'opacity-0 group-hover:opacity-100 transition-opacity',
-            'text-gray-400 hover:text-red-400',
-            'text-xs px-2 py-1'
+            'text-cafe-500 hover:text-red-400',
+            'text-xs px-2 py-1 rounded hover:bg-cafe-700/50'
           )}
           title="Delete Cafe"
         >
@@ -83,7 +88,7 @@ interface CafePathProps {
 
 function CafePath({ path }: CafePathProps): JSX.Element {
   return (
-    <div className="flex items-center gap-2 mb-2 text-sm text-gray-400">
+    <div className="flex items-center gap-2 mb-2 text-sm text-cafe-500">
       <Folder className="w-4 h-4 flex-shrink-0" />
       <span className="truncate" title={path}>
         {path}
@@ -100,8 +105,8 @@ interface CafeStatusProps {
 function CafeStatus({ currentBranch, isDirty }: CafeStatusProps): JSX.Element {
   return (
     <div className="flex items-center gap-2 mb-3 text-sm">
-      <GitBranch className="w-4 h-4 text-gray-400 flex-shrink-0" />
-      <span className="text-bone truncate">{currentBranch}</span>
+      <GitBranch className="w-4 h-4 text-cafe-500 flex-shrink-0" />
+      <span className="text-cafe-200 truncate">{currentBranch}</span>
       {isDirty && (
         <Badge variant="warning" className="ml-auto">
           Dirty
@@ -118,8 +123,8 @@ interface CafeActivityProps {
 function CafeActivity({ activeOrders }: CafeActivityProps): JSX.Element {
   return (
     <div className="flex items-center gap-2 text-sm">
-      <Activity className="w-4 h-4 text-gray-400" />
-      <span className="text-gray-300">
+      <Activity className="w-4 h-4 text-cafe-500" />
+      <span className="text-cafe-300">
         {activeOrders} active {activeOrders === 1 ? 'order' : 'orders'}
       </span>
     </div>
@@ -132,7 +137,7 @@ interface CafeFooterProps {
 
 function CafeFooter({ createdAt }: CafeFooterProps): JSX.Element {
   return (
-    <div className="mt-3 text-xs text-gray-500">
+    <div className="mt-3 text-xs text-cafe-600">
       Added {new Date(createdAt).toLocaleDateString()}
     </div>
   );

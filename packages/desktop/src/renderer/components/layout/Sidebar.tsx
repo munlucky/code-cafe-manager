@@ -158,7 +158,7 @@ export function Sidebar({ onClose }: SidebarProps) {
 
                   {/* Sub-menu with Tree Lines */}
                   {isExpanded && (
-                    <div className="relative ml-[19px] pl-3 border-l border-[#333] pt-1 pb-1 space-y-0.5">
+                    <div className="relative ml-[19px] pl-3 border-l border-cafe-700 pt-1 pb-1 space-y-0.5">
                       {CAFE_NAV_ITEMS.map(({ view, label, icon: Icon }) => (
                         <button
                           key={view}
@@ -166,8 +166,8 @@ export function Sidebar({ onClose }: SidebarProps) {
                           className={cn(
                             'w-full text-left px-2 py-1.5 rounded-md text-[13px] flex items-center gap-2 transition-all duration-150 group relative',
                             currentView === view && currentCafeId === cafe.id
-                              ? 'text-coffee bg-coffee/10 font-medium'
-                              : 'text-gray-400 hover:text-gray-200 hover:bg-[#2A2A2A]'
+                              ? 'text-brand bg-brand/10 font-medium'
+                              : 'text-cafe-500 hover:text-cafe-200 hover:bg-cafe-800'
                           )}
                         >
                           <Icon size={14} className="opacity-70 group-hover:opacity-100" />
@@ -175,7 +175,7 @@ export function Sidebar({ onClose }: SidebarProps) {
 
                           {/* Active Item Border Indicator */}
                           {currentView === view && currentCafeId === cafe.id && (
-                            <div className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-coffee rounded-full" />
+                            <div className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-brand rounded-full" />
                           )}
                         </button>
                       ))}
@@ -189,8 +189,8 @@ export function Sidebar({ onClose }: SidebarProps) {
       </div>
 
       {/* Footer / Global Section */}
-      <div className="border-t border-[#333] p-3 bg-[#191919]">
-        <div className="text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-2 px-1">
+      <div className="border-t border-cafe-700 p-3 bg-cafe-900/50">
+        <div className="text-[11px] font-bold text-cafe-600 uppercase tracking-wider mb-2 px-1">
           Global Settings
         </div>
         <div className="space-y-0.5">
@@ -202,8 +202,8 @@ export function Sidebar({ onClose }: SidebarProps) {
               className={cn(
                 'w-full text-left px-2 py-1.5 rounded-md text-[13px] flex items-center gap-2 transition-all duration-150',
                 currentView === view
-                  ? 'text-coffee bg-coffee/10 font-medium'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#2A2A2A]'
+                  ? 'text-brand bg-brand/10 font-medium'
+                  : 'text-cafe-500 hover:text-cafe-200 hover:bg-cafe-800'
               )}
             >
               <Icon size={14} className="opacity-70" />

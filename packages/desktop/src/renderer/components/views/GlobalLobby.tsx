@@ -76,7 +76,7 @@ export function GlobalLobby() {
   if (loading && cafes.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-gray-400">Loading cafes...</div>
+        <div className="text-cafe-400">Loading cafes...</div>
       </div>
     );
   }
@@ -84,10 +84,10 @@ export function GlobalLobby() {
   return (
     <div className="h-full overflow-auto">
       {/* Header */}
-      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-bone mb-1 sm:mb-2">Global Lobby</h1>
-          <p className="text-xs sm:text-sm text-gray-400">Manage your local repositories (Cafes)</p>
+          <h1 className="text-3xl sm:text-4xl font-bold text-cafe-100 mb-2">Global Lobby</h1>
+          <p className="text-sm text-cafe-400">Manage your local repositories (Cafes)</p>
         </div>
         <Button onClick={() => setShowAddDialog(true)} className="flex items-center gap-2 self-start sm:self-auto">
           <Plus className="w-4 h-4" />
@@ -97,22 +97,22 @@ export function GlobalLobby() {
 
       {/* Error Display */}
       {displayError && (
-        <div className="mb-4 p-3 bg-red-900/20 border border-red-500/50 rounded text-red-300 text-sm">
+        <div className="mb-4 p-3 bg-red-900/30 border border-red-500/50 rounded-lg text-red-300 text-sm">
           {displayError}
         </div>
       )}
 
       {/* Add Cafe Dialog */}
       {showAddDialog && (
-        <div className="mb-6 p-4 bg-card border border-border rounded">
-          <h3 className="text-lg font-semibold text-bone mb-3">Add New Cafe</h3>
+        <div className="mb-6 p-5 bg-cafe-800 border border-cafe-700 rounded-xl shadow-lg animate-in fade-in slide-in-from-top-4">
+          <h3 className="text-lg font-semibold text-cafe-100 mb-3">Add New Cafe</h3>
           <div className="flex gap-2">
             <input
               type="text"
               value={newCafePath}
               onChange={(e) => setNewCafePath(e.target.value)}
               placeholder="Enter absolute path to git repository"
-              className="flex-1 px-3 py-2 bg-background border border-border rounded text-bone placeholder-gray-500 focus:outline-none focus:border-coffee"
+              className="flex-1 px-3 py-2 bg-cafe-900 border border-cafe-700 rounded-lg text-cafe-100 placeholder-cafe-600 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/50"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleAddCafe();
                 if (e.key === 'Escape') {
@@ -133,7 +133,7 @@ export function GlobalLobby() {
               Cancel
             </Button>
           </div>
-          <p className="mt-2 text-sm text-gray-400">
+          <p className="mt-2 text-sm text-cafe-500">
             Example: C:\dev\my-project or /home/user/projects/my-app
           </p>
         </div>

@@ -41,13 +41,13 @@ function SkillCard({
   onView,
 }: SkillCardProps): ReactElement {
   return (
-    <Card className="p-4 hover:border-coffee transition-colors group">
+    <Card className="p-4 hover:border-brand transition-all duration-300 group hover:-translate-y-0.5">
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-bone truncate">{skill.name}</h3>
+            <h3 className="font-semibold text-cafe-100 truncate">{skill.name}</h3>
             {skill.isBuiltIn && (
-              <span className="px-1.5 py-0.5 bg-coffee/20 text-coffee text-xs rounded flex-shrink-0">
+              <span className="px-1.5 py-0.5 bg-brand/20 text-brand text-xs rounded flex-shrink-0">
                 Built-in
               </span>
             )}
@@ -57,7 +57,7 @@ function SkillCard({
               {CATEGORIES.find((c) => c.value === skill.category)?.label || skill.category}
             </span>
           </div>
-          <p className="text-sm text-gray-400 truncate">ID: {skill.id}</p>
+          <p className="text-sm text-cafe-500 truncate">ID: {skill.id}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
           {skill.isBuiltIn ? (
@@ -65,30 +65,30 @@ function SkillCard({
               size="sm"
               variant="ghost"
               onClick={(e) => onView(skill, e)}
-              className="p-1.5 h-auto hover:bg-gray-700"
+              className="p-1.5 h-auto hover:bg-cafe-700"
               title="View skill details"
             >
-              <Eye className="w-4 h-4 text-gray-400 group-hover:text-bone" />
+              <Eye className="w-4 h-4 text-cafe-500 group-hover:text-cafe-100" />
             </Button>
           ) : (
             <Button
               size="sm"
               variant="ghost"
               onClick={(e) => onEdit(skill, e)}
-              className="p-1.5 h-auto hover:bg-gray-700"
+              className="p-1.5 h-auto hover:bg-cafe-700"
               title="Edit skill"
             >
-              <Edit className="w-4 h-4 text-gray-400 group-hover:text-bone" />
+              <Edit className="w-4 h-4 text-cafe-500 group-hover:text-cafe-100" />
             </Button>
           )}
           <Button
             size="sm"
             variant="ghost"
             onClick={(e) => onDuplicate(skill, e)}
-            className="p-1.5 h-auto hover:bg-gray-700"
+            className="p-1.5 h-auto hover:bg-cafe-700"
             title="Duplicate skill"
           >
-            <Copy className="w-4 h-4 text-gray-400 group-hover:text-bone" />
+            <Copy className="w-4 h-4 text-cafe-500 group-hover:text-cafe-100" />
           </Button>
           {!skill.isBuiltIn && (
             <Button
@@ -98,16 +98,16 @@ function SkillCard({
               className="p-1.5 h-auto hover:bg-red-900/30"
               title="Delete skill"
             >
-              <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-400" />
+              <Trash2 className="w-4 h-4 text-cafe-500 hover:text-red-400" />
             </Button>
           )}
         </div>
       </div>
-      <p className="mt-2 text-sm text-gray-300 line-clamp-2">{skill.description}</p>
+      <p className="mt-2 text-sm text-cafe-300 line-clamp-2">{skill.description}</p>
       <div className="mt-3 flex items-center gap-3">
-        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+        <div className="flex items-center gap-1.5 text-xs text-cafe-500">
           <Terminal className="w-3.5 h-3.5" />
-          <code className="bg-gray-800 px-1.5 py-0.5 rounded">{skill.skillCommand}</code>
+          <code className="bg-cafe-900 px-1.5 py-0.5 rounded text-cafe-300">{skill.skillCommand}</code>
         </div>
         <span className={`text-xs px-2 py-0.5 rounded ${
           skill.context === 'inherit'
@@ -243,8 +243,8 @@ export function Skills(): ReactElement {
     return (
       <div className="p-6 h-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-2">
-          <div className="w-8 h-8 border-4 border-coffee border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-400">Loading skills...</p>
+          <div className="w-8 h-8 border-4 border-brand border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-cafe-500">Loading skills...</p>
         </div>
       </div>
     );
@@ -254,8 +254,8 @@ export function Skills(): ReactElement {
     return (
       <div className="p-6 h-full flex flex-col items-center justify-center text-center">
         <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-        <h3 className="text-lg font-semibold text-bone mb-2">Failed to load skills</h3>
-        <p className="text-gray-400 mb-6">{error}</p>
+        <h3 className="text-lg font-semibold text-cafe-100 mb-2">Failed to load skills</h3>
+        <p className="text-cafe-500 mb-6">{error}</p>
         <Button onClick={loadSkills} variant="secondary">
           Retry
         </Button>
@@ -266,10 +266,10 @@ export function Skills(): ReactElement {
   return (
     <>
       <div className="h-full overflow-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-bone">Skills</h1>
-            <p className="text-xs sm:text-sm text-gray-400 mt-1">
+            <h1 className="text-3xl sm:text-4xl font-bold text-cafe-100">Skills</h1>
+            <p className="text-sm text-cafe-400 mt-1">
               개별 스킬을 관리합니다. Workflow의 Stage에서 스킬을 선택하여 사용할 수 있습니다.
             </p>
           </div>
@@ -280,14 +280,14 @@ export function Skills(): ReactElement {
         </div>
 
         {/* Category Filter */}
-        <div className="flex items-center gap-2 mb-4 sm:mb-6 overflow-x-auto pb-2">
-          <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
+        <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
+          <Filter className="w-4 h-4 text-cafe-500 flex-shrink-0" />
           <button
             onClick={() => setCategoryFilter('all')}
             className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm transition-colors whitespace-nowrap ${
               categoryFilter === 'all'
-                ? 'bg-coffee text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                ? 'bg-brand text-white shadow-lg shadow-brand/20'
+                : 'bg-cafe-800 text-cafe-300 hover:bg-cafe-700'
             }`}
           >
             All ({skills.length})
@@ -300,8 +300,8 @@ export function Skills(): ReactElement {
                 onClick={() => setCategoryFilter(cat.value)}
                 className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm transition-colors whitespace-nowrap ${
                   categoryFilter === cat.value
-                    ? `${CATEGORY_COLORS[cat.value]} border border-current`
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    ? `${CATEGORY_COLORS[cat.value]} border border-current shadow-lg`
+                    : 'bg-cafe-800 text-cafe-300 hover:bg-cafe-700'
                 }`}
               >
                 {cat.label} ({count})
@@ -333,14 +333,14 @@ export function Skills(): ReactElement {
           <div className="space-y-4 sm:space-y-6">
             {groupedSkills.map(({ category, skills: catSkills }) => (
               <div key={category.value}>
-                <h2 className={`text-xs sm:text-sm font-semibold mb-2 sm:mb-3 flex items-center gap-2 ${
+                <h2 className={`text-sm sm:text-base font-semibold mb-3 flex items-center gap-2 ${
                   CATEGORY_COLORS[category.value].split(' ')[1]
                 }`}>
                   <span className={`w-2 h-2 rounded-full ${
                     CATEGORY_COLORS[category.value].split(' ')[0]
                   }`}></span>
                   {category.label}
-                  <span className="text-gray-500 font-normal">({catSkills.length})</span>
+                  <span className="text-cafe-600 font-normal">({catSkills.length})</span>
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
                   {catSkills.map((skill) => (

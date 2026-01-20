@@ -32,25 +32,25 @@ function WorkflowCard({
 
   return (
     <Card
-      className="p-4 hover:border-coffee transition-colors cursor-pointer group"
+      className="p-4 hover:border-brand transition-all duration-300 cursor-pointer group hover:-translate-y-0.5"
       onClick={handleClick}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-bone truncate">{workflow.name}</h3>
+            <h3 className="font-semibold text-cafe-100 truncate">{workflow.name}</h3>
             {workflow.stageConfigs && (
-              <span className="px-1.5 py-0.5 bg-coffee/20 text-coffee text-xs rounded flex-shrink-0">
+              <span className="px-1.5 py-0.5 bg-brand/20 text-brand text-xs rounded flex-shrink-0">
                 Configured
               </span>
             )}
           </div>
-          <p className="text-sm text-gray-400 truncate">ID: {workflow.id}</p>
+          <p className="text-sm text-cafe-500 truncate">ID: {workflow.id}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
           {PROTECTED_RECIPES.includes(workflow.name) ? (
             <div
-              className="p-1.5 text-gray-500 flex items-center gap-1"
+              className="p-1.5 text-cafe-600 flex items-center gap-1"
               title="Built-in recipe (read-only)"
             >
               <Lock className="w-4 h-4" />
@@ -61,10 +61,10 @@ function WorkflowCard({
                 size="sm"
                 variant="ghost"
                 onClick={(e) => onEdit(workflow, e)}
-                className="p-1.5 h-auto hover:bg-gray-700"
+                className="p-1.5 h-auto hover:bg-cafe-700"
                 title="Edit recipe"
               >
-                <Edit className="w-4 h-4 text-gray-400 group-hover:text-bone" />
+                <Edit className="w-4 h-4 text-cafe-500 group-hover:text-cafe-100" />
               </Button>
               <Button
                 size="sm"
@@ -73,26 +73,26 @@ function WorkflowCard({
                 className="p-1.5 h-auto hover:bg-red-900/30"
                 title="Delete recipe"
               >
-                <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-400" />
+                <Trash2 className="w-4 h-4 text-cafe-500 hover:text-red-400" />
               </Button>
             </>
           )}
-          <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-bone" />
+          <ChevronRight className="w-4 h-4 text-cafe-600 group-hover:text-cafe-100" />
         </div>
       </div>
-      <p className="mt-2 text-sm text-gray-300 line-clamp-2">{workflow.description}</p>
+      <p className="mt-2 text-sm text-cafe-300 line-clamp-2">{workflow.description}</p>
       <div className="mt-3 flex items-center gap-2">
-        <span className="text-xs text-gray-400">Steps:</span>
+        <span className="text-xs text-cafe-500">Steps:</span>
         <div className="flex flex-wrap gap-1">
           {workflow.stages.map((stage) => {
             const config = workflow.stageConfigs?.[stage];
             // Stage category color mapping
-            const stageColorClass = 
+            const stageColorClass =
               stage === 'analyze' ? 'bg-blue-900/30 text-blue-300 border-blue-800' :
               stage === 'plan' ? 'bg-purple-900/30 text-purple-300 border-purple-800' :
-              stage === 'code' ? 'bg-green-900/30 text-green-300 border-green-800' :
-              stage === 'review' || stage === 'check' || stage === 'test' ? 'bg-yellow-900/30 text-yellow-300 border-yellow-800' :
-              'bg-gray-700 text-gray-200 border-gray-600';
+              stage === 'code' ? 'bg-brand/20 text-brand border-brand/30' :
+              stage === 'review' || stage === 'check' || stage === 'test' ? 'bg-emerald-900/30 text-emerald-300 border-emerald-800' :
+              'bg-cafe-700 text-cafe-300 border-cafe-600';
             return (
               <span
                 key={stage}
@@ -184,8 +184,8 @@ export function Workflows(): ReactElement {
     return (
       <div className="p-6 h-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-2">
-          <div className="w-8 h-8 border-4 border-coffee border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-400">Loading recipes...</p>
+          <div className="w-8 h-8 border-4 border-brand border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-cafe-500">Loading recipes...</p>
         </div>
       </div>
     );
@@ -195,8 +195,8 @@ export function Workflows(): ReactElement {
     return (
       <div className="p-6 h-full flex flex-col items-center justify-center text-center">
         <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-        <h3 className="text-lg font-semibold text-bone mb-2">Failed to load recipes</h3>
-        <p className="text-gray-400 mb-6">{error}</p>
+        <h3 className="text-lg font-semibold text-cafe-100 mb-2">Failed to load recipes</h3>
+        <p className="text-cafe-500 mb-6">{error}</p>
         <Button onClick={loadWorkflows} variant="secondary">
           Retry
         </Button>
@@ -207,8 +207,8 @@ export function Workflows(): ReactElement {
   return (
     <>
       <div className="h-full overflow-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-bone">Recipes</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <h1 className="text-3xl sm:text-4xl font-bold text-cafe-100">Recipes</h1>
           <Button onClick={handleNewWorkflow} className="flex items-center gap-2 self-start sm:self-auto">
             <Plus className="w-4 h-4" />
             New Recipe
