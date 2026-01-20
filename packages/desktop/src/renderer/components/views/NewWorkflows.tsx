@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BookOpen, Plus, Search, ChevronRight, Layers, Trash2, Edit2, Play, GitMerge, Zap, X } from 'lucide-react';
 import type { Recipe, Skill, StageConfig } from '../../types/design';
+import { Dialog } from '../ui/Dialog';
 
 interface NewWorkflowsProps {
   recipes: Recipe[];
@@ -64,6 +65,21 @@ export const NewWorkflows: React.FC<NewWorkflowsProps> = ({
   };
 
   const isProtected = editingId && editingId !== 'new' && recipes.find(r => r.id === editingId)?.protected;
+
+  const handleConfirmCopy = () => {
+    const trimmedName = copyName.trim();
+    if (!trimmedName) return;
+
+    onAddRecipe({
+      ...formData as Recipe,
+      id: Math.random().toString(36).substr(2, 9),
+      name: trimmedName,
+      protected: false,
+      isDefault: false
+    });
+    setShowCopyModal(false);
+    setEditingId(null);
+  };
 
   const handleSave = () => {
     if (!formData.name) return;
@@ -360,60 +376,36 @@ export const NewWorkflows: React.FC<NewWorkflowsProps> = ({
       </div>
 
       {/* Copy Recipe Modal */}
-      {showCopyModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-cafe-900 rounded-xl p-6 w-96 border border-cafe-700">
-            <h3 className="text-lg font-bold text-white mb-4">Save As Copy</h3>
-            <input
-              type="text"
-              value={copyName}
-              onChange={(e) => setCopyName(e.target.value)}
-              placeholder="Enter new name for copy"
-              className="w-full px-4 py-2 rounded-lg bg-cafe-800 border border-cafe-700 text-white mb-4 focus:border-brand focus:outline-none"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && copyName.trim()) {
-                  onAddRecipe({
-                    ...formData as Recipe,
-                    id: Math.random().toString(36).substr(2, 9),
-                    name: copyName.trim(),
-                    protected: false,
-                    isDefault: false
-                  });
-                  setShowCopyModal(false);
-                  setEditingId(null);
-                }
-              }}
-            />
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowCopyModal(false)}
-                className="px-4 py-2 text-cafe-400 hover:text-white transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (copyName.trim()) {
-                    onAddRecipe({
-                      ...formData as Recipe,
-                      id: Math.random().toString(36).substr(2, 9),
-                      name: copyName.trim(),
-                      protected: false,
-                      isDefault: false
-                    });
-                    setShowCopyModal(false);
-                    setEditingId(null);
-                  }
-                }}
-                className="px-4 py-2 bg-brand hover:bg-brand-hover text-white rounded-lg font-bold"
-              >
-                Save Copy
-              </button>
-            </div>
-          </div>
+      <Dialog
+        isOpen={showCopyModal}
+        onClose={() => setShowCopyModal(false)}
+        title="Save As Copy"
+        size="small"
+      >
+        <input
+          type="text"
+          value={copyName}
+          onChange={(e) => setCopyName(e.target.value)}
+          placeholder="Enter new name for copy"
+          className="w-full px-4 py-2 rounded-lg bg-cafe-800 border border-cafe-700 text-white focus:border-brand focus:outline-none"
+          autoFocus
+          onKeyDown={(e) => e.key === 'Enter' && handleConfirmCopy()}
+        />
+        <div className="flex justify-end gap-3 mt-4">
+          <button
+            onClick={() => setShowCopyModal(false)}
+            className="px-4 py-2 text-cafe-400 hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirmCopy}
+            className="px-4 py-2 bg-brand hover:bg-brand-hover text-white rounded-lg font-bold"
+          >
+            Save Copy
+          </button>
         </div>
-      )}
+      </Dialog>
     </div>
   );
 };
