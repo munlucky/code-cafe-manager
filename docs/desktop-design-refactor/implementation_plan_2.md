@@ -1,100 +1,93 @@
-# NewCafeDashboard Order 실행 기능 구현 계획
+# NewCafeDashboard Order 실행 기능 복원 계획
 
 ## 목표
-`NewCafeDashboard`에 Order 실행 관련 모든 기능을 완전히 구현
+뉴 디자인 컴포넌트의 **디자인은 유지**하면서 기존 Order 실행 기능이 정상 동작하도록 수정
 
 ---
 
-## Phase 1: 이벤트 구독 인프라 (App.tsx)
+## 현재 상태 분석
 
-### 1.1 Stage 이벤트 구독 추가
-- **파일**: `App.tsx`
-- **작업**:
-  - `order:stage-started` 이벤트 구독
-  - `order:stage-completed` 이벤트 구독  
-  - `order:stage-failed` 이벤트 구독
-  - Stage 상태를 저장할 state 추가
+### ✅ 이미 구현됨
+- `useIpcEffect.ts`: Stage 이벤트 (started/completed/failed), Session 이벤트 구독
+- `App.tsx`: Order 생성 시 자동 실행 (`handleCreateOrder`)
+- `App.tsx`: `order:output` 로그 수집
+- `NewCafeDashboard`: 기본 UI 렌더링
 
-### 1.2 Order 완료/실패 이벤트
-- **파일**: `App.tsx`
-- **작업**:
-  - `order:completed` 이벤트 → Order 상태 COMPLETED로 갱신
-  - `order:failed` 이벤트 → Order 상태 FAILED로 갱신 + 에러 저장
+### ❌ 미구현/문제점
+| 문제 | 원인 | 해결방법 |
+|------|------|----------|
+| Order 상태 갱신 안됨 | `order:completed/failed` 리스너 부재 | useIpcEffect에 추가 ✅ 완료 |
+| 터미널 HTML 미렌더링 | 일반 텍스트로 출력 | `dangerouslySetInnerHTML` 사용 |
+| cleanup 누락 | 새 리스너 정리 안됨 | cleanup 배열에 추가 필요 |
 
 ---
 
-## Phase 2: NewCafeDashboard Props 확장
+## 구현 작업
 
-### 2.1 새로운 Props 추가
+### 1. ✅ order:completed/failed 이벤트 추가 (완료)
+
+**파일**: `useIpcEffect.ts`
+
 ```typescript
-interface NewCafeDashboardProps {
-  // 기존
-  cafe: Cafe;
-  orders: DesignOrder[];
-  workflows: Recipe[];
-  onCreateOrder: (...) => void;
-  onDeleteOrder: (orderId: string) => void;
-  onSendInput: (orderId: string, input: string) => void;
-  
-  // 신규 추가
-  stageProgress: Record<string, StageInfo[]>;  // orderId → stages
-  onExecuteOrder?: (orderId: string, prompt: string) => void;  // PENDING 실행용
-}
+// Order Completed
+const cleanupOrderCompleted = window.codecafe.order.onCompleted?.((data) => {
+  updateOrder(data.orderId, { status: OrderStatus.COMPLETED });
+  updateSessionStatus(data.orderId, { status: 'completed', awaitingInput: false });
+});
+
+// Order Failed  
+const cleanupOrderFailed = window.codecafe.order.onFailed?.((data) => {
+  updateOrder(data.orderId, { status: OrderStatus.FAILED, error: data.error });
+  updateSessionStatus(data.orderId, { status: 'failed', awaitingInput: false });
+});
 ```
 
 ---
 
-## Phase 3: Stage Progress UI
+### 2. ⏳ cleanup 함수 추가 (진행 중)
 
-### 3.1 StageProgressBar 컴포넌트
-- **파일**: `NewCafeDashboard.tsx` 또는 별도 파일
-- **기능**:
-  - Stage 목록 표시 (뱃지 형태)
-  - 상태별 색상: pending(회색), running(주황 애니메이션), completed(녹색), failed(빨강)
-  - 진행률 바
+**파일**: `useIpcEffect.ts` 
 
----
-
-## Phase 4: Terminal Output 개선
-
-### 4.1 실시간 로그 렌더링 개선
-- **현재**: `activeOrder.logs` 배열 렌더링
-- **개선**:
-  - HTML 콘텐츠 안전 렌더링 (`dangerouslySetInnerHTML` 또는 정제)
-  - 자동 스크롤 토글 버튼
-  - 로그 타입별 아이콘 (stdout, stderr, system)
+```typescript
+return () => {
+  // ... 기존 cleanup
+  cleanupOrderCompleted?.();
+  cleanupOrderFailed?.();
+};
+```
 
 ---
 
-## Phase 5: PENDING Order 실행 버튼
+### 3. 터미널 HTML 렌더링
 
-### 5.1 Execute 버튼 추가
-- **조건**: `order.status === 'PENDING'`
-- **액션**: Order 카드 또는 상세 패널에서 클릭 시 실행
-- **참고**: 현재는 생성 시 자동 실행하므로 선택적
+**파일**: `NewCafeDashboard.tsx`
+
+**현재**:
+```tsx
+{log.content}
+```
+
+**변경**:
+```tsx
+<span dangerouslySetInnerHTML={{ __html: log.content }} />
+```
 
 ---
 
 ## 구현 순서
 
-| 순서 | 작업 | 파일 | 예상 시간 |
-|------|------|------|----------|
-| 1 | Stage 이벤트 구독 | App.tsx | 10분 |
-| 2 | 완료/실패 이벤트 구독 | App.tsx | 5분 |
-| 3 | Props 타입 확장 | design.ts, NewCafeDashboard | 5분 |
-| 4 | Stage Progress UI | NewCafeDashboard | 15분 |
-| 5 | Terminal HTML 렌더링 | NewCafeDashboard | 10분 |
-| 6 | 스크롤 토글 | NewCafeDashboard | 5분 |
-| 7 | 타입체크 & 테스트 | - | 5분 |
-
-**총 예상: 약 55분**
+| # | 작업 | 상태 |
+|---|------|------|
+| 1 | order:completed/failed 리스너 추가 | ✅ 완료 |
+| 2 | cleanup 함수 추가 | ⏳ 진행 중 |
+| 3 | 터미널 HTML 렌더링 | ⏳ 대기 |
+| 4 | 타입체크 & 테스트 | ⏳ 대기 |
 
 ---
 
-## 검증 계획
+## 검증
 
-1. Order 생성 → 자동 실행 확인
-2. 터미널에 실시간 로그 출력 확인
-3. Stage 진행 상황 UI 표시 확인
-4. 완료 시 상태 갱신 확인
-5. 입력 대기 시 입력 폼 표시 확인
+1. Order 생성 → 자동 실행 확인 (PENDING → RUNNING)
+2. 터미널에 색상 있는 로그 출력 확인
+3. 완료 시 상태 갱신 확인 (RUNNING → COMPLETED)
+4. 입력 대기 시 입력 폼 표시 확인

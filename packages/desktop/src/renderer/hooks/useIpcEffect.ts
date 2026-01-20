@@ -138,6 +138,20 @@ export function useIpcEffect() {
       setAwaitingInput(data.orderId, true, data.prompt);
     });
 
+    // Order Completed (via window.codecafe.order API)
+    const cleanupOrderCompleted = window.codecafe.order.onCompleted?.((data: { orderId: string }) => {
+      console.log('[IpcEffect] Order Completed (order API):', data);
+      updateOrder(data.orderId, { status: OrderStatus.COMPLETED });
+      updateSessionStatus(data.orderId, { status: 'completed', awaitingInput: false });
+    });
+
+    // Order Failed (via window.codecafe.order API)
+    const cleanupOrderFailed = window.codecafe.order.onFailed?.((data: { orderId: string; error?: string }) => {
+      console.log('[IpcEffect] Order Failed (order API):', data);
+      updateOrder(data.orderId, { status: OrderStatus.FAILED, error: data.error });
+      updateSessionStatus(data.orderId, { status: 'failed', awaitingInput: false });
+    });
+
     // Cleanup
     return () => {
       cleanupSessionStarted?.();
@@ -147,6 +161,8 @@ export function useIpcEffect() {
       cleanupStageCompleted?.();
       cleanupStageFailed?.();
       cleanupAwaitingInput?.();
+      cleanupOrderCompleted?.();
+      cleanupOrderFailed?.();
     };
   }, [
     updateBarista, 
