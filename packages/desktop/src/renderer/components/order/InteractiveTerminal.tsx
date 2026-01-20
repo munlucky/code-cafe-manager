@@ -1,11 +1,12 @@
 /**
  * Interactive Terminal Component
  * 오더의 터미널 출력을 표시하고 사용자 입력을 받는 컴포넌트
+ *
+ * Design: cafe 테마 기반의 터미널 UI
  */
 
 import { useEffect, useState, useRef, useCallback, type KeyboardEvent } from 'react';
-import { Send, ArrowUp, ArrowDown } from 'lucide-react';
-import { Button } from '../ui/Button';
+import { Terminal as TerminalIcon, ArrowRight, Sparkles, MessageSquare, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
 interface OrderOutputEvent {
@@ -20,6 +21,8 @@ interface InteractiveTerminalProps {
   onSendInput?: (message: string) => Promise<void>;
   className?: string;
   isRunning?: boolean;
+  isAwaitingInput?: boolean;
+  worktreePath?: string;
 }
 
 /**
@@ -48,6 +51,8 @@ export function InteractiveTerminal({
   onSendInput,
   className,
   isRunning = true,
+  isAwaitingInput = false,
+  worktreePath,
 }: InteractiveTerminalProps): JSX.Element {
   const [output, setOutput] = useState<OrderOutputEvent[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -58,6 +63,7 @@ export function InteractiveTerminal({
   const [sending, setSending] = useState(false);
   const outputRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const terminalEndRef = useRef<HTMLDivElement>(null);
   // 중복 검사를 위한 Set (타임스탬프+내용 기반)
   const seenKeysRef = useRef<Set<string>>(new Set());
 
@@ -112,10 +118,10 @@ export function InteractiveTerminal({
     };
   }, [orderId, addOutputEvent]);
 
-  // Auto-scroll
+  // Auto-scroll - smooth scroll to terminal end
   useEffect(() => {
-    if (autoScroll && outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+    if (autoScroll && terminalEndRef.current) {
+      terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [output, autoScroll]);
 
@@ -220,81 +226,123 @@ export function InteractiveTerminal({
   };
 
   return (
-    <div className={cn('flex flex-col h-full bg-background border border-border rounded', className)}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-bone/5">
-        <div className="flex items-center gap-2">
-          <div className={cn('w-2 h-2 rounded-full', isRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500')} />
-          <span className="text-sm text-gray-500">
-            Order: <span className="text-bone font-medium">{orderId.slice(0, 20)}...</span>
-          </span>
+    <div className={cn('flex flex-col h-full bg-terminal-bg font-mono text-sm relative rounded-xl overflow-hidden border border-cafe-800 shadow-inner', className)}>
+      {/* Terminal Header - macOS style */}
+      <div className="flex items-center justify-between px-4 py-2 bg-cafe-900 border-b border-cafe-800">
+        <div className="flex items-center text-cafe-400 text-xs">
+          <TerminalIcon className="w-3.5 h-3.5 mr-2" />
+          <span>Console Output</span>
         </div>
-        <button
-          onClick={() => setAutoScroll(!autoScroll)}
-          className={cn(
-            'text-xs px-2 py-1 rounded transition-colors',
-            autoScroll
-              ? 'bg-coffee text-white hover:bg-coffee/80'
-              : 'bg-border text-gray-400 hover:bg-border/80'
-          )}
-        >
-          {autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setAutoScroll(!autoScroll)}
+            className={cn(
+              'text-[10px] px-2 py-0.5 rounded transition-colors',
+              autoScroll
+                ? 'bg-brand/20 text-brand border border-brand/30'
+                : 'bg-cafe-800 text-cafe-500 border border-cafe-700'
+            )}
+          >
+            {autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
+          </button>
+          <div className="flex gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/50"></div>
+            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/20 border border-yellow-500/50"></div>
+            <div className="w-2.5 h-2.5 rounded-full bg-green-500/20 border border-green-500/50"></div>
+          </div>
+        </div>
       </div>
 
-      {/* Output */}
-      <div
-        ref={outputRef}
-        className="flex-1 overflow-auto bg-gray-900 text-white p-4 font-mono text-xs leading-relaxed"
-      >
+      {/* Logs Area */}
+      <div ref={outputRef} className="flex-1 overflow-y-auto p-4 terminal-scroll">
+        {/* Welcome Message */}
+        <div className="mb-6 pb-4 border-b border-cafe-800/30 text-cafe-500/60 text-xs">
+          <div className="flex items-center mb-1">
+            <Sparkles className="w-3 h-3 mr-2 text-brand" />
+            BaristaEngine v2.0.1 Initialized
+          </div>
+          <div>Target: {worktreePath || 'Local Main'}</div>
+        </div>
+
         {loading && (
-          <div className="text-gray-500">Connecting to terminal...</div>
+          <div className="text-cafe-600 animate-pulse">Connecting to terminal...</div>
         )}
         {!loading && output.length === 0 && (
-          <div className="text-gray-500">Waiting for output...</div>
+          <div className="text-cafe-600">Waiting for output...</div>
         )}
-        {output.map((e, i) => (
-          <div key={i} className="mb-0.5 whitespace-pre-wrap break-all">
-            <span className="text-gray-600">[{formatTimestamp(e.timestamp)}]</span>
-            {e.type !== 'stdout' && (
-              <span className={cn('ml-1', getTypeColor(e.type))}>{getTypePrefix(e.type)}</span>
-            )}
-            <span className={cn('ml-1', getTypeColor(e.type))}>{e.content}</span>
-          </div>
-        ))}
+
+        <div className="space-y-1">
+          {output.map((e, i) => (
+            <div key={i} className="flex group items-start hover:bg-white/5 px-2 py-0.5 rounded -mx-2 transition-colors">
+              <span className="text-cafe-700 text-[10px] w-14 shrink-0 select-none pt-0.5 tracking-tighter opacity-50 font-sans">
+                {formatTimestamp(e.timestamp)}
+              </span>
+              <div className={cn(
+                'flex-1 break-all whitespace-pre-wrap leading-relaxed',
+                e.type === 'stderr' ? 'text-red-400' :
+                e.type === 'system' ? 'text-blue-400' :
+                e.type === 'user-input' ? 'text-yellow-400 italic' :
+                'text-cafe-400'
+              )}>
+                {e.type === 'user-input' && <span className="mr-2 text-yellow-500">➜</span>}
+                {e.type === 'system' && <span className="mr-2 text-blue-400">🤖</span>}
+                {e.content}
+              </div>
+            </div>
+          ))}
+          {/* Thinking Indicator */}
+          {isRunning && output.length > 0 && (
+            <div className="flex items-center text-cafe-600 mt-2 pl-16 animate-pulse">
+              <span className="w-1.5 h-3 bg-brand block mr-2"></span>
+              <span className="text-xs">Processing...</span>
+            </div>
+          )}
+          <div ref={terminalEndRef} />
+        </div>
       </div>
 
-      {/* Input Area */}
-      {isRunning && onSendInput && (
-        <div className="flex items-center gap-2 px-3 py-2 border-t border-border bg-gray-800">
-          <div className="flex items-center gap-1 text-xs text-gray-500">
-            <ArrowUp className="w-3 h-3" />
-            <ArrowDown className="w-3 h-3" />
-          </div>
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type a message to the AI agent..."
-            className="flex-1 px-3 py-1.5 bg-gray-900 border border-gray-700 rounded text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-coffee"
-            disabled={sending}
-          />
-          <Button
-            onClick={handleSendInput}
-            disabled={!inputValue.trim() || sending}
-            size="sm"
-            className="flex items-center gap-1"
-          >
-            <Send className="w-3 h-3" />
-            {sending ? 'Sending...' : 'Send'}
-          </Button>
+      {/* Input Area - Highlight when awaiting input */}
+      {(isAwaitingInput || isRunning) && onSendInput && (
+        <div className={cn(
+          'border-t border-cafe-800 p-3 transition-colors duration-300',
+          isAwaitingInput ? 'bg-brand/10 border-brand/30' : 'bg-cafe-900'
+        )}>
+          {isAwaitingInput && (
+            <div className="flex items-center mb-2 text-brand-light text-xs font-bold animate-pulse">
+              <MessageSquare className="w-3 h-3 mr-1.5" />
+              Input Required
+            </div>
+          )}
+          <form onSubmit={(e) => { e.preventDefault(); handleSendInput(); }} className="relative flex items-center">
+            <span className="text-brand mr-2 font-bold">❯</span>
+            <input
+              ref={inputRef}
+              autoFocus={isAwaitingInput}
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type command or response..."
+              className="flex-1 bg-transparent border-none text-cafe-100 focus:ring-0 outline-none placeholder-cafe-700"
+              disabled={sending}
+            />
+            <div className="flex items-center gap-2 text-cafe-600 mr-2">
+              <ArrowUp className="w-3 h-3" />
+              <ArrowDown className="w-3 h-3" />
+            </div>
+            <button
+              type="submit"
+              disabled={!inputValue.trim() || sending}
+              className="p-1.5 bg-cafe-800 hover:bg-brand text-cafe-400 hover:text-white rounded transition-colors disabled:opacity-50"
+            >
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </form>
         </div>
       )}
 
       {/* Footer */}
-      <div className="px-4 py-1.5 border-t border-border bg-bone/5 text-xs text-gray-500 flex justify-between">
+      <div className="px-4 py-1.5 border-t border-cafe-800 bg-cafe-900/50 text-[10px] text-cafe-600 flex justify-between">
         <span>{output.length} lines</span>
         {inputHistory.length > 0 && (
           <span>{inputHistory.length} in history</span>

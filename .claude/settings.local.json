@@ -81,7 +81,8 @@
       "Bash(node:*)",
       "Bash(cmd //c taskkill:*)",
       "Bash(powershell.exe:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(git check-ignore:*)"
     ],
     "deny": [],
     "ask": []

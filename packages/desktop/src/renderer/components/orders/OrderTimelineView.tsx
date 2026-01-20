@@ -1,15 +1,13 @@
 import { type ReactElement, useState, useMemo } from 'react';
-import { 
-  CheckCircle, 
-  Circle, 
-  XCircle, 
-  Terminal, 
-  Clock, 
-  MessageSquare, 
-  Play, 
-  ChevronDown, 
-  ChevronRight, 
-  AlertTriangle 
+import {
+  CheckCircle2,
+  Circle,
+  XCircle,
+  Terminal,
+  MessageSquare,
+  Play,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
@@ -53,19 +51,19 @@ export function OrderTimelineView({
       data: TimelineEvent | TimelineEvent[];
       id: string;
     }> = [];
-    
+
     let currentLogs: TimelineEvent[] = [];
-    
+
     events.forEach((event) => {
       if (event.type === 'log') {
         currentLogs.push(event);
       } else {
         // Flush logs
         if (currentLogs.length > 0) {
-          groups.push({ 
-            type: 'logs', 
-            data: [...currentLogs], 
-            id: `logs-${currentLogs[0].id}` 
+          groups.push({
+            type: 'logs',
+            data: [...currentLogs],
+            id: `logs-${currentLogs[0].id}`
           });
           currentLogs = [];
         }
@@ -74,10 +72,10 @@ export function OrderTimelineView({
     });
 
     if (currentLogs.length > 0) {
-      groups.push({ 
-        type: 'logs', 
-        data: [...currentLogs], 
-        id: `logs-${currentLogs[0].id}` 
+      groups.push({
+        type: 'logs',
+        data: [...currentLogs],
+        id: `logs-${currentLogs[0].id}`
       });
     }
 
@@ -85,68 +83,105 @@ export function OrderTimelineView({
   }, [events]);
 
   return (
-    <div className={cn("flex flex-col h-full bg-gray-900 overflow-hidden", className)}>
-       {/* Header is handled by container */}
-       
-       <div className="flex-1 overflow-auto p-4 space-y-4">
-          {events.length === 0 && (
-            <div className="text-center text-gray-500 py-10">
-              No timeline events recorded yet.
-            </div>
-          )}
+    <div className={cn("flex flex-col h-full bg-cafe-950 overflow-hidden", className)}>
+      {/* Timeline with left connecting line */}
+      <div className="flex-1 overflow-auto p-6 space-y-6 relative">
+        {/* Vertical connecting line */}
+        <div className="absolute left-6 top-6 bottom-6 w-px bg-cafe-800/50" />
 
-          {groupedEvents.map((group) => {
-            if (group.type === 'event') {
-              const event = group.data as TimelineEvent;
-              return <TimelineEventItem key={group.id} event={event} />;
-            } else {
-               const logs = group.data as TimelineEvent[];
-               return <LogGroup key={group.id} logs={logs} />;
-            }
-          })}
-       </div>
+        {events.length === 0 && (
+          <div className="text-center text-cafe-500 py-10">
+            No timeline events recorded yet.
+          </div>
+        )}
+
+        {groupedEvents.map((group, idx) => {
+          if (group.type === 'event') {
+            const event = group.data as TimelineEvent;
+            return <TimelineEventItem key={group.id} event={event} index={idx} />;
+          } else {
+            const logs = group.data as TimelineEvent[];
+            return <LogGroup key={group.id} logs={logs} />;
+          }
+        })}
+      </div>
     </div>
   );
 }
 
-function TimelineEventItem({ event }: { event: TimelineEvent }) {
+function TimelineEventItem({ event, index = 0 }: { event: TimelineEvent; index?: number }) {
   const getIcon = () => {
     switch (event.type) {
-      case 'stage_start': return <Play className="w-4 h-4 text-blue-400" />;
-      case 'stage_complete': return <CheckCircle className="w-4 h-4 text-green-400" />;
-      case 'stage_fail': return <XCircle className="w-4 h-4 text-red-500" />;
-      case 'input': return <MessageSquare className="w-4 h-4 text-yellow-400" />;
-      case 'system': return <Terminal className="w-4 h-4 text-gray-400" />;
-      default: return <Circle className="w-4 h-4 text-gray-500" />;
+      case 'stage_start': return <Play className="w-3.5 h-3.5" />;
+      case 'stage_complete': return <CheckCircle2 className="w-3.5 h-3.5" />;
+      case 'stage_fail': return <XCircle className="w-3.5 h-3.5" />;
+      case 'input': return <MessageSquare className="w-3.5 h-3.5" />;
+      case 'system': return <Terminal className="w-3.5 h-3.5" />;
+      default: return <Circle className="w-3.5 h-3.5" />;
     }
   };
 
-  const getBgColor = () => {
+  const getIconStyle = () => {
     switch (event.type) {
-       case 'stage_fail': return 'bg-red-500/10 border-red-500/30';
-       case 'input': return 'bg-yellow-500/10 border-yellow-500/30';
-       case 'stage_start': return 'bg-blue-500/10 border-blue-500/30';
-       case 'stage_complete': return 'bg-green-500/10 border-green-500/30';
-       default: return 'bg-gray-800 border-gray-700';
+      case 'stage_fail': return 'bg-red-900/20 border-red-500/50 text-red-400';
+      case 'input': return 'bg-yellow-900/20 border-yellow-500/50 text-yellow-400';
+      case 'stage_start': return 'bg-blue-900/20 border-blue-500/50 text-blue-400';
+      case 'stage_complete': return 'bg-emerald-900/20 border-emerald-500/50 text-emerald-400';
+      default: return 'bg-cafe-900 border-cafe-700 text-cafe-500';
+    }
+  };
+
+  const getContentStyle = () => {
+    switch (event.type) {
+      case 'stage_fail': return 'bg-red-950/10 border-red-900/20 text-red-100';
+      case 'input': return 'bg-yellow-950/10 border-yellow-900/20 text-yellow-100 italic';
+      case 'stage_start': return 'bg-blue-950/10 border-blue-900/20 text-blue-100';
+      case 'stage_complete': return 'bg-emerald-950/10 border-emerald-900/20 text-emerald-100';
+      default: return 'bg-cafe-900 border-cafe-800 text-cafe-400';
+    }
+  };
+
+  const getLabelStyle = () => {
+    switch (event.type) {
+      case 'stage_fail': return 'text-red-400';
+      case 'input': return 'text-yellow-400';
+      case 'stage_start': return 'text-blue-400';
+      case 'stage_complete': return 'text-emerald-400';
+      default: return 'text-cafe-500';
     }
   };
 
   return (
-    <div className={cn("flex gap-3 p-3 rounded-lg border", getBgColor())}>
-       <div className="mt-0.5">{getIcon()}</div>
-       <div className="flex-1 min-w-0">
-          <div className="flex justify-between items-start">
-             <span className="text-sm font-medium text-bone">
-                {event.stageName ? `${event.stageName}: ` : ''}{event.type.replace('_', ' ').toUpperCase()}
-             </span>
-             <span className="text-xs text-gray-500 font-mono ml-2 shrink-0">
-                {formatTime(event.timestamp)}
-             </span>
-          </div>
-          <div className="text-xs text-gray-300 mt-1 whitespace-pre-wrap">
-             {event.content}
-          </div>
-       </div>
+    <div
+      className="relative flex gap-4 animate-in fade-in slide-in-from-left-2"
+      style={{ animationDelay: `${index * 50}ms` }}
+    >
+      {/* Icon */}
+      <div className="relative z-10 shrink-0">
+        <div className={cn(
+          'w-8 h-8 rounded-full flex items-center justify-center border-2 shadow-lg',
+          getIconStyle()
+        )}>
+          {getIcon()}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 pt-1">
+        <div className="flex justify-between items-baseline mb-1">
+          <span className={cn('text-xs font-bold uppercase tracking-wider', getLabelStyle())}>
+            {event.type.replace('_', ' ')}
+          </span>
+          <span className="text-[10px] font-mono text-cafe-600">{formatTime(event.timestamp)}</span>
+        </div>
+
+        <div className={cn('p-3 rounded-lg border text-sm', getContentStyle())}>
+          {event.stageName && (
+            <span className="font-bold mr-2">{event.stageName}:</span>
+          )}
+          {event.content}
+        </div>
+      </div>
     </div>
   );
 }
@@ -157,24 +192,24 @@ function LogGroup({ logs }: { logs: TimelineEvent[] }) {
   const hasMore = logs.length > previewCount;
 
   return (
-    <div className="ml-2 pl-4 border-l-2 border-gray-800 space-y-1">
-       {/* Preview logs */}
-       {(expanded ? logs : logs.slice(0, previewCount)).map(log => (
-         <div key={log.id} className="text-xs font-mono text-gray-400 flex gap-2 hover:bg-gray-800/50 rounded px-1">
-           <span className="text-gray-600 shrink-0 select-none">{formatTime(log.timestamp)}</span>
-           <span className="break-all whitespace-pre-wrap">{log.content}</span>
-         </div>
-       ))}
-       
-       {hasMore && (
-         <button 
-           onClick={() => setExpanded(!expanded)}
-           className="text-xs text-coffee hover:underline flex items-center gap-1 mt-1 px-1"
-         >
-           {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-           {expanded ? 'Show less' : `Show ${logs.length - previewCount} more lines...`}
-         </button>
-       )}
+    <div className="ml-12 pl-4 border-l-2 border-cafe-800 space-y-1">
+      {/* Preview logs */}
+      {(expanded ? logs : logs.slice(0, previewCount)).map(log => (
+        <div key={log.id} className="text-xs font-mono text-cafe-400 flex gap-2 hover:bg-cafe-800/50 rounded px-2 py-0.5">
+          <span className="text-cafe-600 shrink-0 select-none">{formatTime(log.timestamp)}</span>
+          <span className="break-all whitespace-pre-wrap">{log.content}</span>
+        </div>
+      ))}
+
+      {hasMore && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-xs text-brand hover:underline flex items-center gap-1 mt-1 px-2"
+        >
+          {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          {expanded ? 'Show less' : `Show ${logs.length - previewCount} more lines...`}
+        </button>
+      )}
     </div>
   );
 }
