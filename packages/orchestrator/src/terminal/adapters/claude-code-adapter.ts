@@ -230,9 +230,9 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       args.push('--continue');
     }
 
-    if (ctx.streaming) {
-      args.push('--output-format=stream-json');
-    }
+    // Enable streaming by default for real-time output
+    // stream-json format provides incremental updates
+    args.push('--output-format=stream-json');
 
     return { args, prompt: cleanPrompt };
   }
@@ -397,10 +397,36 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
 
       childProc.stdout?.on('data', (data: Buffer) => {
         const chunk = data.toString();
-        // Debug log (limit chunk size)
-        this.log('stdout-chunk', { chunk: chunk.substring(0, 200) });
         output += chunk;
-        if (onData) onData(chunk);
+        
+        // Parse stream-json format and extract content
+        // Each line is a JSON object like: {"type":"assistant","message":{"content":"..."}}
+        const lines = chunk.split('\n').filter(line => line.trim());
+        for (const line of lines) {
+          try {
+            const parsed = JSON.parse(line);
+            // Extract content from various message types
+            if (parsed.type === 'assistant' && parsed.message?.content) {
+              // Assistant text chunks
+              if (onData) onData(parsed.message.content);
+            } else if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+              // Streaming text deltas
+              if (onData) onData(parsed.delta.text);
+            } else if (parsed.type === 'text' && parsed.text) {
+              // Simple text output
+              if (onData) onData(parsed.text);
+            } else if (parsed.content) {
+              // Generic content field
+              if (onData) onData(parsed.content);
+            }
+          } catch {
+            // Not JSON or parsing failed - pass raw chunk
+            // (This can happen with partial chunks or non-JSON output)
+            if (onData && line.trim() && !line.startsWith('{')) {
+              onData(line);
+            }
+          }
+        }
       });
 
       childProc.stderr?.on('data', (data: Buffer) => {

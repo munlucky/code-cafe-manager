@@ -54,7 +54,7 @@ const convertToDesignOrder = (order: Order, sessionStatus?: { awaitingInput: boo
 };
 
 // Convert backend Workflow to design Recipe
-const convertToDesignRecipe = (wf: Workflow): Recipe => ({
+const convertToDesignRecipe = (wf: Workflow & { stageConfigs?: Record<string, { skills?: string[] }> }): Recipe => ({
   id: wf.id,
   name: wf.name,
   description: wf.description || '',
@@ -62,9 +62,11 @@ const convertToDesignRecipe = (wf: Workflow): Recipe => ({
   stageConfigs: Object.fromEntries(
     wf.stages.map((stage: string) => [
       stage,
-      { skills: [] } // Will be populated from skill assignments
+      { skills: wf.stageConfigs?.[stage]?.skills || [] }
     ])
   ),
+  isDefault: wf.isDefault,
+  protected: wf.protected,
 });
 
 // Convert core Cafe to design Cafe
@@ -118,8 +120,10 @@ export function App(): JSX.Element {
 
   useIpcEffect();
 
-  // Load cafes, recipes, skills on mount
+  // Load cafes, recipes, skills, and orders on mount
   useEffect(() => {
+    const { setOrders } = useOrderStore.getState();
+    
     const loadData = async () => {
       // Load cafes
       await loadCafes();
@@ -134,6 +138,13 @@ export function App(): JSX.Element {
       const skillRes = await window.codecafe.skill.list();
       if (skillRes.success && skillRes.data) {
         setSkills(skillRes.data.map(convertToDesignSkill));
+      }
+
+      // Load orders from backend (for persistence)
+      const orderRes = await window.codecafe.order.getAll();
+      if (orderRes.success && orderRes.data) {
+        console.log('[App] Loaded orders from backend:', orderRes.data.length);
+        setOrders(orderRes.data);
       }
     };
     loadData();

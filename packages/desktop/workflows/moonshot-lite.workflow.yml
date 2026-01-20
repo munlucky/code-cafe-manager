@@ -1,6 +1,8 @@
 workflow:
   name: moonshot-lite
   description: Moonshot Orchestrator 스타일 워크플로우 - 분석 → 계획 → 구현 → 검증
+  isDefault: true
+  protected: true
   stages:
     - analyze
     - plan

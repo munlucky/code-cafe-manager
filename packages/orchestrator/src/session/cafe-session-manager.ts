@@ -111,6 +111,8 @@ export class CafeSessionManager extends EventEmitter {
       this.emit('session:cancelled', data);
       this.cleanupSession(cafeId, order.id);
     });
+    session.on('session:awaiting', (data) => this.emit('session:awaiting', data));
+    session.on('session:resumed', (data) => this.emit('session:resumed', data));
     session.on('output', (data) => this.emit('output', data));
     session.on('stage:started', (data) => this.emit('stage:started', data));
     session.on('stage:completed', (data) => this.emit('stage:completed', data));

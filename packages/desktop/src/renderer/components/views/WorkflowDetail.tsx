@@ -412,7 +412,7 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps): ReactElemen
   }
 
   const isAnyEditing = editingWorkflowName || editingWorkflowDesc || Object.keys(editingStages).length > 0;
-  const isProtected = workflow?.id === 'moon'; // moonshot-lite is the default recipe
+  const isProtected = workflow?.protected === true;
 
   return (
     <div className="h-full flex flex-col">

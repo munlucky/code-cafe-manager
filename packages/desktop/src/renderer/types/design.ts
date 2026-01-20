@@ -81,6 +81,8 @@ export interface Recipe {
   description: string;
   stages: string[]; // List of stage names (e.g., ['analyze', 'plan', 'code'])
   stageConfigs: Record<string, StageConfig>; // Configuration for each stage mapping to skills
+  isDefault?: boolean; // Default recipe flag
+  protected?: boolean; // Cannot be deleted or modified
 }
 
 // Deprecated alias for backward compatibility if needed, but we use Recipe now

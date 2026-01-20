@@ -70,6 +70,8 @@ export interface Workflow {
   name: string;
   description?: string;
   stages: string[];
+  isDefault?: boolean;
+  protected?: boolean;
 }
 
 // Extended workflow types with stage configuration

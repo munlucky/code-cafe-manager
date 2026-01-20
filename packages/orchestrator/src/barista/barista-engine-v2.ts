@@ -67,6 +67,9 @@ export class BaristaEngineV2 extends EventEmitter {
     this.sessionManager.on('session:failed', (data) => {
       this.emit('order:failed', data);
     });
+    this.sessionManager.on('session:awaiting', (data) => {
+      this.emit('order:awaiting-input', data);
+    });
     this.sessionManager.on('stage:started', (data) => {
       this.emit('stage:started', data);
     });

@@ -54,6 +54,10 @@ interface WorkflowInfo {
   stages: string[];
   // Stage별 provider 설정 (workflow 내에 정의된 경우)
   stageConfigs?: Record<string, StageAssignment>;
+  // 기본 레시피 여부
+  isDefault?: boolean;
+  // 삭제/수정 보호 여부
+  protected?: boolean;
 }
 
 /**
@@ -185,6 +189,12 @@ function updateWorkflow(orchDir: string, workflowData: WorkflowInfo): WorkflowIn
     throw new Error(`Workflow with id "${workflowData.id}" not found.`);
   }
 
+  // Check if workflow is protected
+  const existingWorkflow = getWorkflow(orchDir, workflowData.id);
+  if (existingWorkflow?.protected) {
+    throw new Error(`Cannot modify protected workflow: ${workflowData.id}`);
+  }
+
   console.log('[DEBUG] updateWorkflow received:', JSON.stringify(workflowData, null, 2));
   
   writeWorkflowToFile(filePath, workflowData);
@@ -203,6 +213,12 @@ function updateWorkflow(orchDir: string, workflowData: WorkflowInfo): WorkflowIn
  * Delete a workflow
  */
 function deleteWorkflow(orchDir: string, id: string): { success: boolean } {
+  // Check if workflow is protected
+  const workflow = getWorkflow(orchDir, id);
+  if (workflow?.protected) {
+    throw new Error(`Cannot delete protected workflow: ${id}`);
+  }
+  
   const filePath = path.join(orchDir, 'workflows', `${id}.workflow.yml`);
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
@@ -259,6 +275,8 @@ function parseWorkflowInfo(filePath: string, id: string): WorkflowInfo | null {
       description,
       stages,
       stageConfigs: Object.keys(stageConfigs).length > 0 ? stageConfigs : undefined,
+      isDefault: workflow?.isDefault === true,
+      protected: workflow?.protected === true,
     };
   } catch (error) {
     return null;

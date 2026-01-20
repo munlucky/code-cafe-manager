@@ -61,6 +61,8 @@ export const NewWorkflows: React.FC<NewWorkflowsProps> = ({
     }
   };
 
+  const isProtected = editingId && editingId !== 'new' && recipes.find(r => r.id === editingId)?.protected;
+
   const handleSave = () => {
     if (!formData.name) return;
 
@@ -201,11 +203,12 @@ export const NewWorkflows: React.FC<NewWorkflowsProps> = ({
                     type="text"
                     value={formData.name}
                     onChange={e => setFormData({...formData, name: e.target.value})}
-                    className="bg-transparent text-2xl font-bold text-white placeholder-cafe-600 outline-none w-full border-b border-transparent focus:border-cafe-700 transition-colors"
+                    className="bg-transparent text-2xl font-bold text-white placeholder-cafe-600 outline-none w-full border-b border-transparent focus:border-cafe-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     placeholder="Enter recipe name..."
+                    disabled={!!isProtected}
                    />
                  </div>
-                 {editingId !== 'new' && (
+                 {editingId !== 'new' && !isProtected && (
                     <button onClick={() => onDeleteRecipe(editingId)} className="p-2 text-red-400 hover:bg-red-900/20 rounded-lg transition-colors">
                       <Trash2 className="w-5 h-5" />
                     </button>
@@ -239,9 +242,11 @@ export const NewWorkflows: React.FC<NewWorkflowsProps> = ({
                         <div className="flex-1 bg-cafe-950 rounded-xl border border-cafe-800 p-4 transition-all hover:border-cafe-700">
                           <div className="flex justify-between items-center mb-3">
                             <span className="text-cafe-200 font-bold text-sm tracking-wide">{stage}</span>
-                            <button onClick={() => removeStage(idx)} className="text-cafe-600 hover:text-red-400 p-1 rounded transition-colors">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {!isProtected && (
+                              <button onClick={() => removeStage(idx)} className="text-cafe-600 hover:text-red-400 p-1 rounded transition-colors">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
 
                           {/* Assigned Skills */}
@@ -252,18 +257,21 @@ export const NewWorkflows: React.FC<NewWorkflowsProps> = ({
                                  <div key={skillId} className="flex items-center px-2 py-1 bg-cafe-800 text-cafe-300 rounded text-xs border border-cafe-700 animate-in zoom-in">
                                    <Zap className="w-3 h-3 mr-1 text-brand-light" />
                                    {skill.name}
-                                   <button
-                                     onClick={() => removeSkillFromStage(idx, skillId)}
-                                     className="ml-1.5 hover:text-red-400"
-                                   >
-                                     <X className="w-3 h-3" />
-                                   </button>
+                                   {!isProtected && (
+                                     <button
+                                       onClick={() => removeSkillFromStage(idx, skillId)}
+                                       className="ml-1.5 hover:text-red-400"
+                                     >
+                                       <X className="w-3 h-3" />
+                                     </button>
+                                   )}
                                  </div>
                                ) : null;
                              })}
 
                              {/* Add Skill Button */}
-                             <div className="relative">
+                             {!isProtected && (
+                               <div className="relative">
                                <button
                                  onClick={() => setActiveStageIndex(activeStageIndex === idx ? null : idx)}
                                  className="flex items-center px-2 py-1 bg-cafe-900 hover:bg-cafe-800 text-cafe-500 hover:text-brand-light rounded text-xs border border-cafe-800 border-dashed transition-colors"
@@ -294,34 +302,58 @@ export const NewWorkflows: React.FC<NewWorkflowsProps> = ({
                                  </div>
                                )}
                              </div>
+                             )}
                           </div>
                         </div>
                       </div>
                     ))}
 
                     {/* Add Stage Input */}
-                    <div className="flex items-center gap-3 pt-2">
-                       <div className="w-6 flex justify-center">
-                         <div className="w-2 h-2 rounded-full bg-cafe-800"></div>
-                       </div>
-                       <div className="flex-1 flex gap-2">
-                         <input
-                           type="text"
-                           value={stageInput}
-                           onChange={e => setStageInput(e.target.value)}
-                           onKeyDown={e => e.key === 'Enter' && addStage()}
-                           placeholder="New stage name (e.g. 'Security Scan')"
-                           className="flex-1 bg-cafe-950 border border-cafe-800 rounded-lg px-3 py-2.5 text-sm text-white focus:border-brand outline-none transition-colors focus:bg-cafe-900"
-                         />
-                         <button onClick={addStage} className="px-4 py-2 bg-cafe-800 hover:bg-cafe-700 text-white rounded-lg text-sm font-medium transition-colors">Add Stage</button>
-                       </div>
-                    </div>
+                    {!isProtected && (
+                      <div className="flex items-center gap-3 pt-2">
+                         <div className="w-6 flex justify-center">
+                           <div className="w-2 h-2 rounded-full bg-cafe-800"></div>
+                         </div>
+                         <div className="flex-1 flex gap-2">
+                           <input
+                             type="text"
+                             value={stageInput}
+                             onChange={e => setStageInput(e.target.value)}
+                             onKeyDown={e => e.key === 'Enter' && addStage()}
+                             placeholder="New stage name (e.g. 'Security Scan')"
+                             className="flex-1 bg-cafe-950 border border-cafe-800 rounded-lg px-3 py-2.5 text-sm text-white focus:border-brand outline-none transition-colors focus:bg-cafe-900"
+                           />
+                           <button onClick={addStage} className="px-4 py-2 bg-cafe-800 hover:bg-cafe-700 text-white rounded-lg text-sm font-medium transition-colors">Add Stage</button>
+                         </div>
+                      </div>
+                    )}
                   </div>
                </div>
 
                <div className="pt-6 border-t border-cafe-800 flex justify-end gap-3 sticky bottom-0 bg-cafe-900 pb-2">
                  <button onClick={() => setEditingId(null)} className="px-5 py-2.5 text-cafe-400 hover:text-white transition-colors">Cancel</button>
-                 <button onClick={handleSave} className="px-6 py-2.5 bg-brand hover:bg-brand-hover text-white rounded-lg font-bold shadow-lg transition-transform active:scale-95">Save Recipe</button>
+                 {isProtected ? (
+                   <button 
+                     onClick={() => {
+                       const newName = prompt('Enter new name for copy:', `${formData.name} (Copy)`);
+                       if (newName) {
+                         onAddRecipe({
+                           ...formData as Recipe,
+                           id: Math.random().toString(36).substr(2, 9),
+                           name: newName,
+                           protected: false,
+                           isDefault: false
+                         });
+                         setEditingId(null);
+                       }
+                     }}
+                     className="px-6 py-2.5 bg-cafe-700 hover:bg-cafe-600 text-white rounded-lg font-bold shadow-lg transition-transform active:scale-95"
+                   >
+                     Save As Copy
+                   </button>
+                 ) : (
+                   <button onClick={handleSave} className="px-6 py-2.5 bg-brand hover:bg-brand-hover text-white rounded-lg font-bold shadow-lg transition-transform active:scale-95">Save Recipe</button>
+                 )}
                </div>
             </div>
           ) : (

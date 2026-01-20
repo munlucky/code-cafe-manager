@@ -16,9 +16,13 @@
 ### ✅ 문제 해결 완료
 | 문제 | 원인 | 해결방법 |
 |------|------|----------|
-| Order 상태 갱신 안됨 | `order:completed/failed` 리스너 부재 | useIpcEffect에 추가 ✅ 완료 |
-| 터미널 HTML 미렌더링 | 일반 텍스트로 출력 | `dangerouslySetInnerHTML` 사용 ✅ 완료 |
-| cleanup 누락 | 새 리스너 정리 안됨 | cleanup 배열에 추가 ✅ 완료 |
+| Order 상태 COMPLETED 갱신 안됨 | `order:completed/failed` 리스너 부재 | useIpcEffect에 추가 ✅ |
+| Order 상태 RUNNING 갱신 안됨 | `session-started`시 Order 상태 미업데이트 | `updateOrder(RUNNING)` 추가 ✅ |
+| **Order 영속성 없음** | 앱 시작시 Order 로드 안함 | `order.getAll()` 추가 ✅ |
+| 터미널 HTML 미렌더링 | 일반 텍스트로 출력 | `dangerouslySetInnerHTML` 사용 ✅ |
+| cleanup 누락 | 새 리스너 정리 안됨 | cleanup 배열에 추가 ✅ |
+| **스트리밍 안됨** | Claude CLI stdout 버퍼링 | `--output-format=stream-json` 활성화 ✅ |
+| **session:awaiting 전파 누락** | CafeSessionManager/BaristaEngineV2 미전파 | 이벤트 전파 추가 ✅ |
 
 ---
 

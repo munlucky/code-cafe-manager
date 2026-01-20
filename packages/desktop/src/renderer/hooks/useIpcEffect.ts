@@ -60,6 +60,8 @@ export function useIpcEffect() {
     // Session Started
     const cleanupSessionStarted = window.codecafe.order.onSessionStarted?.((data: { orderId: string }) => {
       console.log('[IpcEffect] Session Started:', data);
+      // Order 상태를 RUNNING으로 업데이트
+      updateOrder(data.orderId, { status: OrderStatus.RUNNING });
       updateSessionStatus(data.orderId, { 
         status: 'running', 
         awaitingInput: false 
