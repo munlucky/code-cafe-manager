@@ -32,13 +32,15 @@ codecafe/
 ├── .orch/              # Orchestrator runtime data (gitignored)
 │   ├── orders/             # Order execution logs
 │   ├── runs/               # Workflow run data
+│   ├── roles/              # User-defined custom roles
 │   └── skills/             # Skill definitions (JSON)
 ├── packages/
 │   ├── core/           # Domain models, recipe engine, types
+│   │   └── types/          # Type exports (terminal, role)
 │   ├── cli/            # codecafe CLI commands
 │   ├── desktop/        # Electron UI (Manager)
 │   │   ├── src/main/       # Electron main process
-│   │   │   └── ipc/        # IPC handlers (cafe, order, workflow, skill, role, etc.)
+│   │   │   └── ipc/        # IPC handlers (cafe, order, workflow, skill, orchestrator, etc.)
 │   │   ├── src/preload/    # Preload scripts (CommonJS)
 │   │   └── src/renderer/   # React UI
 │   ├── orchestrator/   # Integrated orchestrator engine
@@ -48,14 +50,18 @@ codecafe/
 │   │   ├── common/         # Shared provider interfaces
 │   │   ├── claude-code/    # Claude Code Provider (PTY)
 │   │   └── codex/          # Codex Provider
+│   ├── roles/          # Built-in role definitions (Handlebars templates)
 │   ├── git-worktree/   # Git worktree management
 │   └── schema/         # YAML/JSON schema and validation
-├── agents/             # Agent configuration (optional)
+├── agents/             # Agent definitions (PM, design-spec, docs, impl, etc.)
 ├── recipes/
 │   └── house-blend/    # Default recipe templates
 └── docs/
-    ├── old/            # Archived documentation
+    ├── architecture/       # Architecture diagrams and docs
+    ├── claude-cli-terminal/ # Terminal execution documentation
+    ├── old/                # Archived documentation
     ├── desktop-architecture.md
+    ├── refactoring-workflow.md
     ├── terminal-execution-flow.md
     └── IMPLEMENTATION_SUMMARY.md
 ```
@@ -103,6 +109,13 @@ codecafe/
   - `orchestrator.ts`: Integrated orchestrator
   - `storage.ts`: JSON storage
   - `log-manager.ts`: Log management
+  - `types/terminal.ts`: Terminal type definitions
+  - `types/role.ts`: Role type definitions
+- **Exports**:
+  - `.`: Main exports
+  - `./types`: Type definitions
+  - `./types/terminal`: Terminal types
+  - `./types/role`: Role types
 - **Dependencies**: `yaml`, `zod`
 
 ### @codecafe/cli
@@ -120,13 +133,14 @@ codecafe/
 - **Main views**:
   - Dashboard: Overall status
   - New Order: Create new order
-  - Order Detail: Detailed execution status
+  - Order Detail: Detailed execution status with session/stage tracking
   - Baristas: Barista list
-- **Tech stack**: Electron, React, TailwindCSS, Zustand, Framer Motion, webpack
+- **Tech stack**: Electron 28, React 18, TailwindCSS 3, Zustand 4, Framer Motion 10, webpack 5
 - **IPC Architecture**: main ↔ renderer communication via contextBridge
   - `preload/index.cts`: Exposes IPC API to renderer (CommonJS)
-  - `main/ipc/*.ts`: IPC handlers (cafe, barista, order, workflow, run, config, role, terminal, worktree, provider)
+  - `main/ipc/*.ts`: IPC handlers (cafe, orchestrator, order, workflow, skill, terminal, worktree, provider)
   - Registry: Manages cafe metadata in `~/.codecafe/cafes.json`
+- **Additional UI deps**: Radix UI, Lucide icons, ansi-to-html, shadcn
 
 ### @codecafe/orchestrator
 - **Role**: Multi AI CLI orchestrator engine
@@ -145,13 +159,28 @@ codecafe/
 ### @codecafe/git-worktree
 - **Role**: Git worktree parallel execution management
 
+### packages/roles/
+- **Role**: Built-in role definitions with Handlebars templates
+- **Format**: Markdown with YAML frontmatter
+- **Template syntax**: Handlebars (variables, conditionals, loops)
+- **Role files**:
+  - `planner.md`: Implementation planning
+  - `coder.md`: Code implementation
+  - `tester.md`: Testing and coverage
+  - `reviewer.md`: Code review
+  - `generic-agent.md`: Generic template
+- **Loading priority**: `.orch/roles/` (user) > `packages/roles/` (built-in) > `node_modules/@codecafe/roles/`
+
 ### agents/
-- **Role**: Agent role definitions (markdown files)
-  - `coder.md`: Implementation agent
-  - `planner.md`: Planning agent
-  - `reviewer.md`: Review agent
-  - `tester.md`: Testing agent
-  - `generic-agent.md`: Generic agent template
+- **Role**: Agent configuration for orchestrator workflows
+- **Agent files**:
+  - `pm-agent.md`: Project management orchestration
+  - `design-spec-extractor.md`: Design spec extraction from assets
+  - `documentation-agent.md`: Documentation generation
+  - `implementation-agent.md`: Code implementation
+  - `context-builder.md`: Context building
+  - `requirements-analyzer.md`: Requirements analysis
+  - `verification-agent.md`: Verification tasks
 
 ## Build and Development Commands
 
@@ -226,11 +255,28 @@ Electron IPC channels exposed via `window.codecafe`:
 - `order:get` - Get order details
 - `order:getLog` - Get order logs
 - `order:cancel` - Cancel order
-- `order:event` / `order:assigned` / `order:completed` - Event subscriptions
+- `order:delete` - Delete single order
+- `order:deleteMany` - Bulk delete orders
+- `order:execute` - Execute order
+- `order:sendInput` - Send input to order terminal
+- `order:createWithWorktree` - Create order with git worktree
+- `order:subscribeOutput` / `order:unsubscribeOutput` - Output stream subscription
+- `order:retryFromStage` / `order:retryFromBeginning` / `order:getRetryOptions` - Retry support
+- Event subscriptions:
+  - `order:event` / `order:assigned` / `order:completed` / `order:failed` / `order:output`
+  - Session: `order:session-started` / `order:session-completed` / `order:session-failed`
+  - Stage: `order:stage-started` / `order:stage-completed` / `order:stage-failed`
+  - `order:awaiting-input` - Awaiting user input event
+
+### Receipt
+- `receipt:getAll` - Get all execution receipts
 
 ### Workflow
 - `workflow:list` - List available workflows
 - `workflow:get` - Get workflow definition
+- `workflow:create` - Create new workflow
+- `workflow:update` - Update workflow
+- `workflow:delete` - Delete workflow
 - `workflow:run` - Execute workflow
 
 ### Run (Workflow Run Management)
@@ -242,16 +288,14 @@ Electron IPC channels exposed via `window.codecafe`:
 ### Config
 - `config:assignments:get` / `config:assignments:set` - Assignment configuration
 - `config:profiles:list` / `config:profiles:set` - Profile management
-- `config:roles:list` - List roles
-
-### Role
-- `role:list` / `role:get` - Role definitions
-- `role:listDefault` / `role:listUser` - Filter by type
-- `role:reload` - Reload roles
 
 ### Terminal
 - `terminal:init` - Initialize terminal
 - `terminal:poolStatus` - Get terminal pool status
+- `terminal:poolMetrics` - Get terminal pool metrics
+- `terminal:subscribe` / `terminal:unsubscribe` - Terminal output subscription
+- `terminal:shutdown` - Shutdown terminal
+- `terminal:data:{id}` - Terminal data stream (per terminal)
 
 ### Worktree
 - `worktree:list` - List worktrees
@@ -274,6 +318,9 @@ Electron IPC channels exposed via `window.codecafe`:
 
 - **Recipes**: `recipes/` directory (YAML)
   - `house-blend/`: Default recipe templates
+- **Roles**:
+  - Built-in: `packages/roles/` (Markdown with YAML frontmatter)
+  - User-defined: `.orch/roles/` (gitignored, higher priority)
 - **Skills**: `.orch/skills/` directory (JSON, gitignored)
   - Built-in skills auto-created on first run
   - User-created skills stored as individual `.json` files
@@ -300,10 +347,14 @@ Electron IPC channels exposed via `window.codecafe`:
 - `docs/IMPLEMENTATION_SUMMARY.md`: Implementation summary
 - `docs/desktop-architecture.md`: Electron desktop UI architecture
 - `docs/terminal-execution-flow.md`: Terminal PTY execution flow
+- `docs/refactoring-workflow.md`: Package refactoring workflow guide
+- `docs/architecture/`: Architecture diagrams and documentation
+- `docs/claude-cli-terminal/`: Terminal execution detailed docs
 - `docs/old/`: Archived documentation
   - `PRD.md`: Product requirements document
   - `오케스트레이터-PRD.md`: Orchestrator PRD (Korean)
-- `agents/`: Agent role definitions (coder, planner, reviewer, tester, generic-agent)
+- `packages/roles/README.md`: Role system documentation and template syntax
+- `agents/`: Agent definitions for orchestrator workflows
 
 ## Milestone Progress
 
@@ -317,11 +368,14 @@ Electron IPC channels exposed via `window.codecafe`:
 - Storage/observation system (JSON + logs)
 - Electron UI (Dashboard, New Order, Order Detail, Baristas)
 
-### M2 (In Progress - Partially Complete)
+### M2 (In Progress - Mostly Complete)
 - [x] Workflow engine (FSM-based)
 - [x] Git worktree parallel execution
 - [x] Workflow UI (execution/monitoring)
 - [x] Skill system (built-in + user-defined)
+- [x] Role system (built-in roles with Handlebars templates)
+- [x] Order management enhancements (retry, session/stage events)
+- [x] Terminal pool management
 - [ ] Codex Provider integration
 - [ ] DAG visualization
 
