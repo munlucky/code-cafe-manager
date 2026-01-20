@@ -19,6 +19,8 @@ export const NewWorkflows: React.FC<NewWorkflowsProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [copyName, setCopyName] = useState('');
 
   // Form State
   const [formData, setFormData] = useState<Partial<Recipe>>({
@@ -333,19 +335,10 @@ export const NewWorkflows: React.FC<NewWorkflowsProps> = ({
                <div className="pt-6 border-t border-cafe-800 flex justify-end gap-3 sticky bottom-0 bg-cafe-900 pb-2">
                  <button onClick={() => setEditingId(null)} className="px-5 py-2.5 text-cafe-400 hover:text-white transition-colors">Cancel</button>
                  {isProtected ? (
-                   <button 
+                   <button
                      onClick={() => {
-                       const newName = prompt('Enter new name for copy:', `${formData.name} (Copy)`);
-                       if (newName) {
-                         onAddRecipe({
-                           ...formData as Recipe,
-                           id: Math.random().toString(36).substr(2, 9),
-                           name: newName,
-                           protected: false,
-                           isDefault: false
-                         });
-                         setEditingId(null);
-                       }
+                       setCopyName(`${formData.name} (Copy)`);
+                       setShowCopyModal(true);
                      }}
                      className="px-6 py-2.5 bg-cafe-700 hover:bg-cafe-600 text-white rounded-lg font-bold shadow-lg transition-transform active:scale-95"
                    >
@@ -365,6 +358,62 @@ export const NewWorkflows: React.FC<NewWorkflowsProps> = ({
           )}
         </div>
       </div>
+
+      {/* Copy Recipe Modal */}
+      {showCopyModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-cafe-900 rounded-xl p-6 w-96 border border-cafe-700">
+            <h3 className="text-lg font-bold text-white mb-4">Save As Copy</h3>
+            <input
+              type="text"
+              value={copyName}
+              onChange={(e) => setCopyName(e.target.value)}
+              placeholder="Enter new name for copy"
+              className="w-full px-4 py-2 rounded-lg bg-cafe-800 border border-cafe-700 text-white mb-4 focus:border-brand focus:outline-none"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && copyName.trim()) {
+                  onAddRecipe({
+                    ...formData as Recipe,
+                    id: Math.random().toString(36).substr(2, 9),
+                    name: copyName.trim(),
+                    protected: false,
+                    isDefault: false
+                  });
+                  setShowCopyModal(false);
+                  setEditingId(null);
+                }
+              }}
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowCopyModal(false)}
+                className="px-4 py-2 text-cafe-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (copyName.trim()) {
+                    onAddRecipe({
+                      ...formData as Recipe,
+                      id: Math.random().toString(36).substr(2, 9),
+                      name: copyName.trim(),
+                      protected: false,
+                      isDefault: false
+                    });
+                    setShowCopyModal(false);
+                    setEditingId(null);
+                  }
+                }}
+                className="px-4 py-2 bg-brand hover:bg-brand-hover text-white rounded-lg font-bold"
+              >
+                Save Copy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
