@@ -5,6 +5,7 @@
 
 import { useState, useEffect, type ReactElement } from 'react';
 import { X } from 'lucide-react';
+import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { cn } from '../../utils/cn';
@@ -86,96 +87,80 @@ export function NewOrderDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50"
-        onClick={onClose}
-      />
-
-      {/* Dialog */}
-      <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-bone">Create New Order</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-bone transition-colors"
+    <Dialog
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Create New Order"
+      size="small"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Workflow Selection */}
+        <div>
+          <label className="block text-sm font-medium text-cafe-300 mb-1">
+            Workflow
+          </label>
+          <select
+            value={workflowId}
+            onChange={(e) => {
+              setWorkflowId(e.target.value);
+              const selected = workflows.find((w) => w.id === e.target.value);
+              if (selected) {
+                setWorkflowName(selected.name);
+              }
+            }}
+            className={cn(
+              'w-full px-3 py-2 bg-cafe-950 border border-cafe-700 rounded-lg text-cafe-200',
+              'focus:outline-none focus:ring-2 focus:ring-brand/50 focus:border-transparent'
+            )}
+            required
           >
-            <X className="w-5 h-5" />
-          </button>
+            <option value="">Select a workflow...</option>
+            {workflows.map((workflow) => (
+              <option key={workflow.id} value={workflow.id}>
+                {workflow.name}
+              </option>
+            ))}
+          </select>
+          {workflowId && workflows.find((w) => w.id === workflowId)?.description && (
+            <p className="mt-1 text-xs text-cafe-400">
+              {workflows.find((w) => w.id === workflowId)?.description}
+            </p>
+          )}
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Workflow Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Workflow
-            </label>
-            <select
-              value={workflowId}
-              onChange={(e) => {
-                setWorkflowId(e.target.value);
-                const selected = workflows.find((w) => w.id === e.target.value);
-                if (selected) {
-                  setWorkflowName(selected.name);
-                }
-              }}
-              className={cn(
-                'w-full px-3 py-2 bg-background border border-border rounded text-bone',
-                'focus:outline-none focus:ring-2 focus:ring-coffee/50'
-              )}
-              required
-            >
-              <option value="">Select a workflow...</option>
-              {workflows.map((workflow) => (
-                <option key={workflow.id} value={workflow.id}>
-                  {workflow.name}
-                </option>
-              ))}
-            </select>
-            {workflowId && workflows.find((w) => w.id === workflowId)?.description && (
-              <p className="mt-1 text-xs text-gray-400">
-                {workflows.find((w) => w.id === workflowId)?.description}
-              </p>
-            )}
-          </div>
+        {/* Worktree Option */}
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="createWorktree"
+            checked={createWorktree}
+            onChange={(e) => setCreateWorktree(e.target.checked)}
+            className="w-4 h-4 rounded border-cafe-700 bg-cafe-950 text-brand focus:ring-brand focus:ring-offset-0"
+          />
+          <label htmlFor="createWorktree" className="text-sm text-cafe-300">
+            Auto-create worktree
+          </label>
+        </div>
 
-          {/* Worktree Option */}
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="createWorktree"
-              checked={createWorktree}
-              onChange={(e) => setCreateWorktree(e.target.checked)}
-              className="w-4 h-4 rounded border-border bg-background text-coffee focus:ring-coffee focus:ring-offset-0"
-            />
-            <label htmlFor="createWorktree" className="text-sm text-gray-300">
-              Auto-create worktree
-            </label>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-2 pt-4">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={onClose}
-              className="flex-1"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="flex-1"
-            >
-              {loading ? 'Creating...' : 'Create Order'}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+        {/* Actions */}
+        <div className="flex items-center gap-2 pt-4">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onClose}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={loading}
+            className="flex-1"
+          >
+            {loading ? 'Creating...' : 'Create Order'}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }

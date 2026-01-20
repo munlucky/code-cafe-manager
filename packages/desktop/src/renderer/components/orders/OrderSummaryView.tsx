@@ -1,6 +1,7 @@
 import { type ReactElement, useState } from 'react';
 import { Send, MessageSquare, AlertTriangle } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { Input } from '../ui/Input';
 import { OrderStageProgress, type StageInfo } from '../order/OrderStageProgress';
 
 interface OrderSummaryViewProps {
@@ -51,12 +52,13 @@ export function OrderSummaryView({
            </div>
 
            <div className="flex gap-2">
-             <input
+             <Input
                type="text"
                value={inputValue}
                onChange={(e) => setInputValue(e.target.value)}
                placeholder="Type your response here..."
-               className="flex-1 bg-cafe-950 border border-cafe-700 rounded-lg px-4 py-2.5 text-sm text-cafe-200 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/20 outline-none placeholder-cafe-600 transition-all"
+               className="flex-1"
+               intent="warning"
                onKeyDown={(e) => {
                  if (e.key === 'Enter') handleSend();
                }}
@@ -87,12 +89,12 @@ export function OrderSummaryView({
            </h3>
 
            <div className="flex gap-2">
-             <input
+             <Input
                type="text"
                value={inputValue}
                onChange={(e) => setInputValue(e.target.value)}
                placeholder="Type a message..."
-               className="flex-1 bg-cafe-950 border border-cafe-700 rounded-lg px-4 py-2.5 text-sm text-cafe-200 focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none placeholder-cafe-600 transition-all"
+               className="flex-1"
                onKeyDown={(e) => {
                  if (e.key === 'Enter') handleSend();
                }}

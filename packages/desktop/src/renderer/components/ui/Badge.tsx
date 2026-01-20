@@ -1,18 +1,18 @@
 import { cn } from '../../utils/cn';
 import type { BaristaStatus, OrderStatus } from '../../types/models';
 
-const DEFAULT_STATUS_STYLE = 'border-l-4 border-gray-500 bg-gray-500/10';
+const DEFAULT_STATUS_STYLE = 'border-l-4 border-cafe-600 bg-cafe-600/10';
 
 const STATUS_STYLES: Record<string, string> = {
   idle: 'border-l-4 border-green-500 bg-green-500/10',
   running: 'border-l-4 border-blue-500 bg-blue-500/10',
   completed: 'border-l-4 border-green-500 bg-green-500/10',
-  pending: 'border-l-4 border-gray-500 bg-gray-500/10',
+  pending: 'border-l-4 border-cafe-600 bg-cafe-600/10',
   error: 'border-l-4 border-red-500 bg-red-500/10',
   failed: 'border-l-4 border-red-500 bg-red-500/10',
   paused: 'border-l-4 border-yellow-500 bg-yellow-500/10',
-  cancelled: 'border-l-4 border-gray-500 bg-gray-500/10',
-  stopped: 'border-l-4 border-gray-500 bg-gray-500/10',
+  cancelled: 'border-l-4 border-cafe-600 bg-cafe-600/10',
+  stopped: 'border-l-4 border-cafe-600 bg-cafe-600/10',
 };
 
 export function StatusBadge({
@@ -35,16 +35,18 @@ export function StatusBadge({
 
 // Generic Badge component with variants
 const BADGE_VARIANTS = {
-  default: 'bg-gray-500/10 text-gray-300 border border-gray-500/30',
+  default: 'bg-cafe-800/50 text-cafe-300 border border-cafe-700',
+  cafe: 'bg-cafe-800 text-cafe-100 border border-cafe-700',
+  brand: 'bg-brand/20 text-brand border border-brand/30',
   success: 'bg-green-500/10 text-green-300 border border-green-500/30',
   error: 'bg-red-500/10 text-red-300 border border-red-500/30',
   warning: 'bg-yellow-500/10 text-yellow-300 border border-yellow-500/30',
   secondary: 'bg-blue-500/10 text-blue-300 border border-blue-500/30',
-  outline: 'bg-transparent text-gray-300 border border-gray-500/50',
+  outline: 'bg-transparent text-cafe-300 border border-cafe-700',
 };
 
 interface BadgeProps {
-  variant?: 'default' | 'success' | 'error' | 'warning' | 'secondary' | 'outline';
+  variant?: 'default' | 'cafe' | 'brand' | 'success' | 'error' | 'warning' | 'secondary' | 'outline';
   className?: string;
   children: React.ReactNode;
 }
