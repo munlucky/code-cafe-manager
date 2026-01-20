@@ -86,7 +86,7 @@ export function Orders(): JSX.Element {
         if (response.success && response.data?.stages) {
           setWorkflowStages(prev => ({
             ...prev,
-            [workflowId]: response.data.stages,
+            [workflowId]: response.data!.stages,
           }));
         }
       } catch (error) {

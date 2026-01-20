@@ -776,6 +776,9 @@ export class OrderSession extends EventEmitter {
 
     console.log(`[OrderSession] Retrying from stage ${fromStageId || this.failedState.failedStageId} (batch ${startBatchIndex})`);
 
+    // 상태 초기화 전에 failedStageId 저장
+    const originalFailedStageId = this.failedState.failedStageId;
+
     // 상태 초기화
     this.status = 'running';
     this.error = null;
@@ -784,7 +787,7 @@ export class OrderSession extends EventEmitter {
 
     this.emit('session:resumed', {
       orderId: this.orderId,
-      fromStageId: fromStageId || this.failedState?.failedStageId,
+      fromStageId: fromStageId || originalFailedStageId,
       retryType: 'stage',
     });
 
