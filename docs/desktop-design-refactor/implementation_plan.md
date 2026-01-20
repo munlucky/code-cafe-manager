@@ -1,242 +1,244 @@
-# Desktop Design Migration Plan
+# Desktop Design Migration Plan v2 (Design-First)
 
 ## 목표
 
-새로운 디자인 프로젝트 (`docs/desktop-design-refactor/codecafe-desktop`)의 스타일을  
-기존 desktop 패키지에 적용합니다.
+새 디자인 컴포넌트를 **그대로 사용**하고, 기존 IPC 기능만 연결합니다.
 
----
-
-## 1. 현재 상태 비교
-
-| 항목 | 기존 Desktop | 새 디자인 |
-|------|--------------|-----------|
-| **스타일링** | Tailwind CSS | Tailwind CSS |
-| **컬러 팔레트** | background/#121212 기반 | cafe/950-100 Warm Stone |
-| **브랜드 색상** | coffee/#6F4E37 | brand/amber-600 |
-| **폰트** | 시스템 폰트 | Inter + JetBrains Mono |
-| **아이콘** | Lucide React | Lucide React |
-
----
-
-## 2. 마이그레이션 범위
-
-### Phase 1: 디자인 시스템 업데이트 (Foundation)
-- [ ] tailwind.config.cjs 컬러 팔레트 교체
-- [ ] 폰트 설정 추가 (Inter, JetBrains Mono)
-- [ ] index.css 스크롤바 스타일 업데이트
-
-### Phase 2: 공통 컴포넌트 마이그레이션
-- [ ] Sidebar.tsx 스타일 업데이트
-- [ ] ui/Button.tsx 스타일 업데이트
-- [ ] ui/Card.tsx 스타일 업데이트
-
-### Phase 3: 뷰 컴포넌트 마이그레이션
-- [ ] GlobalLobby.tsx (= CafeDashboard)
-- [ ] Orders.tsx (= OrderInterface)
-- [ ] Workflows.tsx (= RecipeManager)
-- [ ] Skills.tsx (= SkillManager)
-
----
-
-## 3. 상세 변경 사항
-
-### 3.1 tailwind.config.cjs
-
-**현재**:
-```javascript
-colors: {
-  background: '#121212',
-  card: '#1C1C1C',
-  espresso: '#3C2218',
-  coffee: '#6F4E37',
-  bone: '#E6D6C8',
-  sidebar: '#252525',
-  border: '#333333',
-}
 ```
-
-**변경**:
-```javascript
-colors: {
-  cafe: {
-    950: '#0c0a09', // Deepest Espresso
-    900: '#1c1917', // Dark Roast
-    850: '#23201d', // Panel Background
-    800: '#292524', // Card Background
-    700: '#44403c', // Borders
-    600: '#57534e', // Muted Text
-    500: '#78716c', // Secondary Text
-    400: '#a8a29e', // Primary Text
-    300: '#d6d3d1', // High Contrast Text
-    200: '#e7e5e4', // Headings
-    100: '#f5f5f4', // White Text
-  },
-  brand: {
-    DEFAULT: '#d97706', // amber-600
-    hover: '#b45309',   // amber-700
-    light: '#fbbf24',   // amber-400
-    subtle: '#78350f',  // amber-900
-  },
-  terminal: {
-    bg: '#120f0e',
-  },
-  // 호환성 유지 (점진적 마이그레이션)
-  background: '#0c0a09',
-  card: '#292524',
-  coffee: '#d97706',
-  bone: '#e7e5e4',
-  sidebar: '#1c1917',
-  border: '#44403c',
-}
-```
-
-### 3.2 폰트 설정
-
-**index.html**:
-```html
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-```
-
-**tailwind.config.cjs**:
-```javascript
-fontFamily: {
-  sans: ['Inter', 'system-ui', 'sans-serif'],
-  mono: ['JetBrains Mono', 'monospace'],
-}
-```
-
-### 3.3 index.css 업데이트
-
-```css
-/* Terminal scrollbar - Coffee Themed */
-.terminal-scroll::-webkit-scrollbar {
-  width: 8px;
-}
-.terminal-scroll::-webkit-scrollbar-track {
-  background: #1c1917; /* cafe-900 */
-}
-.terminal-scroll::-webkit-scrollbar-thumb {
-  background: #44403c; /* cafe-700 */
-  border-radius: 4px;
-}
-.terminal-scroll::-webkit-scrollbar-thumb:hover {
-  background: #57534e; /* cafe-600 */
-}
+새 디자인 (codecafe-desktop)     기존 Desktop (packages/desktop)
+┌─────────────────────────────┐  ┌─────────────────────────────┐
+│ • App.tsx (Mock Data)       │  │ • window.codecafe API       │
+│ • Sidebar.tsx               │  │ • IPC Handlers              │
+│ • CafeDashboard.tsx         │  │ • Zustand Stores            │
+│ • OrderInterface.tsx        │  │ • useIpcEffect Hook         │
+│ • RecipeManager.tsx         │  │ • Type Definitions          │
+│ • SkillManager.tsx          │  │                             │
+└─────────────────────────────┘  └─────────────────────────────┘
+              │                              │
+              └──────────┬───────────────────┘
+                         ▼
+              ┌─────────────────────────┐
+              │   최종 Desktop 앱       │
+              │ 새 디자인 + IPC 연결    │
+              └─────────────────────────┘
 ```
 
 ---
 
-## 4. 컴포넌트 매핑
+## 작업 개요
 
-| 새 디자인 | 기존 Desktop | 변경 방식 |
-|-----------|--------------|-----------|
-| `Sidebar.tsx` | `layout/Sidebar.tsx` | 스타일 교체 |
-| `CafeDashboard.tsx` | `views/GlobalLobby.tsx` | 스타일 교체 |
-| `OrderInterface.tsx` | `views/CafeDashboard.tsx` + `order/*` | 구조 참고, 스타일 교체 |
-| `RecipeManager.tsx` | `views/Workflows.tsx` | 스타일 교체 |
-| `SkillManager.tsx` | `views/Skills.tsx` | 스타일 교체 |
-
----
-
-## 5. 마이그레이션 전략
-
-### Option A: 점진적 마이그레이션 (권장)
-1. **Phase 1**: 컬러 팔레트만 먼저 적용 (호환성 alias 유지)
-2. **Phase 2**: 컴포넌트별로 클래스 업데이트
-3. **Phase 3**: 구식 색상 alias 제거
-
-**장점**: 안전, 점진적, 롤백 용이  
-**단점**: 시간이 더 걸림
-
-### Option B: 전체 교체
-1. 새 디자인 컴포넌트를 그대로 복사
-2. IPC 연동 코드만 추가
-3. 기존 컴포넌트 제거
-
-**장점**: 빠름, 깔끔  
-**단점**: 리스크 높음, 기능 누락 가능
+| 단계 | 작업 | 예상 시간 |
+|------|------|-----------|
+| 1 | 새 컴포넌트 복사 | 10분 |
+| 2 | Tailwind 설정 동기화 | 10분 |
+| 3 | App.tsx IPC 연결 | 30분 |
+| 4 | Sidebar IPC 연결 | 15분 |
+| 5 | CafeDashboard IPC 연결 | 20분 |
+| 6 | OrderInterface IPC 연결 | 1시간 |
+| 7 | RecipeManager IPC 연결 | 30분 |
+| 8 | SkillManager IPC 연결 | 30분 |
+| 9 | 빌드 및 테스트 | 30분 |
+| **총합** | | **~4시간** |
 
 ---
 
-## 6. 작업 순서 (Phase 1 상세)
+## Phase 1: 컴포넌트 복사
 
-### Step 1: tailwind.config.cjs 업데이트
+### 복사할 파일
 ```
-1. cafe 팔레트 추가
-2. brand 팔레트 추가
-3. 폰트 설정 추가
-4. 기존 색상은 호환성 alias로 유지
-```
-
-### Step 2: index.html 폰트 로드 추가
-```
-1. Google Fonts 링크 추가
-2. Inter + JetBrains Mono
-```
-
-### Step 3: index.css 스크롤바 업데이트
-```
-1. terminal-scroll 클래스 스타일 추가
-2. cafe 컬러 사용
+docs/desktop-design-refactor/codecafe-desktop/
+├── App.tsx           → packages/desktop/src/renderer/App.tsx
+├── types.ts          → packages/desktop/src/renderer/types/design.ts
+└── components/
+    ├── Sidebar.tsx       → components/layout/Sidebar.tsx
+    ├── CafeDashboard.tsx → components/views/GlobalLobby.tsx
+    ├── OrderInterface.tsx→ components/views/CafeDashboard.tsx
+    ├── RecipeManager.tsx → components/views/Workflows.tsx
+    └── SkillManager.tsx  → components/views/Skills.tsx
 ```
 
-### Step 4: 빌드 및 검증
+### Tailwind 설정 동기화
 ```
-1. pnpm typecheck
-2. pnpm build
-3. 앱 실행하여 스타일 확인
+docs/.../codecafe-desktop/index.html의 tailwind.config
+→ packages/desktop/tailwind.config.cjs에 반영
 ```
 
 ---
 
-## 7. 검증 계획
+## Phase 2: IPC 연결 (컴포넌트별)
 
-### 자동 테스트
-```bash
-# 타입체크
-pnpm typecheck
+### App.tsx 변환
 
-# 빌드 검증
-pnpm build
+**Mock → IPC**:
+```typescript
+// Before (Mock)
+const [cafes, setCafes] = useState<Cafe[]>([...MOCK_DATA]);
+const [recipes, setRecipes] = useState<Recipe[]>(DEFAULT_RECIPES);
+
+// After (IPC)
+const [cafes, setCafes] = useState<Cafe[]>([]);
+const [recipes, setRecipes] = useState<Recipe[]>([]);
+
+useEffect(() => {
+  const loadData = async () => {
+    const cafeRes = await window.codecafe.cafe.getAll();
+    if (cafeRes.success) setCafes(cafeRes.data);
+    
+    const recipeRes = await window.codecafe.workflow.list();
+    if (recipeRes.success) setRecipes(recipeRes.data);
+  };
+  loadData();
+}, []);
 ```
 
-### 수동 테스트
-1. 앱 실행 (`pnpm dev` in desktop)
-2. 각 화면 시각적 확인:
-   - [ ] Lobby 화면 배경색, 폰트
-   - [ ] Sidebar 네비게이션 하이라이트
-   - [ ] Order 생성 모달 스타일
-   - [ ] Terminal 출력 스크롤바
-   - [ ] Recipes/Skills 탭 스타일
+### CafeDashboard (Lobby) 변환
+
+**Mock → IPC**:
+```typescript
+// Before (Mock)
+const handleCreateCafe = (path: string) => {
+  setCafes([...cafes, { id: generateId(), ... }]);
+};
+
+// After (IPC)
+const handleCreateCafe = async (path: string) => {
+  const res = await window.codecafe.cafe.create({ path });
+  if (res.success && res.data) {
+    setCafes([...cafes, res.data]);
+  }
+};
+```
+
+### OrderInterface 변환 (가장 복잡)
+
+**Mock → IPC**:
+```typescript
+// Order 생성
+const handleCreateOrder = async (...) => {
+  const res = await window.codecafe.order.createWithWorktree({
+    cafeId, workflowId, workflowName, createWorktree
+  });
+  if (res.success) {
+    // 반환된 order로 상태 업데이트
+  }
+};
+
+// Order 실행
+const handleExecuteOrder = async (orderId, prompt) => {
+  await window.codecafe.order.execute(orderId, prompt, {});
+};
+
+// 실시간 로그
+useEffect(() => {
+  const cleanup = window.codecafe.order.onOutput((data) => {
+    // logs 업데이트
+  });
+  return cleanup;
+}, []);
+
+// 사용자 입력
+const handleSendInput = async (orderId, input) => {
+  await window.codecafe.order.sendInput(orderId, input);
+};
+```
+
+### RecipeManager 변환
+
+```typescript
+// CRUD 연결
+const handleAddRecipe = async (recipe) => {
+  await window.codecafe.workflow.create(recipe);
+};
+const handleUpdateRecipe = async (recipe) => {
+  await window.codecafe.workflow.update(recipe);
+};
+const handleDeleteRecipe = async (id) => {
+  await window.codecafe.workflow.delete(id);
+};
+```
+
+### SkillManager 변환
+
+```typescript
+// CRUD 연결
+const handleAddSkill = async (skill) => {
+  await window.codecafe.skill.create(skill);
+};
+const handleUpdateSkill = async (skill) => {
+  await window.codecafe.skill.update(skill);
+};
+const handleDeleteSkill = async (id) => {
+  await window.codecafe.skill.delete(id);
+};
+```
 
 ---
 
-## 8. 롤백 계획
+## Phase 3: IPC API 매핑 표
 
-Git 커밋 단위로 작업하여 문제 발생 시:
-```bash
-git revert <commit-hash>
+| 새 디자인 함수 | IPC API |
+|---------------|---------|
+| `handleCreateCafe(path)` | `window.codecafe.cafe.create({ path })` |
+| `handleCreateOrder(...)` | `window.codecafe.order.createWithWorktree(...)` |
+| `handleDeleteOrder(id)` | `window.codecafe.order.delete(id)` |
+| `handleSendInput(id, msg)` | `window.codecafe.order.sendInput(id, msg)` |
+| `handleAddRecipe(recipe)` | `window.codecafe.workflow.create(recipe)` |
+| `handleUpdateRecipe(recipe)` | `window.codecafe.workflow.update(recipe)` |
+| `handleDeleteRecipe(id)` | `window.codecafe.workflow.delete(id)` |
+| `handleAddSkill(skill)` | `window.codecafe.skill.create(skill)` |
+| `handleUpdateSkill(skill)` | `window.codecafe.skill.update(skill)` |
+| `handleDeleteSkill(id)` | `window.codecafe.skill.delete(id)` |
+
+---
+
+## Phase 4: 삭제할 기존 컴포넌트
+
+새 디자인으로 교체 후 삭제:
+```
+components/
+├── layout/
+│   └── Sidebar.tsx (교체)
+├── views/
+│   ├── GlobalLobby.tsx (교체)
+│   ├── CafeDashboard.tsx (교체)
+│   ├── Dashboard.tsx (삭제)
+│   ├── Workflows.tsx (교체)
+│   └── Skills.tsx (교체)
+├── order/
+│   ├── OrderCard.tsx (통합)
+│   ├── OrderModal.tsx (통합)
+│   └── ... (통합)
+└── orders/
+    └── ... (통합)
 ```
 
 ---
 
-## 9. 예상 작업 시간
+## 체크리스트
 
-| Phase | 예상 시간 |
-|-------|-----------|
-| Phase 1: Foundation | 30분 |
-| Phase 2: 공통 컴포넌트 | 1시간 |
-| Phase 3: 뷰 컴포넌트 | 2-3시간 |
-| 테스트 및 조정 | 1시간 |
-| **총합** | **4-5시간** |
+### Phase 1: 복사
+- [ ] 새 컴포넌트 5개 복사
+- [ ] types.ts 복사
+- [ ] tailwind.config.cjs 업데이트
+- [ ] index.html 폰트 추가
+
+### Phase 2: IPC 연결
+- [ ] App.tsx: cafes, recipes, skills 로딩
+- [ ] Sidebar: 네비게이션 연결
+- [ ] CafeDashboard: cafe CRUD 연결
+- [ ] OrderInterface: order 실행/로그 연결
+- [ ] RecipeManager: recipe CRUD 연결
+- [ ] SkillManager: skill CRUD 연결
+
+### Phase 3: 정리
+- [ ] 미사용 컴포넌트 삭제
+- [ ] import 정리
+- [ ] 타입체크 통과
+- [ ] 빌드 성공
+- [ ] 앱 테스트
 
 ---
 
 ## 다음 단계
 
-Phase 1 (Foundation) 작업부터 진행할까요?
-
-- tailwind.config.cjs 업데이트
-- 폰트 설정 추가
-- 스크롤바 스타일 업데이트
+이 계획으로 진행할까요?
