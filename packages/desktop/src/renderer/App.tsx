@@ -1,92 +1,349 @@
-import { useEffect } from 'react';
-import { Layout } from './components/layout/Layout';
+import { useEffect, useState, useCallback } from 'react';
 import { useViewStore } from './store/useViewStore';
 import { useCafeStore } from './store/useCafeStore';
 import { useIpcEffect } from './hooks/useIpcEffect';
-import {
-  Dashboard,
-  NewOrder,
-  OrderDetail,
-  Workflows,
-  WorkflowDetail,
-  Skills,
-} from './components/views';
-import { GlobalLobby } from './components/views/GlobalLobby';
-import { CafeDashboard } from './components/views/CafeDashboard';
-import { OrderTerminals } from './components/terminal/OrderTerminals';
+import type { Recipe, Skill as DesignSkill, DesignOrder, WorkflowLog, Cafe as DesignCafe } from './types/design';
+import { OrderStatus as DesignOrderStatus } from './types/design';
+import type { Order, Workflow, Skill } from './types/models';
+import type { Cafe } from '@codecafe/core';
+import { OrderStatus as BackendOrderStatus } from './types/models';
 
-const VIEW_MAP: Record<string, React.ComponentType> = {
-  cafes: GlobalLobby,
-  dashboard: Dashboard,
-  'new-order': NewOrder,
-  orders: OrderDetail,
-  terminals: OrderTerminals,
-  workflows: Workflows,
-  skills: Skills,
+// Import components
+import { NewSidebar } from './components/layout/NewSidebar';
+import { NewGlobalLobby } from './components/views/NewGlobalLobby';
+import { NewCafeDashboard } from './components/views/NewCafeDashboard';
+import { NewWorkflows } from './components/views/NewWorkflows';
+import { NewSkills } from './components/views/NewSkills';
+
+// Convert backend Order to design Order
+const convertToDesignOrder = (order: Order): DesignOrder => {
+  // Determine status from order state (BackendOrderStatus enum values)
+  const statusMap: Record<BackendOrderStatus, DesignOrderStatus> = {
+    'PENDING': DesignOrderStatus.PENDING,
+    'RUNNING': DesignOrderStatus.RUNNING,
+    'COMPLETED': DesignOrderStatus.COMPLETED,
+    'FAILED': DesignOrderStatus.FAILED,
+    'CANCELLED': DesignOrderStatus.FAILED,
+  };
+
+  return {
+    id: order.id,
+    workflowId: order.workflowId || '',
+    workflowName: order.workflowName || 'Unknown',
+    status: statusMap[order.status] || 'PENDING',
+    cafeId: order.counter || '', // Use counter as cafeId since Order doesn't have cafeId
+    vars: order.vars || {},
+    worktreeInfo: order.worktreeInfo ? {
+      path: order.worktreeInfo.path,
+      branch: order.worktreeInfo.branch,
+      baseBranch: order.worktreeInfo.baseBranch,
+      repoPath: order.worktreeInfo.repoPath || '',
+    } : undefined,
+    currentStage: 'Init', // Order doesn't track currentStage
+    logs: [], // Will be populated from order events
+    createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
+    startedAt: order.startedAt ? new Date(order.startedAt) : undefined,
+    completedAt: order.endedAt ? new Date(order.endedAt) : undefined,
+  };
 };
 
+// Convert backend Workflow to design Recipe
+const convertToDesignRecipe = (wf: Workflow): Recipe => ({
+  id: wf.id,
+  name: wf.name,
+  description: wf.description || '',
+  stages: wf.stages,
+  stageConfigs: Object.fromEntries(
+    wf.stages.map((stage: string) => [
+      stage,
+      { skills: [] } // Will be populated from skill assignments
+    ])
+  ),
+});
 
-// Helper function to encapsulate view selection logic
-function selectViewComponent(view: string): React.ComponentType {
-  if (view === 'dashboard') {
-    return CafeDashboard;
-  }
-  return VIEW_MAP[view];
-}
+// Convert core Cafe to design Cafe
+const convertToDesignCafe = (cafe: Cafe): DesignCafe => ({
+  id: cafe.id,
+  name: cafe.name,
+  path: cafe.path,
+  createdAt: cafe.createdAt,
+  lastAccessedAt: undefined,
+  settings: cafe.settings,
+  activeOrdersCount: cafe.activeOrders,
+});
 
-// Type guard for workflow params
-function isWorkflowParams(params: any): params is { workflowId: string } {
-  return params && typeof params.workflowId === 'string';
-}
+// Convert backend Skill to design Skill
+const convertToDesignSkill = (skill: Skill): DesignSkill => ({
+  id: skill.id,
+  name: skill.name,
+  description: skill.description,
+  category: skill.category as DesignSkill['category'] || 'implementation',
+  instructions: skill.skillCommand, // Map skillCommand to instructions
+  isBuiltIn: skill.isBuiltIn || false,
+});
+
+// View mapping
+const VIEW_MAP = {
+  cafes: NewGlobalLobby,
+  dashboard: NewCafeDashboard,
+  workflows: NewWorkflows,
+  skills: NewSkills,
+};
 
 export function App(): JSX.Element {
   const { currentView, viewParams, setView } = useViewStore();
-  const { cafes, currentCafeId, loadCafes, selectCafe } = useCafeStore();
+  const { cafes, currentCafeId, loadCafes, getCurrentCafe } = useCafeStore();
+
+  // Global data state (recipes, skills, orders)
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [skills, setSkills] = useState<DesignSkill[]>([]);
+  const [orders, setOrders] = useState<DesignOrder[]>([]);
+  const [orderLogs, setOrderLogs] = useState<Record<string, WorkflowLog[]>>({});
 
   useIpcEffect();
 
-  // App start logic: auto-route based on cafe state
+  // Load cafes, recipes, skills on mount
   useEffect(() => {
-    const initializeApp = async () => {
-      // Load cafes first
+    const loadData = async () => {
+      // Load cafes
       await loadCafes();
+
+      // Load recipes (workflows)
+      const wfRes = await window.codecafe.workflow.list();
+      if (wfRes.success && wfRes.data) {
+        setRecipes(wfRes.data.map(convertToDesignRecipe));
+      }
+
+      // Load skills
+      const skillRes = await window.codecafe.skill.list();
+      if (skillRes.success && skillRes.data) {
+        setSkills(skillRes.data.map(convertToDesignSkill));
+      }
     };
-    initializeApp();
+    loadData();
   }, [loadCafes]);
 
-  // After cafes loaded, handle routing
+  // Load orders for current cafe
+  // Note: Order uses 'counter' as cafe identifier, not 'cafeId'
   useEffect(() => {
-    // If no cafes exist → show GlobalLobby (onboarding)
-    if (cafes.length === 0) {
-      if (currentView !== 'cafes') {
-        setView('cafes');
-      }
-      return;
+    if (currentCafeId) {
+      const loadOrders = async () => {
+        const orderRes = await window.codecafe.order.getAll();
+        if (orderRes.success && orderRes.data) {
+          const cafeOrders = orderRes.data
+            .filter(o => o.counter === currentCafeId)
+            .map(convertToDesignOrder);
+          setOrders(cafeOrders);
+        }
+      };
+      loadOrders();
     }
+  }, [currentCafeId]);
 
-    // If cafes exist but none selected → auto-select first/last accessed
-    if (!currentCafeId && cafes.length > 0) {
-      // Select first cafe and go to dashboard
-      selectCafe(cafes[0].id);
-      setView('dashboard');
+  // Subscribe to order output events
+  useEffect(() => {
+    const cleanup = window.codecafe.order.onOutput((event) => {
+      const { orderId, type, message, timestamp } = event;
+
+      setOrderLogs(prev => ({
+        ...prev,
+        [orderId]: [
+          ...(prev[orderId] || []),
+          {
+            id: `${orderId}-${Date.now()}`,
+            timestamp: new Date(timestamp).toLocaleTimeString([], { hour12: false }),
+            content: message,
+            type: type === 'error' ? 'error' : type === 'success' ? 'success' : 'info',
+          }
+        ]
+      }));
+    });
+    return cleanup;
+  }, []);
+
+  // Subscribe to awaiting input events
+  // Backend OrderStatus doesn't have WAITING_INPUT, so we handle it via event
+  useEffect(() => {
+    const cleanup = window.codecafe.order.onAwaitingInput(({ orderId }) => {
+      setOrders(prev => prev.map(o =>
+        o.id === orderId ? { ...o, status: DesignOrderStatus.WAITING_INPUT } : o
+      ));
+    });
+    return cleanup;
+  }, []);
+
+  // Recipe CRUD handlers
+  const handleAddRecipe = useCallback(async (recipe: Recipe) => {
+    const res = await window.codecafe.workflow.create(recipe);
+    if (res.success && res.data) {
+      setRecipes(prev => [...prev, convertToDesignRecipe(res.data!)]);
     }
-  }, [cafes, currentCafeId, currentView, setView, selectCafe]);
+  }, []);
 
-  // Special handling for views with required props
-  if (currentView === 'workflow-detail' && isWorkflowParams(viewParams)) {
-    return (
-      <Layout>
-        <WorkflowDetail workflowId={viewParams.workflowId} />
-      </Layout>
-    );
+  const handleUpdateRecipe = useCallback(async (recipe: Recipe) => {
+    const res = await window.codecafe.workflow.update(recipe);
+    if (res.success && res.data) {
+      setRecipes(prev => prev.map(r => r.id === recipe.id ? convertToDesignRecipe(res.data!) : r));
+    }
+  }, []);
+
+  const handleDeleteRecipe = useCallback(async (id: string) => {
+    const res = await window.codecafe.workflow.delete(id);
+    if (res.success) {
+      setRecipes(prev => prev.filter(r => r.id !== id));
+    }
+  }, []);
+
+  // Skill CRUD handlers
+  // Convert DesignSkill to backend Skill before sending to API
+  const convertToBackendSkill = (skill: DesignSkill): Skill => ({
+    id: skill.id,
+    name: skill.name,
+    description: skill.description,
+    category: (skill.category === 'review' ? 'verification' : skill.category) || 'implementation',
+    skillCommand: skill.instructions, // Map instructions to skillCommand
+    isBuiltIn: skill.isBuiltIn,
+  });
+
+  const handleAddSkill = useCallback(async (skill: DesignSkill) => {
+    const backendSkill = convertToBackendSkill(skill);
+    const res = await window.codecafe.skill.create(backendSkill);
+    if (res.success && res.data) {
+      setSkills(prev => [...prev, convertToDesignSkill(res.data!)]);
+    }
+  }, []);
+
+  const handleUpdateSkill = useCallback(async (skill: DesignSkill) => {
+    const backendSkill = convertToBackendSkill(skill);
+    const res = await window.codecafe.skill.update(backendSkill);
+    if (res.success && res.data) {
+      setSkills(prev => prev.map(s => s.id === skill.id ? convertToDesignSkill(res.data!) : s));
+    }
+  }, []);
+
+  const handleDeleteSkill = useCallback(async (id: string) => {
+    const res = await window.codecafe.skill.delete(id);
+    if (res.success) {
+      setSkills(prev => prev.filter(s => s.id !== id));
+    }
+  }, []);
+
+  // Cafe handlers
+  const handleCreateCafe = useCallback(async (path: string) => {
+    const res = await window.codecafe.cafe.create({ path });
+    if (res.success && res.data) {
+      await loadCafes();
+      // Navigate to dashboard with new cafe
+    }
+  }, [loadCafes]);
+
+  // Order handlers
+  const handleCreateOrder = useCallback(async (
+    cafeId: string,
+    workflowId: string,
+    description: string,
+    useWorktree: boolean
+  ) => {
+    const workflow = recipes.find(r => r.id === workflowId);
+    const res = await window.codecafe.order.createWithWorktree({
+      cafeId,
+      workflowId,
+      workflowName: workflow?.name || 'Unknown',
+      vars: { prompt: description },
+      createWorktree: useWorktree,
+    });
+    if (res.success && res.data) {
+      setOrders(prev => [convertToDesignOrder(res.data!.order), ...prev]);
+    }
+  }, [recipes]);
+
+  const handleDeleteOrder = useCallback(async (orderId: string) => {
+    const res = await window.codecafe.order.delete(orderId);
+    if (res.success) {
+      setOrders(prev => prev.filter(o => o.id !== orderId));
+    }
+  }, []);
+
+  const handleSendInput = useCallback(async (orderId: string, input: string) => {
+    const res = await window.codecafe.order.sendInput(orderId, input);
+    if (res.success) {
+      setOrders(prev => prev.map(o =>
+        o.id === orderId ? { ...o, status: DesignOrderStatus.RUNNING } : o
+      ));
+    }
+  }, []);
+
+  // Navigation handler
+  const handleNavigate = useCallback((view: string, cafeId?: string) => {
+    setView(view as any, cafeId ? { cafeId } : undefined);
+  }, [setView]);
+
+  // Convert cafes to design format for components
+  const designCafes: DesignCafe[] = cafes.map(convertToDesignCafe);
+
+  // View component selector
+  const ViewComponent = VIEW_MAP[currentView as keyof typeof VIEW_MAP];
+
+  if (!ViewComponent) {
+    return <div className="p-8 text-cafe-400">Unknown view: {currentView}</div>;
   }
 
-  const ViewComponent = selectViewComponent(currentView);
-
   return (
-    <Layout>
-      <ViewComponent />
-    </Layout>
+    <div className="flex h-screen bg-cafe-950 text-cafe-200">
+      <NewSidebar
+        cafes={designCafes}
+        activeCafeId={currentCafeId}
+        activeView={currentView}
+        onNavigate={handleNavigate}
+        onAddCafe={() => handleNavigate('cafes')}
+      />
+
+      <main className="flex-1 overflow-hidden relative">
+        <div className="absolute inset-0 bg-gradient-to-br from-cafe-950 to-[#120f0e] pointer-events-none" />
+
+        <div className="relative h-full z-10">
+          {currentView === 'cafes' && (
+            <NewGlobalLobby
+              cafes={designCafes}
+              onCreateCafe={handleCreateCafe}
+              onSelectCafe={(id) => handleNavigate('dashboard', id)}
+            />
+          )}
+
+          {currentView === 'dashboard' && currentCafeId && (
+            <NewCafeDashboard
+              cafe={convertToDesignCafe(getCurrentCafe()!)}
+              orders={orders.map(o => ({
+                ...o,
+                logs: orderLogs[o.id] || o.logs
+              }))}
+              workflows={recipes}
+              onCreateOrder={handleCreateOrder}
+              onDeleteOrder={handleDeleteOrder}
+              onSendInput={handleSendInput}
+            />
+          )}
+
+          {currentView === 'workflows' && (
+            <NewWorkflows
+              recipes={recipes}
+              skills={skills}
+              onAddRecipe={handleAddRecipe}
+              onUpdateRecipe={handleUpdateRecipe}
+              onDeleteRecipe={handleDeleteRecipe}
+            />
+          )}
+
+          {currentView === 'skills' && (
+            <NewSkills
+              skills={skills}
+              onAddSkill={handleAddSkill}
+              onUpdateSkill={handleUpdateSkill}
+              onDeleteSkill={handleDeleteSkill}
+            />
+          )}
+        </div>
+      </main>
+    </div>
   );
 }
-
