@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useViewStore } from './store/useViewStore';
 import { useCafeStore } from './store/useCafeStore';
+import { useOrderStore } from './store/useOrderStore';
 import { useIpcEffect } from './hooks/useIpcEffect';
 import type { Recipe, Skill as DesignSkill, DesignOrder, WorkflowLog, Cafe as DesignCafe } from './types/design';
 import { OrderStatus as DesignOrderStatus } from './types/design';
@@ -16,7 +17,7 @@ import { NewWorkflows } from './components/views/NewWorkflows';
 import { NewSkills } from './components/views/NewSkills';
 
 // Convert backend Order to design Order
-const convertToDesignOrder = (order: Order): DesignOrder => {
+const convertToDesignOrder = (order: Order, sessionStatus?: { awaitingInput: boolean }): DesignOrder => {
   // Determine status from order state (BackendOrderStatus enum values)
   const statusMap: Record<BackendOrderStatus, DesignOrderStatus> = {
     'PENDING': DesignOrderStatus.PENDING,
@@ -26,11 +27,16 @@ const convertToDesignOrder = (order: Order): DesignOrder => {
     'CANCELLED': DesignOrderStatus.FAILED,
   };
 
+  // Use WAITING_INPUT status if session indicates awaiting input
+  const status = sessionStatus?.awaitingInput
+    ? DesignOrderStatus.WAITING_INPUT
+    : statusMap[order.status] || 'PENDING';
+
   return {
     id: order.id,
     workflowId: order.workflowId || '',
     workflowName: order.workflowName || 'Unknown',
-    status: statusMap[order.status] || 'PENDING',
+    status,
     cafeId: order.counter || '', // Use counter as cafeId since Order doesn't have cafeId
     vars: order.vars || {},
     worktreeInfo: order.worktreeInfo ? {
@@ -94,11 +100,21 @@ export function App(): JSX.Element {
   const { currentView, viewParams, setView } = useViewStore();
   const { cafes, currentCafeId, loadCafes, getCurrentCafe } = useCafeStore();
 
-  // Global data state (recipes, skills, orders)
+  // Global data state (recipes, skills)
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [skills, setSkills] = useState<DesignSkill[]>([]);
-  const [orders, setOrders] = useState<DesignOrder[]>([]);
   const [orderLogs, setOrderLogs] = useState<Record<string, WorkflowLog[]>>({});
+
+  // Order state from useOrderStore (updated by IPC events)
+  const { orders: backendOrders, addOrder, removeOrder, updateOrder, sessionStatuses, setAwaitingInput } = useOrderStore();
+
+  // Convert backend orders to design orders
+  const orders: DesignOrder[] = backendOrders.map(order =>
+    convertToDesignOrder(order, sessionStatuses[order.id])
+  ).map(o => ({
+    ...o,
+    logs: orderLogs[o.id] || o.logs,
+  }));
 
   useIpcEffect();
 
@@ -123,23 +139,6 @@ export function App(): JSX.Element {
     loadData();
   }, [loadCafes]);
 
-  // Load orders for current cafe
-  // Note: Order uses 'counter' as cafe identifier, not 'cafeId'
-  useEffect(() => {
-    if (currentCafeId) {
-      const loadOrders = async () => {
-        const orderRes = await window.codecafe.order.getAll();
-        if (orderRes.success && orderRes.data) {
-          const cafeOrders = orderRes.data
-            .filter(o => o.counter === currentCafeId)
-            .map(convertToDesignOrder);
-          setOrders(cafeOrders);
-        }
-      };
-      loadOrders();
-    }
-  }, [currentCafeId]);
-
   // Subscribe to order output events
   useEffect(() => {
     const cleanup = window.codecafe.order.onOutput((event) => {
@@ -157,17 +156,6 @@ export function App(): JSX.Element {
           }
         ]
       }));
-    });
-    return cleanup;
-  }, []);
-
-  // Subscribe to awaiting input events
-  // Backend OrderStatus doesn't have WAITING_INPUT, so we handle it via event
-  useEffect(() => {
-    const cleanup = window.codecafe.order.onAwaitingInput(({ orderId }) => {
-      setOrders(prev => prev.map(o =>
-        o.id === orderId ? { ...o, status: DesignOrderStatus.WAITING_INPUT } : o
-      ));
     });
     return cleanup;
   }, []);
@@ -253,25 +241,34 @@ export function App(): JSX.Element {
       createWorktree: useWorktree,
     });
     if (res.success && res.data) {
-      setOrders(prev => [convertToDesignOrder(res.data!.order), ...prev]);
+      const order = res.data!.order;
+      addOrder(order);
+      
+      // 바로 실행: description을 prompt로 사용
+      if (description.trim()) {
+        try {
+          console.log('[App] Auto-executing order:', order.id, 'with prompt:', description);
+          await window.codecafe.order.execute(order.id, description, {});
+        } catch (err) {
+          console.error('[App] Failed to auto-execute order:', err);
+        }
+      }
     }
-  }, [recipes]);
+  }, [recipes, addOrder]);
 
   const handleDeleteOrder = useCallback(async (orderId: string) => {
     const res = await window.codecafe.order.delete(orderId);
     if (res.success) {
-      setOrders(prev => prev.filter(o => o.id !== orderId));
+      removeOrder(orderId);
     }
-  }, []);
+  }, [removeOrder]);
 
   const handleSendInput = useCallback(async (orderId: string, input: string) => {
     const res = await window.codecafe.order.sendInput(orderId, input);
     if (res.success) {
-      setOrders(prev => prev.map(o =>
-        o.id === orderId ? { ...o, status: DesignOrderStatus.RUNNING } : o
-      ));
+      setAwaitingInput(orderId, false);
     }
-  }, []);
+  }, [setAwaitingInput]);
 
   // Navigation handler
   const handleNavigate = useCallback((view: string, cafeId?: string) => {
@@ -313,10 +310,7 @@ export function App(): JSX.Element {
           {currentView === 'dashboard' && currentCafeId && (
             <NewCafeDashboard
               cafe={convertToDesignCafe(getCurrentCafe()!)}
-              orders={orders.map(o => ({
-                ...o,
-                logs: orderLogs[o.id] || o.logs
-              }))}
+              orders={orders}
               workflows={recipes}
               onCreateOrder={handleCreateOrder}
               onDeleteOrder={handleDeleteOrder}

@@ -379,7 +379,7 @@ export function Orders(): JSX.Element {
                 </h3>
 
                 <div className="flex items-center justify-between">
-                  {order.worktreePath ? (
+                  {order.worktreeInfo?.path ? (
                     <div className="flex items-center text-[10px] text-cafe-500 bg-cafe-950/50 px-2 py-1 rounded">
                       <Split className="w-3 h-3 mr-1.5 text-brand/70" />
                       <span className="truncate max-w-[100px]">worktree</span>
@@ -470,7 +470,6 @@ export function Orders(): JSX.Element {
                     <div className="bg-cafe-900 p-5 rounded-xl border border-cafe-800 shadow-lg shrink-0">
                       <OrderStageProgress
                         stages={getStagesForOrder(activeOrder)}
-                        currentStage={activeOrder.currentStage}
                       />
                     </div>
 
@@ -480,8 +479,6 @@ export function Orders(): JSX.Element {
                         orderId={activeOrder.id}
                         onSendInput={async (input) => handleSendInput(activeOrder.id, input)}
                         isRunning={activeOrder.status === OrderStatus.RUNNING}
-                        isAwaitingInput={activeOrder.status === OrderStatus.WAITING_INPUT}
-                        worktreePath={activeOrder.worktreePath}
                       />
                     </div>
                   </div>
