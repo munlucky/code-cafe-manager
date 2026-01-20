@@ -13,12 +13,12 @@
 - `App.tsx`: `order:output` 로그 수집
 - `NewCafeDashboard`: 기본 UI 렌더링
 
-### ❌ 미구현/문제점
+### ✅ 문제 해결 완료
 | 문제 | 원인 | 해결방법 |
 |------|------|----------|
 | Order 상태 갱신 안됨 | `order:completed/failed` 리스너 부재 | useIpcEffect에 추가 ✅ 완료 |
-| 터미널 HTML 미렌더링 | 일반 텍스트로 출력 | `dangerouslySetInnerHTML` 사용 |
-| cleanup 누락 | 새 리스너 정리 안됨 | cleanup 배열에 추가 필요 |
+| 터미널 HTML 미렌더링 | 일반 텍스트로 출력 | `dangerouslySetInnerHTML` 사용 ✅ 완료 |
+| cleanup 누락 | 새 리스너 정리 안됨 | cleanup 배열에 추가 ✅ 완료 |
 
 ---
 
@@ -44,7 +44,7 @@ const cleanupOrderFailed = window.codecafe.order.onFailed?.((data) => {
 
 ---
 
-### 2. ⏳ cleanup 함수 추가 (진행 중)
+### 2. ✅ cleanup 함수 추가 (완료)
 
 **파일**: `useIpcEffect.ts` 
 
@@ -79,9 +79,9 @@ return () => {
 | # | 작업 | 상태 |
 |---|------|------|
 | 1 | order:completed/failed 리스너 추가 | ✅ 완료 |
-| 2 | cleanup 함수 추가 | ⏳ 진행 중 |
-| 3 | 터미널 HTML 렌더링 | ⏳ 대기 |
-| 4 | 타입체크 & 테스트 | ⏳ 대기 |
+| 2 | cleanup 함수 추가 | ✅ 완료 |
+| 3 | 터미널 HTML 렌더링 | ✅ 완료 |
+| 4 | 타입체크 & 테스트 | ⏳ 환경 미설치 (node_modules 필요) |
 
 ---
 

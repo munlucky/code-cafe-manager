@@ -230,7 +230,7 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
                      }`}>
                        {log.type === 'system' && <span className="mr-2 opacity-50">➜</span>}
                        {log.type === 'ai' && <span className="mr-2 text-brand">🤖</span>}
-                       {log.content}
+                       <span dangerouslySetInnerHTML={{ __html: log.content }} />
                      </div>
                    </div>
                  ))}
