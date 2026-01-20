@@ -1,8 +1,7 @@
 import { type ReactElement, useState } from 'react';
-import { Send, MessageSquare } from 'lucide-react';
-import { Card } from '../ui/Card';
-import { Button } from '../ui/Button';
-import { OrderStageProgress, OrderStageProgressBar, type StageInfo } from '../order/OrderStageProgress';
+import { Send, MessageSquare, AlertTriangle } from 'lucide-react';
+import { cn } from '../../utils/cn';
+import { OrderStageProgress, type StageInfo } from '../order/OrderStageProgress';
 
 interface OrderSummaryViewProps {
   stages: StageInfo[];
@@ -35,77 +34,88 @@ export function OrderSummaryView({
   return (
     <div className="space-y-4">
       {/* Pipeline Progress */}
-      <Card className="p-4 bg-gray-800 border-border">
-         <h3 className="text-sm font-medium text-coffee mb-3">Pipeline Executing</h3>
-         <OrderStageProgressBar stages={stages} className="mb-4" />
+      <div className="p-4 bg-cafe-900 rounded-xl border border-cafe-800">
+         <h3 className="text-xs font-bold text-cafe-500 uppercase tracking-wider mb-3">Pipeline Progress</h3>
          <OrderStageProgress stages={stages} />
-      </Card>
+      </div>
 
       {/* Awaiting Input Section (Yellow highlight) */}
       {awaitingInput?.required && (
-        <Card className="p-4 border-yellow-500/30 bg-yellow-500/5 shadow-sm shadow-yellow-900/20">
-           <h3 className="text-sm font-bold text-yellow-400 mb-2 flex items-center gap-2">
-             <span>⚠️</span> Action Required
+        <div className="p-4 border border-yellow-500/40 bg-yellow-500/10 shadow-lg shadow-yellow-900/20 rounded-xl">
+           <h3 className="text-sm font-bold text-yellow-400 mb-3 flex items-center gap-2">
+             <AlertTriangle className="w-4 h-4" />
+             Action Required
            </h3>
-           <div className="text-sm text-gray-200 mb-4 bg-gray-900/50 p-3 rounded border border-gray-700/50 whitespace-pre-wrap">
+           <div className="text-sm text-cafe-200 mb-4 bg-cafe-950/80 p-3 rounded-lg border border-yellow-500/20 whitespace-pre-wrap font-mono">
              {awaitingInput.prompt || "The agent is requesting additional information to proceed."}
            </div>
-           
+
            <div className="flex gap-2">
-             <input 
-               type="text" 
+             <input
+               type="text"
                value={inputValue}
                onChange={(e) => setInputValue(e.target.value)}
-               placeholder="Type your response here..." 
-               className="flex-1 bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-bone focus:border-coffee outline-none placeholder-gray-500"
+               placeholder="Type your response here..."
+               className="flex-1 bg-cafe-950 border border-cafe-700 rounded-lg px-4 py-2.5 text-sm text-cafe-200 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/20 outline-none placeholder-cafe-600 transition-all"
                onKeyDown={(e) => {
                  if (e.key === 'Enter') handleSend();
                }}
+               autoFocus
              />
-             <Button 
+             <button
                 onClick={handleSend}
                 disabled={!inputValue.trim()}
-                className="bg-yellow-600 hover:bg-yellow-500 text-white border-yellow-700"
+                className={cn(
+                  "px-4 py-2.5 rounded-lg font-medium transition-all flex items-center gap-1.5",
+                  inputValue.trim()
+                    ? "bg-yellow-600 hover:bg-yellow-500 text-white shadow-lg shadow-yellow-900/20"
+                    : "bg-cafe-800 text-cafe-600 cursor-not-allowed"
+                )}
              >
-               <Send className="w-4 h-4 mr-1.5" />
+               <Send className="w-4 h-4" />
                Send
-             </Button>
+             </button>
            </div>
-        </Card>
+        </div>
       )}
 
       {/* General Input Section (for running orders without explicit awaiting state) */}
       {isRunning && !awaitingInput?.required && (
-        <Card className="p-4 border-gray-600 bg-gray-800/50">
-           <h3 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+        <div className="p-4 border border-cafe-700 bg-cafe-900/50 rounded-xl">
+           <h3 className="text-xs font-bold text-cafe-500 uppercase mb-2 flex items-center gap-2">
              <MessageSquare className="w-4 h-4" /> Send Message to Agent
            </h3>
-           
+
            <div className="flex gap-2">
-             <input 
-               type="text" 
+             <input
+               type="text"
                value={inputValue}
                onChange={(e) => setInputValue(e.target.value)}
-               placeholder="Type a message..." 
-               className="flex-1 bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-bone focus:border-coffee outline-none placeholder-gray-500"
+               placeholder="Type a message..."
+               className="flex-1 bg-cafe-950 border border-cafe-700 rounded-lg px-4 py-2.5 text-sm text-cafe-200 focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none placeholder-cafe-600 transition-all"
                onKeyDown={(e) => {
                  if (e.key === 'Enter') handleSend();
                }}
              />
-             <Button 
+             <button
                 onClick={handleSend}
                 disabled={!inputValue.trim()}
-                variant="secondary"
+                className={cn(
+                  "px-4 py-2.5 rounded-lg font-medium transition-all flex items-center gap-1.5",
+                  inputValue.trim()
+                    ? "bg-brand hover:bg-brand-hover text-white shadow-lg shadow-brand/20"
+                    : "bg-cafe-800 text-cafe-600 cursor-not-allowed"
+                )}
              >
-               <Send className="w-4 h-4 mr-1.5" />
+               <Send className="w-4 h-4" />
                Send
-             </Button>
+             </button>
            </div>
-        </Card>
+        </div>
       )}
 
       {/* Instructions / Tips */}
-      <div className="text-xs text-gray-500 px-1">
+      <div className="text-xs text-cafe-600 px-1 space-y-1">
         <p>• The pipeline automatically executes defined stages.</p>
         {isRunning && <p>• You can send messages to the agent at any time while it's running.</p>}
       </div>
