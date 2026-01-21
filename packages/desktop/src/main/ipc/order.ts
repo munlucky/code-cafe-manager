@@ -596,11 +596,21 @@ class OrderManager {
             const chunks = parseLogChunks(content);
 
             for (const chunk of chunks) {
+              // Detect output type from special markers (same as execution-manager)
+              let outputType: 'stdout' | 'stderr' = 'stdout';
+              let message = chunk.message;
+
+              // Check for [STDERR] marker
+              if (message.startsWith('[STDERR] ')) {
+                outputType = 'stderr';
+                message = message.substring('[STDERR] '.length); // Remove marker
+              }
+
               event.sender.send('order:output', {
                 orderId,
                 timestamp: chunk.timestamp,
-                type: 'stdout',
-                content: convertAnsiToHtml(chunk.message),  // ANSI를 HTML로 변환
+                type: outputType,
+                content: convertAnsiToHtml(message),  // ANSI를 HTML로 변환
               });
             }
 

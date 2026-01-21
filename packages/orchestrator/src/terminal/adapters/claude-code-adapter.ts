@@ -398,31 +398,48 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       childProc.stdout?.on('data', (data: Buffer) => {
         const chunk = data.toString();
         output += chunk;
-        
+
         // Parse stream-json format and extract content
         // Each line is a JSON object like: {"type":"assistant","message":{"content":"..."}}
         const lines = chunk.split('\n').filter(line => line.trim());
         for (const line of lines) {
+          let contentExtracted = false;
+
           try {
             const parsed = JSON.parse(line);
             // Extract content from various message types
             if (parsed.type === 'assistant' && parsed.message?.content) {
               // Assistant text chunks
               if (onData) onData(parsed.message.content);
+              contentExtracted = true;
             } else if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
               // Streaming text deltas
               if (onData) onData(parsed.delta.text);
+              contentExtracted = true;
             } else if (parsed.type === 'text' && parsed.text) {
               // Simple text output
               if (onData) onData(parsed.text);
+              contentExtracted = true;
             } else if (parsed.content) {
               // Generic content field
               if (onData) onData(parsed.content);
+              contentExtracted = true;
+            } else if (parsed.type === 'message_start' || parsed.type === 'message_stop' ||
+                       parsed.type === 'content_block_start' || parsed.type === 'content_block_stop') {
+              // Stream control messages - skip silently
+              contentExtracted = true;
+            }
+
+            // If JSON parsed but no known content field, log for debugging
+            if (!contentExtracted && onData) {
+              this.log('unknown-json-format', { parsed });
+              // Forward as formatted JSON for visibility
+              onData(`[JSON] ${JSON.stringify(parsed)}`);
             }
           } catch {
-            // Not JSON or parsing failed - pass raw chunk
-            // (This can happen with partial chunks or non-JSON output)
-            if (onData && line.trim() && !line.startsWith('{')) {
+            // Not JSON or parsing failed - pass raw chunk as-is
+            // (This can happen with partial chunks or plain text output)
+            if (onData && line.trim()) {
               onData(line);
             }
           }
@@ -432,7 +449,13 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       childProc.stderr?.on('data', (data: Buffer) => {
         const chunk = data.toString();
         this.log('stderr-chunk', { chunk });
-        errorOutput += data.toString();
+        errorOutput += chunk;
+
+        // Forward stderr to UI with special marker for identification
+        // execution-manager will parse this and set type='stderr'
+        if (onData && chunk.trim()) {
+          onData(`[STDERR] ${chunk}`);
+        }
       });
 
       childProc.on('close', (code) => {

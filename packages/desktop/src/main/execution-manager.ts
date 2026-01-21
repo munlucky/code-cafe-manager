@@ -274,15 +274,25 @@ export class ExecutionManager {
       }
       metrics.totalChunks++;
 
+      // Detect output type from special markers
+      let outputType: 'stdout' | 'stderr' = 'stdout';
+      let content = data.data;
+
+      // Check for [STDERR] marker from adapter
+      if (content.startsWith('[STDERR] ')) {
+        outputType = 'stderr';
+        content = content.substring('[STDERR] '.length); // Remove marker
+      }
+
       // 1. UI 전송 (실시간 보기용) - order:output 형식으로 전송 (ANSI를 HTML로 변환)
       this.sendToRenderer('order:output', {
         orderId: data.orderId,
         timestamp: new Date().toISOString(),
-        type: 'stdout',
-        content: convertAnsiToHtml(data.data),
+        type: outputType,
+        content: convertAnsiToHtml(content),
       });
 
-      // 2. 로그 저장 (지속성용) - 원본 그대로 저장
+      // 2. 로그 저장 (지속성용) - 원본 그대로 저장 (마커 포함)
       this.orchestrator.appendOrderLog(data.orderId, data.data).catch((err: Error) => {
         console.error(`[ExecutionManager] Failed to append log for order ${data.orderId}:`, err);
       });
