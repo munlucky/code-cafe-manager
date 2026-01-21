@@ -3,11 +3,13 @@ import { useViewStore } from './store/useViewStore';
 import { useCafeStore } from './store/useCafeStore';
 import { useOrderStore } from './store/useOrderStore';
 import { useIpcEffect } from './hooks/useIpcEffect';
-import type { Recipe, Skill as DesignSkill, DesignOrder, WorkflowLog, Cafe as DesignCafe } from './types/design';
+import type { Recipe, Skill as DesignSkill, DesignOrder, WorkflowLog, Cafe as DesignCafe, SkillCategory } from './types/design';
 import { OrderStatus as DesignOrderStatus } from './types/design';
 import type { Order, Workflow, Skill } from './types/models';
 import type { Cafe } from '@codecafe/core';
 import { OrderStatus as BackendOrderStatus } from './types/models';
+import type { StageInfo } from './components/order/OrderStageProgress';
+import type { TimelineEvent } from './components/orders/OrderTimelineView';
 
 // Import components
 import { NewSidebar } from './components/layout/NewSidebar';
@@ -107,6 +109,18 @@ export function App(): JSX.Element {
   const [skills, setSkills] = useState<DesignSkill[]>([]);
   const [orderLogs, setOrderLogs] = useState<Record<string, WorkflowLog[]>>({});
 
+  // Stage results for progress tracking
+  const [stageResults, setStageResults] = useState<Record<string, Record<string, {
+    stageId: string;
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    startedAt?: string;
+    completedAt?: string;
+    error?: string;
+  }>>>({});
+
+  // Timeline events
+  const [timelineEvents, setTimelineEvents] = useState<Record<string, TimelineEvent[]>>({});
+
   // Order state from useOrderStore (updated by IPC events)
   const { orders: backendOrders, addOrder, removeOrder, updateOrder, sessionStatuses, setAwaitingInput } = useOrderStore();
 
@@ -171,6 +185,100 @@ export function App(): JSX.Element {
     return cleanup;
   }, []);
 
+  // Subscribe to stage events
+  useEffect(() => {
+    const cleanupStageStarted = window.codecafe.order.onStageStarted((data: { orderId: string; stageId: string }) => {
+      const timestamp = new Date().toISOString();
+      setStageResults(prev => ({
+        ...prev,
+        [data.orderId]: {
+          ...(prev[data.orderId] || {}),
+          [data.stageId]: {
+            stageId: data.stageId,
+            status: 'running',
+            startedAt: timestamp,
+          },
+        },
+      }));
+      setTimelineEvents(prev => ({
+        ...prev,
+        [data.orderId]: [
+          ...(prev[data.orderId] || []),
+          {
+            id: `${data.stageId}-start-${Date.now()}`,
+            type: 'stage_start',
+            timestamp,
+            content: 'Stage started',
+            stageName: data.stageId,
+          },
+        ],
+      }));
+    });
+
+    const cleanupStageCompleted = window.codecafe.order.onStageCompleted((data: { orderId: string; stageId: string; duration?: number }) => {
+      const timestamp = new Date().toISOString();
+      setStageResults(prev => ({
+        ...prev,
+        [data.orderId]: {
+          ...(prev[data.orderId] || {}),
+          [data.stageId]: {
+            ...(prev[data.orderId]?.[data.stageId] || { stageId: data.stageId }),
+            status: 'completed',
+            completedAt: timestamp,
+          },
+        },
+      }));
+      setTimelineEvents(prev => ({
+        ...prev,
+        [data.orderId]: [
+          ...(prev[data.orderId] || []),
+          {
+            id: `${data.stageId}-complete-${Date.now()}`,
+            type: 'stage_complete',
+            timestamp,
+            content: `Stage completed${data.duration ? ` in ${data.duration}ms` : ''}`,
+            stageName: data.stageId,
+          },
+        ],
+      }));
+    });
+
+    const cleanupStageFailed = window.codecafe.order.onStageFailed((data: { orderId: string; stageId: string; error?: string }) => {
+      const timestamp = new Date().toISOString();
+      setStageResults(prev => ({
+        ...prev,
+        [data.orderId]: {
+          ...(prev[data.orderId] || {}),
+          [data.stageId]: {
+            ...(prev[data.orderId]?.[data.stageId] || { stageId: data.stageId }),
+            status: 'failed',
+            completedAt: timestamp,
+            error: data.error,
+          },
+        },
+      }));
+      setTimelineEvents(prev => ({
+        ...prev,
+        [data.orderId]: [
+          ...(prev[data.orderId] || []),
+          {
+            id: `${data.stageId}-fail-${Date.now()}`,
+            type: 'stage_fail',
+            timestamp,
+            content: data.error || 'Stage failed',
+            stageName: data.stageId,
+          },
+        ],
+      }));
+    });
+
+    return () => {
+      cleanupStageStarted();
+      cleanupStageCompleted();
+      cleanupStageFailed();
+    };
+  }, []);
+
   // Recipe CRUD handlers
   const handleAddRecipe = useCallback(async (recipe: Recipe) => {
     const res = await window.codecafe.workflow.create(recipe);
@@ -227,12 +335,33 @@ export function App(): JSX.Element {
     }
   }, []);
 
+  const handleDuplicateSkill = useCallback(async (skill: DesignSkill) => {
+    const duplicatedSkill: DesignSkill = {
+      ...skill,
+      id: `${skill.id}-copy-${Date.now()}`,
+      name: `${skill.name} (Copy)`,
+      isBuiltIn: false,
+    };
+    const backendSkill = convertToBackendSkill(duplicatedSkill);
+    const res = await window.codecafe.skill.create(backendSkill);
+    if (res.success && res.data) {
+      setSkills(prev => [...prev, convertToDesignSkill(res.data!)]);
+    }
+  }, []);
+
   // Cafe handlers
   const handleCreateCafe = useCallback(async (path: string) => {
     const res = await window.codecafe.cafe.create({ path });
     if (res.success && res.data) {
       await loadCafes();
       // Navigate to dashboard with new cafe
+    }
+  }, [loadCafes]);
+
+  const handleDeleteCafe = useCallback(async (cafeId: string) => {
+    const res = await window.codecafe.cafe.delete(cafeId);
+    if (res.success) {
+      await loadCafes();
     }
   }, [loadCafes]);
 
@@ -274,6 +403,13 @@ export function App(): JSX.Element {
     }
   }, [removeOrder]);
 
+  const handleCancelOrder = useCallback(async (orderId: string) => {
+    const res = await window.codecafe.order.cancel(orderId);
+    if (res.success) {
+      updateOrder(orderId, { status: BackendOrderStatus.CANCELLED });
+    }
+  }, [updateOrder]);
+
   const handleSendInput = useCallback(async (orderId: string, input: string) => {
     const res = await window.codecafe.order.sendInput(orderId, input);
     if (res.success) {
@@ -285,6 +421,31 @@ export function App(): JSX.Element {
   const handleNavigate = useCallback((view: string, cafeId?: string) => {
     setView(view as any, cafeId ? { cafeId } : undefined);
   }, [setView]);
+
+  // Get stages for order (from workflow + stageResults)
+  const getStagesForOrder = useCallback((order: DesignOrder): StageInfo[] => {
+    const recipe = recipes.find(r => r.id === order.workflowId);
+    const orderStages = recipe?.stages || [];
+    const results = stageResults[order.id] || {};
+
+    return orderStages.map(stageId => {
+      const stageResult = results[stageId];
+      let status: StageInfo['status'] = 'pending';
+
+      if (stageResult) {
+        status = stageResult.status;
+      } else if (order.status === 'COMPLETED') {
+        status = 'completed';
+      } else if (order.status === 'FAILED') {
+        status = 'failed';
+      }
+
+      return {
+        name: stageId.charAt(0).toUpperCase() + stageId.slice(1),
+        status,
+      };
+    });
+  }, [recipes, stageResults]);
 
   // Convert cafes to design format for components
   const designCafes: DesignCafe[] = cafes.map(convertToDesignCafe);
@@ -315,6 +476,7 @@ export function App(): JSX.Element {
               cafes={designCafes}
               onCreateCafe={handleCreateCafe}
               onSelectCafe={(id) => handleNavigate('dashboard', id)}
+              onDeleteCafe={handleDeleteCafe}
             />
           )}
 
@@ -325,7 +487,10 @@ export function App(): JSX.Element {
               workflows={recipes}
               onCreateOrder={handleCreateOrder}
               onDeleteOrder={handleDeleteOrder}
+              onCancelOrder={handleCancelOrder}
               onSendInput={handleSendInput}
+              getStagesForOrder={getStagesForOrder}
+              timelineEvents={timelineEvents}
             />
           )}
 
@@ -345,6 +510,7 @@ export function App(): JSX.Element {
               onAddSkill={handleAddSkill}
               onUpdateSkill={handleUpdateSkill}
               onDeleteSkill={handleDeleteSkill}
+              onDuplicateSkill={handleDuplicateSkill}
             />
           )}
         </div>
