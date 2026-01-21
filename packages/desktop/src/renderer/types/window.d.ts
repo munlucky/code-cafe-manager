@@ -309,6 +309,19 @@ declare global {
         onStageFailed: (callback: (data: { orderId: string; stageId: string; error?: string }) => void) => () => void;
         // Awaiting input event
         onAwaitingInput: (callback: (data: { orderId: string; prompt?: string }) => void) => () => void;
+        // Todo progress event (from Claude's TodoWrite)
+        onTodoProgress: (callback: (data: {
+          orderId: string;
+          timestamp: string;
+          completed: number;
+          inProgress: number;
+          total: number;
+          todos?: Array<{
+            content: string;
+            status: 'pending' | 'in_progress' | 'completed';
+            activeForm?: string;
+          }>;
+        }) => void) => () => void;
       };
 
       // Order 관리 (Legacy flat API - backward compatibility)

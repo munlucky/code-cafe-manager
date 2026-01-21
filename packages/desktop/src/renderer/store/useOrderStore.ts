@@ -24,37 +24,61 @@ export interface StageResult {
   error?: string;
 }
 
+/**
+ * Todo progress from Claude's TodoWrite tool
+ */
+export interface TodoProgress {
+  orderId: string;
+  timestamp: string;
+  completed: number;
+  inProgress: number;
+  total: number;
+  todos?: Array<{
+    content: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    activeForm?: string;
+  }>;
+}
+
 interface OrderState {
   // Core order data
   orders: Order[];
-  
+
   // Session status per order (for running orders)
   sessionStatuses: Record<string, SessionStatus>;
-  
+
   // Stage results per order
   stageResults: Record<string, Record<string, StageResult>>;
-  
+
+  // Todo progress per order (from Claude's TodoWrite)
+  todoProgress: Record<string, TodoProgress>;
+
   // Actions - Core
   setOrders: (orders: Order[]) => void;
   addOrder: (order: Order) => void;
   updateOrder: (id: string, updates: Partial<Order>) => void;
   removeOrder: (id: string) => void;
-  
+
   // Actions - Session Status
   updateSessionStatus: (orderId: string, status: Partial<SessionStatus>) => void;
   setAwaitingInput: (orderId: string, awaiting: boolean, prompt?: string) => void;
   clearSessionStatus: (orderId: string) => void;
-  
+
   // Actions - Stage Results
   updateStageResult: (orderId: string, stageId: string, result: Partial<StageResult>) => void;
   appendStageOutput: (orderId: string, stageId: string, output: string) => void;
   clearStageResults: (orderId: string) => void;
+
+  // Actions - Todo Progress
+  updateTodoProgress: (progress: TodoProgress) => void;
+  clearTodoProgress: (orderId: string) => void;
 }
 
 export const useOrderStore = create<OrderState>((set, get) => ({
   orders: [],
   sessionStatuses: {},
   stageResults: {},
+  todoProgress: {},
   
   // Core actions
   setOrders: (orders) => set({ orders }),
@@ -153,5 +177,20 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     set((state) => {
       const { [orderId]: _, ...rest } = state.stageResults;
       return { stageResults: rest };
+    }),
+
+  // Todo Progress actions
+  updateTodoProgress: (progress) =>
+    set((state) => ({
+      todoProgress: {
+        ...state.todoProgress,
+        [progress.orderId]: progress,
+      },
+    })),
+
+  clearTodoProgress: (orderId) =>
+    set((state) => {
+      const { [orderId]: _, ...rest } = state.todoProgress;
+      return { todoProgress: rest };
     }),
 }));

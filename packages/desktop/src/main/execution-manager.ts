@@ -193,7 +193,7 @@ export class ExecutionManager {
       metrics.totalChunks++;
 
       // Parse output type from markers (uses parseOutputType helper)
-      const { type, content } = parseOutputType(data.data);
+      const { type, content, todoProgress } = parseOutputType(data.data);
 
       // 1. UI 전송 (실시간 보기용) - order:output 형식으로 전송 (ANSI를 HTML로 변환)
       // SECURITY: convertAnsiToHtml properly escapes HTML to prevent XSS
@@ -204,7 +204,16 @@ export class ExecutionManager {
         content: convertAnsiToHtml(content),
       });
 
-      // 2. 로그 저장 (지속성용) - 원본 그대로 저장 (마커 포함)
+      // 2. Todo 진행률이 있으면 별도 이벤트로 전송
+      if (todoProgress) {
+        this.sendToRenderer('order:todo-progress', {
+          orderId: data.orderId,
+          timestamp: new Date().toISOString(),
+          ...todoProgress,
+        });
+      }
+
+      // 3. 로그 저장 (지속성용) - 원본 그대로 저장 (마커 포함)
       this.orchestrator.appendOrderLog(data.orderId, data.data).catch((err: Error) => {
         console.error(`[ExecutionManager] Failed to append log for order ${data.orderId}:`, err);
       });

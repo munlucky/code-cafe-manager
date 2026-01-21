@@ -9,13 +9,14 @@ import { OrderStatus } from '@codecafe/core';
  */
 export function useIpcEffect() {
   const { updateBarista } = useBaristaStore();
-  const { 
-    updateOrder, 
-    updateSessionStatus, 
-    updateStageResult, 
+  const {
+    updateOrder,
+    updateSessionStatus,
+    updateStageResult,
     setAwaitingInput,
     clearSessionStatus,
     clearStageResults,
+    updateTodoProgress,
   } = useOrderStore();
 
   useEffect(() => {
@@ -154,6 +155,19 @@ export function useIpcEffect() {
       updateSessionStatus(data.orderId, { status: 'failed', awaitingInput: false });
     });
 
+    // Todo Progress (from Claude's TodoWrite tool)
+    const cleanupTodoProgress = window.codecafe.order.onTodoProgress?.((data: {
+      orderId: string;
+      timestamp: string;
+      completed: number;
+      inProgress: number;
+      total: number;
+      todos?: Array<{ content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }>;
+    }) => {
+      console.log('[IpcEffect] Todo Progress:', data);
+      updateTodoProgress(data);
+    });
+
     // Cleanup
     return () => {
       cleanupSessionStarted?.();
@@ -165,14 +179,16 @@ export function useIpcEffect() {
       cleanupAwaitingInput?.();
       cleanupOrderCompleted?.();
       cleanupOrderFailed?.();
+      cleanupTodoProgress?.();
     };
   }, [
-    updateBarista, 
-    updateOrder, 
-    updateSessionStatus, 
-    updateStageResult, 
+    updateBarista,
+    updateOrder,
+    updateSessionStatus,
+    updateStageResult,
     setAwaitingInput,
     clearSessionStatus,
     clearStageResults,
+    updateTodoProgress,
   ]);
 }

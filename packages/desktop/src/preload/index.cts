@@ -66,6 +66,8 @@ contextBridge.exposeInMainWorld('codecafe', {
     onStageFailed: (callback: (data: any) => void) => setupIpcListener('order:stage-failed', callback),
     // Awaiting input event
     onAwaitingInput: (callback: (data: any) => void) => setupIpcListener('order:awaiting-input', callback),
+    // Todo progress event (from Claude's TodoWrite)
+    onTodoProgress: (callback: (data: any) => void) => setupIpcListener('order:todo-progress', callback),
   },
 
   receipt: {
