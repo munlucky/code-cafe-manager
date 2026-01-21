@@ -267,7 +267,11 @@ export function InteractiveTerminal({
               )}>
                 {e.type === 'user-input' && <span className="mr-2 text-yellow-500">➜</span>}
                 {e.type === 'system' && <span className="mr-2 text-blue-400">🤖</span>}
-                {/* Render HTML content (ANSI colors converted by execution-manager) */}
+                {/*
+                  Render HTML content (ANSI colors converted by execution-manager)
+                  SECURITY: Content is sanitized by convertAnsiToHtml (output-utils.ts)
+                  which escapes all HTML special characters before ANSI conversion
+                */}
                 <span dangerouslySetInnerHTML={{ __html: e.content }} />
               </div>
             </div>

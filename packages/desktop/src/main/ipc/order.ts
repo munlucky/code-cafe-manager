@@ -11,90 +11,8 @@ import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { promises as fs } from 'fs';
 import { getExecutionManager } from '../execution-manager.js';
-
-/**
- * ANSI escape 코드를 HTML로 변환
- * 터미널 출력의 색상/스타일을 유지하고 제어 시퀀스는 제거
- */
-function convertAnsiToHtml(text: string): string {
-  // 1. 먼저 모든 ANSI CSI 시퀀스를 처리 (ESC [ ... final_byte)
-  // final byte는 0x40-0x7E (@-~) 범위
-  // 색상 코드(m으로 끝남)만 유지하고 나머지 제어 코드는 제거
-  const allCsiRegex = /\x1b\[[0-9;?]*[@-~]/g;
-  let cleanedText = text.replace(allCsiRegex, (match) => {
-    // 색상 코드 (m으로 끝남)는 유지
-    if (match.endsWith('m')) {
-      return match;
-    }
-    // 나머지 제어 코드 (H, J, K, X, C, A, B, D, h, l 등)는 제거
-    return '';
-  });
-
-  // 2. 색상 코드를 HTML로 변환
-  const ansiColorRegex = /\x1b\[([0-9;?]*)m/g;
-
-  let result = '';
-  let lastIndex = 0;
-  let currentStyles: string[] = [];
-
-  const styleMap: Record<string, string> = {
-    '0': '',           // Reset
-    '1': 'font-weight:bold',  // Bold
-    '2': 'opacity:0.7',  // Dim
-    '3': 'font-style:italic',  // Italic
-    '4': 'text-decoration:underline',  // Underline
-    '30': 'color:black',
-    '31': 'color:#ef5350',  // Red
-    '32': 'color:#a5d6a7',  // Green
-    '33': 'color:#ffca28',  // Yellow
-    '34': 'color:#42a5f5',  // Blue
-    '35': 'color:#ab47bc',  // Magenta
-    '36': 'color:#26c6da',  // Cyan
-    '37': 'color:#ffffff',  // White
-    '90': 'color:#616161',  // Bright Black (Dark Gray)
-    '91': 'color:#ef5350',  // Bright Red
-    '92': 'color:#a5d6a7',  // Bright Green
-    '93': 'color:#ffca28',  // Bright Yellow
-    '94': 'color:#42a5f5',  // Bright Blue
-    '95': 'color:#ab47bc',  // Bright Magenta
-    '96': 'color:#26c6da',  // Bright Cyan
-    '97': 'color:#ffffff',  // Bright White
-  };
-
-  cleanedText.replace(ansiColorRegex, (match, codes, offset) => {
-    result += cleanedText.slice(lastIndex, offset);
-
-    const codeList = codes.split(';');
-    for (const code of codeList) {
-      if (code === '0') {
-        while (currentStyles.length > 0) {
-          result += '</span>';
-          currentStyles.pop();
-        }
-      } else if (code.startsWith('38') || code.startsWith('48')) {
-        continue;
-      } else if (styleMap[code]) {
-        const style = styleMap[code];
-        if (style && !currentStyles.includes(style)) {
-          result += `<span style="${style}">`;
-          currentStyles.push(style);
-        }
-      }
-    }
-
-    lastIndex = offset + match.length;
-    return '';
-  });
-
-  result += cleanedText.slice(lastIndex);
-
-  while (currentStyles.length > 0) {
-    result += '</span>';
-    currentStyles.pop();
-  }
-
-  return result;
-}
+import { convertAnsiToHtml } from '../common/output-utils.js';
+import { parseOutputType } from '../common/output-markers.js';
 
 /**
  * Cafe Registry 타입 (간소화)
@@ -596,21 +514,15 @@ class OrderManager {
             const chunks = parseLogChunks(content);
 
             for (const chunk of chunks) {
-              // Detect output type from special markers (same as execution-manager)
-              let outputType: 'stdout' | 'stderr' = 'stdout';
-              let message = chunk.message;
+              // Parse output type from markers (uses parseOutputType helper)
+              const { type, content } = parseOutputType(chunk.message);
 
-              // Check for [STDERR] marker
-              if (message.startsWith('[STDERR] ')) {
-                outputType = 'stderr';
-                message = message.substring('[STDERR] '.length); // Remove marker
-              }
-
+              // SECURITY: convertAnsiToHtml properly escapes HTML to prevent XSS
               event.sender.send('order:output', {
                 orderId,
                 timestamp: chunk.timestamp,
-                type: outputType,
-                content: convertAnsiToHtml(message),  // ANSI를 HTML로 변환
+                type,
+                content: convertAnsiToHtml(content),
               });
             }
 

@@ -13,6 +13,7 @@ import * as fs from 'fs';
 import { ProviderType } from '@codecafe/core';
 import { IProviderAdapter, IPty } from '../provider-adapter';
 import { ProviderSpawnError } from '../errors';
+import { STDERR_MARKER, JSON_MARKER } from '../output-markers.js';
 
 // Configuration constants
 const CONFIG = {
@@ -434,7 +435,7 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
             if (!contentExtracted && onData) {
               this.log('unknown-json-format', { parsed });
               // Forward as formatted JSON for visibility
-              onData(`[JSON] ${JSON.stringify(parsed)}`);
+              onData(`${JSON_MARKER}${JSON.stringify(parsed)}`);
             }
           } catch {
             // Not JSON or parsing failed - pass raw chunk as-is
@@ -454,7 +455,7 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         // Forward stderr to UI with special marker for identification
         // execution-manager will parse this and set type='stderr'
         if (onData && chunk.trim()) {
-          onData(`[STDERR] ${chunk}`);
+          onData(`${STDERR_MARKER}${chunk}`);
         }
       });
 
