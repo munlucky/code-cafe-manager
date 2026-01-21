@@ -166,8 +166,10 @@ Run `decisions.skillChain` in order:
 - `context-builder`: context-building agent (Task tool)
 - `codex-validate-plan`: Codex plan validation skill
 - `implementation-runner`: implementation agent (Task tool)
+- `completion-verifier`: test-based completion verification skill
 - `codex-review-code`: Codex code review skill
-- `codex-test-integration`: Codex integration test skill
+- `security-reviewer`: security vulnerability review skill
+- `build-error-resolver`: build/compile error resolution skill
 - `verify-changes.sh`: verification script (Bash tool)
 - `efficiency-tracker`: efficiency tracking skill
 - `session-logger`: session logging skill
@@ -185,6 +187,70 @@ Run `decisions.skillChain` in order:
 - `requirements-analyzer` -> `subagent_type: "general-purpose"` + prompt
 - `context-builder` -> `subagent_type: "context-builder"`
 - `implementation-runner` -> `subagent_type: "implementation-agent"`
+
+### 3.1 Dynamic Skill Injection
+
+During skillChain execution, dynamically inject skills when signals detected:
+
+| Signal | Condition | Inject Skill | Insert Position |
+|--------|-----------|--------------|-----------------|
+| `buildFailed` | Bash exit code ≠ 0 | build-error-resolver | Before retry current step |
+| `securityConcern` | Changed files contain `.env`, `auth`, `password`, `token` | security-reviewer | After codex-review-code |
+| `coverageLow` | Coverage < 80% from codex-test-integration output | (request additional tests) | After codex-test-integration |
+
+**Signal Detection:**
+```yaml
+buildFailed:
+  trigger: Bash tool returns non-zero exit code
+  action: Insert build-error-resolver, then retry failed step (max 2)
+
+securityConcern:
+  trigger: |
+    changedFiles.any(f => 
+      f.includes('.env') || 
+      f.includes('auth') || 
+      f.includes('password') || 
+      f.includes('token') ||
+      f.includes('secret')
+    )
+  action: Add security-reviewer after codex-review-code
+
+coverageLow:
+  trigger: codex-test-integration reports coverage < 80%
+  action: Log warning, request additional tests from user
+```
+
+### 3.2 Completion Verification Loop
+
+After implementation-runner completes:
+
+1. Call `completion-verifier`
+2. If `allPassed: true`:
+   - Mark `implementationComplete: true`
+   - Proceed to next step (codex-review-code)
+3. If `allPassed: false`:
+   - Identify failed phase (Unit → Phase 1, Integration → Phase 2)
+   - If retryCount < 2:
+     - **Go back to failed Phase (not test writing)**
+     - Pass `failedTests` to implementation-agent
+     - Implementation-agent fixes code only
+     - Increment retryCount
+   - Else:
+     - Ask user for intervention
+     - Provide failed test details
+
+**Signals Update:**
+```yaml
+signals:
+  implementationComplete: false  # existing
+  
+  # New fields
+  acceptanceTestsGenerated: false
+  testsPassed: 0
+  testsFailed: 0
+  completionRetryCount: 0
+  currentPhase: "Phase 0"  # 0=Tests, 1=Mock, 2=API, 3=Verify
+```
 
 ### 4. Record results
 Save final analysisContext to `.claude/docs/moonshot-analysis.yaml`.

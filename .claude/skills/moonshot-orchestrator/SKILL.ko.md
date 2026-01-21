@@ -166,8 +166,10 @@ notes: []
 - `context-builder`: 컨텍스트 구축 에이전트 (Task tool)
 - `codex-validate-plan`: Codex 계획 검증 스킬
 - `implementation-runner`: 구현 에이전트 (Task tool)
+- `completion-verifier`: 테스트 기반 완료 검증 스킬
 - `codex-review-code`: Codex 코드 리뷰 스킬
-- `codex-test-integration`: Codex 통합 테스트 스킬
+- `security-reviewer`: 보안 취약점 검토 스킬
+- `build-error-resolver`: 빌드/컴파일 에러 해결 스킬
 - `verify-changes.sh`: 검증 스크립트 (Bash tool)
 - `efficiency-tracker`: 효율성 추적 스킬
 - `session-logger`: 세션 로깅 스킬
@@ -185,6 +187,70 @@ notes: []
 - `requirements-analyzer` → `subagent_type: "general-purpose"` + 프롬프트
 - `context-builder` → `subagent_type: "context-builder"`
 - `implementation-runner` → `subagent_type: "implementation-agent"`
+
+### 3.1 동적 스킬 삽입 (Dynamic Skill Injection)
+
+skillChain 실행 중 시그널 감지 시 스킬 동적 삽입:
+
+| 시그널 | 조건 | 삽입 스킬 | 삽입 위치 |
+|--------|------|----------|----------|
+| `buildFailed` | Bash exit code ≠ 0 | build-error-resolver | 현재 단계 재시도 전 |
+| `securityConcern` | 변경 파일에 `.env`, `auth`, `password`, `token` 포함 | security-reviewer | codex-review-code 후 |
+| `coverageLow` | codex-test-integration 출력에서 커버리지 < 80% | (추가 테스트 요청) | codex-test-integration 후 |
+
+**시그널 감지:**
+```yaml
+buildFailed:
+  trigger: Bash 도구가 0이 아닌 exit code 반환
+  action: build-error-resolver 삽입, 실패한 단계 재시도 (최대 2회)
+
+securityConcern:
+  trigger: |
+    changedFiles.any(f => 
+      f.includes('.env') || 
+      f.includes('auth') || 
+      f.includes('password') || 
+      f.includes('token') ||
+      f.includes('secret')
+    )
+  action: codex-review-code 후 security-reviewer 추가
+
+coverageLow:
+  trigger: codex-test-integration에서 커버리지 < 80% 보고
+  action: 경고 로깅, 사용자에게 추가 테스트 요청
+```
+
+### 3.2 Completion Verification Loop
+
+implementation-runner 완료 후:
+
+1. `completion-verifier` 호출
+2. `allPassed: true` 시:
+   - `implementationComplete: true` 설정
+   - 다음 단계로 진행 (codex-review-code)
+3. `allPassed: false` 시:
+   - 실패 Phase 식별 (Unit → Phase 1, Integration → Phase 2)
+   - retryCount < 2 시:
+     - **실패한 Phase로 돌아가기 (테스트 작성 X)**
+     - `failedTests`를 implementation-agent에 전달
+     - implementation-agent는 코드만 수정
+     - retryCount 증가
+   - 그 외:
+     - 사용자에게 개입 요청
+     - 실패 테스트 상세 제공
+
+**Signals 업데이트:**
+```yaml
+signals:
+  implementationComplete: false  # 기존
+  
+  # 신규 필드
+  acceptanceTestsGenerated: false
+  testsPassed: 0
+  testsFailed: 0
+  completionRetryCount: 0
+  currentPhase: "Phase 0"  # 0=Tests, 1=Mock, 2=API, 3=Verify
+```
 
 ### 4. 결과 기록
 최종 analysisContext를 `.claude/docs/moonshot-analysis.yaml`에 저장.

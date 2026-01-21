@@ -1,100 +1,59 @@
 schemaVersion: "1.0"
 request:
-  userMessage: "Desktop 디자인 마이그레이션 Phase 2: IPC 연결"
+  userMessage: "공식문서가 이거야 확인하고 다시 개선해줘."
   taskType: modification
-  keywords: [ipc, connection, desktop, migration, phase-2]
+  keywords:
+    - 공식문서
+    - 확인
+    - 개선
 repo:
   gitBranch: "main"
-  gitStatus: "modified"
-  openFiles: []
+  gitStatus: "dirty"
+  openFiles:
+    - .claude/README.md
+    - .claude/CLAUDE.md
+    - .claude/skills/moonshot-orchestrator/SKILL.md
+    - .claude/rules/workflow.md
+    - .claude/rules/quality.md
   changedFiles:
-    - "packages/desktop/src/renderer/App.tsx"
-    - "packages/desktop/src/renderer/components/layout/NewSidebar.tsx"
-    - "packages/desktop/src/renderer/components/views/NewCafeDashboard.tsx"
-    - "packages/desktop/src/renderer/components/views/NewGlobalLobby.tsx"
-    - "packages/desktop/src/renderer/components/views/NewSkills.tsx"
-    - "packages/desktop/src/renderer/components/views/NewWorkflows.tsx"
-    - "packages/desktop/src/renderer/types/design.ts"
+    - .claude/CLAUDE.md
+    - .claude/README.md
+    - install-claude.sh
+    - .claude/rules/agents/agent-definition.md
+    - .claude/rules/basic-principles.md
+    - .claude/rules/communication.md
+    - .claude/rules/context-management.md
+    - .claude/rules/docs/documentation.md
+    - .claude/rules/output-format.md
+    - .claude/rules/quality.md
+    - .claude/rules/skills/skill-definition.md
+    - .claude/rules/workflow.md
 signals:
-  hasContextMd: true
-  hasPendingQuestions: true
-  requirementsClear: false
-  implementationReady: false
-  implementationComplete: false
+  hasContextMd: false
+  hasPendingQuestions: false
+  requirementsClear: true
+  implementationReady: true
+  implementationComplete: true
   hasMockImplementation: false
-  apiSpecConfirmed: true
+  apiSpecConfirmed: false
 estimates:
-  estimatedFiles: 7
-  estimatedLines: 300
-  estimatedTime: 3h
-phase: planning
-complexity: complex
-missingInfo:
-  - category: type-system
-    priority: HIGH
-    question: "OrderStatus 타입 불일치: design.ts의 OrderStatus는 WAITING_INPUT을 포함하고 models.ts는 CANCELLED를 포함합니다. statusMap에서 CANCELLED→FAILED 매핑이 올바른지 확인 필요. WAITING_INPUT 상태를 RUNNING으로 처리할까요 별도 처리할까요?"
-    reason: "TypeScript 타입 체크 실패 - 두 OrderStatus 간 값 불일치"
-
-  - category: import-error
-    priority: HIGH
-    question: "App.tsx:65에서 CoreCafe 타입을 참조하지만 @codecafe/core는 Cafe만 export합니다. CoreCafe를 Cafe로 변경하거나 타입 별칭을 추가할까요?"
-    reason: "TypeScript 오류: Cannot find name 'CoreCafe'"
-
-  - category: ipc-error-handling
-    priority: MEDIUM
-    question: "IPC 호출 실패 시 사용자에게 어떻게 알릴까요? (toast/alert/silent retry + 재시도 횟수와 타임아웃 정책)"
-    reason: "네트워크/IPC 실패 시 UX 정책 필요"
-
-  - category: loading-state
-    priority: MEDIUM
-    question: "IPC 로딩 중일 때 표시할 로딩 인디케이터 스타일 (스켈레톤/스피너/진행률바)과 전역 로딩 상태 관리 방식"
-    reason: "비동기 IPC 호출 시 로딩 UX 필요"
-
-  - category: component-props
-    priority: LOW
-    question: "NewSkills.tsx:191에서 Lucide Lock 컴포넌트에 title prop을 전달하지만 Lucide는 이를 지원하지 않습니다. title 속성을 제거하거나 다른 방식으로 tooltip을 구현할까요?"
-    reason: "Lucide 아이콘은 title 속성을 지원하지 않음"
-
-  - category: type-mapping
-    priority: LOW
-    question: "@codecafe/core의 Cafe에는 currentBranch, isDirty가 있고 design.ts의 Cafe에는 lastAccessedAt, activeOrdersCount가 있습니다. convertToDesignCafe에서 이 매핑이 올바른지 확인이 필요합니다."
-    reason: "두 Cafe 타입 간 속성 차이 존재"
-
+  estimatedFiles: 1
+  estimatedLines: 90
+  estimatedTime: "30m"
+phase: verification
+complexity: simple
+missingInfo: []
 decisions:
-  recommendedAgents:
-    - requirements-analyzer
-    - context-builder
-    - codex-validate-plan
+  recommendedAgents: []
   skillChain:
-    - requirements-analyzer
-    - context-builder
-    - codex-validate-plan
     - implementation-runner
-    - codex-review-code
-    - codex-test-integration
-    - efficiency-tracker
-    - session-logger
-  parallelGroups:
-    - - efficiency-tracker
-      - session-logger
+    - verify-changes.sh
+  parallelGroups: []
 artifacts:
-  tasksRoot: ".claude/docs/tasks"
-  contextDocPath: ".claude/docs/tasks/desktop-design-migration/context.md"
+  contextDocPath: .claude/docs/tasks/claude-memory-docs/context.md
   verificationScript: .claude/agents/verification/verify-changes.sh
-tokenBudget:
-  specSummaryTrigger: 2000
-  splitTrigger: 5
-  contextMaxTokens: 8000
-  warningThreshold: 0.8
 notes:
-  - "taskType=modification, confidence=high (마이그레이션 작업: 기존 코드 수정)"
-  - "Phase 1 완료: 새 컴포넌트 복사 완료 (NewSidebar, NewCafeDashboard, NewGlobalLobby, NewSkills, NewWorkflows, design.ts)"
-  - "Phase 2 IPC 연결: App.tsx 메인 IPC 핸들러 + 4개 뷰 컴포넌트 IPC 연결 + 타입 변환 레이어"
-  - "IPC 채널: window.codecafe.order (create/sendInput/delete), workflow (CRUD), skill (list), cafe (list/get)"
-  - "OrderInterface(NewCafeDashboard) 복잡도 높음 - 실시간 로그 스트리밍, 사용자 입력 처리"
-  - "complexity=complex, estimated=7files/~300lines/~3hours (6+files, 300+lines, 3h+ thresholds met)"
-  - "구현 계획 존재: docs/desktop-design-refactor/implementation_plan.md"
-  - "UNCERTAINTY DETECTED: 6개 질문 (HIGH:2, MEDIUM:2, LOW:2) - 타입 불일치, IPC 에러 핸들링, 로딩 상태"
-  - "[SEQUENCE DECISION UPDATED] phase=planning (hasPendingQuestions=true)"
-  - "chain: requirements-analyzer -> context-builder -> codex-validate-plan -> implementation -> codex-review-code -> codex-test-integration -> efficiency-tracker -> session-logger"
-  - "next step: requirements-analyzer to resolve HIGH priority type/import errors"
+  - "taskType=modification, confidence=medium"
+  - "complexity=simple, estimated=heuristic"
+  - "implementation: update README with official memory guidance"
+  - "verification: not run"
