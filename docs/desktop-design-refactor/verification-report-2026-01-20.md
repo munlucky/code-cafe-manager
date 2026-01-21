@@ -67,12 +67,12 @@ Desktop 디자인 리팩토링 후 기존 기능과 신규 구현을 비교 분�
 | StatusBadge | ✅ | `:30-46` | |
 | WAITING_INPUT 입력 | ✅ | `:248-277` | |
 | Worktree 정보 표시 | ✅ | `:149-154, :185-192` | |
-| **OrderStageProgress** | ❌ 누락 | - | Stage 뱃지 없음 |
-| **OrderStageProgressBar** | ❌ 누락 | - | 진행률 바 없음 |
-| **Summary/Timeline 탭** | ❌ 누락 | - | 탭 전환 없음 |
-| **OrderTimelineView** | ❌ 누락 | - | 이벤트 타임라인 없음 |
+| **OrderStageProgress** | ✅ 완료 | `App.tsx:getStagesForOrder` | Stage 진행률 표시 추가 |
+| **OrderStageProgressBar** | ✅ 완료 | `NewCafeDashboard.tsx` | 진행률 바 통합 |
+| **Summary/Timeline 탭** | ✅ 완료 | `NewCafeDashboard.tsx:viewMode` | Logs/Timeline 토글 |
+| **OrderTimelineView** | ✅ 완료 | `NewCafeDashboard.tsx` | Timeline 뷰 통합 |
 | **히스토리 로그 로딩** | ❌ 누락 | - | getOrderLog 미사용 |
-| **Cancel 버튼** | ❌ 누락 | - | Order 취소 불가 |
+| **Cancel 버튼** | ✅ 완료 | `NewCafeDashboard.tsx:234-241` | Order 취소 기능 추가 |
 | **명령어 히스토리** | ❌ 누락 | - | ↑/↓ 키보드 지원 없음 |
 | **Auto-scroll 토글** | ❌ 누락 | - | 자동 스크롤 제어 없음 |
 | **ANSI 코드 제거** | ❌ 누락 | - | 터미널 색상 코드 처리 없음 |
@@ -119,14 +119,14 @@ Desktop 디자인 리팩토링 후 기존 기능과 신규 구현을 비교 분�
 
 ## 3. Missing Features Summary
 
-### 3.1 High Priority (Order Execution UX)
+### 3.1 High Priority (Order Execution UX) - ✅ 대부분 구현 완료
 
-| # | Feature | Impact | Recommendation |
-|---|---------|--------|----------------|
-| 1 | **OrderStageProgress** | 사용자가 진행 상황 파악 어려움 | 기존 컴포넌트 통합 |
-| 2 | **Timeline View** | 이벤트 추적 불가 | 탭 UI 추가 |
-| 3 | **Cancel Order** | 실행 중인 Order 제어 불가 | 버튼 추가 |
-| 4 | **히스토리 로그** | 재접속 시 이전 로그 조회 불가 | getOrderLog 호출 추가 |
+| # | Feature | Status | 구현 위치 |
+|---|---------|--------|---------|
+| 1 | **OrderStageProgress** | ✅ 완료 | `App.tsx:getStagesForOrder`, `NewCafeDashboard.tsx` |
+| 2 | **Timeline View** | ✅ 완료 | `NewCafeDashboard.tsx:viewMode` |
+| 3 | **Cancel Order** | ✅ 완료 | `App.tsx:handleCancelOrder` |
+| 4 | **히스토리 로그** | ❌ 누락 | 재접속 시 이전 로그 조회 불가 |
 
 ### 3.2 Medium Priority (터미널 UX)
 
@@ -246,9 +246,9 @@ App.tsx (State + Handlers) → NewCafeDashboard (통합)
 - [x] Data Type Conversion
 
 ### Missing Functionality
-- [ ] Order Cancel
-- [ ] Stage Progress Display
-- [ ] Timeline Events View
+- [x] Order Cancel ✅ 구현됨
+- [x] Stage Progress Display ✅ 구현됨
+- [x] Timeline Events View ✅ 구현됨
 - [ ] History Log Loading
 - [ ] ANSI Code Stripping
 - [ ] Auto-scroll Toggle

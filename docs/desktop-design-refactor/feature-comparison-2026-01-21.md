@@ -45,12 +45,12 @@
 | 주문 생성 | ✅ | ✅ | ✅ |
 | 주문 삭제 | ✅ | ✅ | ✅ |
 | 주문 실행 (수동) | ✅ | - | ⚠️ 자동 실행으로 대체 |
-| **주문 취소** | ✅ | ❌ | **❌ 누락** |
+| **주문 취소** | ✅ | ✅ | ✅ |
 | **완료 주문 일괄 삭제** | ✅ | ❌ | **❌ 누락** |
 | 입력 전송 | ✅ | ✅ | ✅ |
-| **Stage 이벤트 구독** | ✅ | ❌ | **❌ 누락** |
-| **Stage 진행률 표시** | ✅ | ❌ | **❌ 누락** |
-| **Timeline 표시** | ✅ | ❌ | **❌ 누락** |
+| **Stage 이벤트 구독** | ✅ | ✅ | ✅ |
+| **Stage 진행률 표시** | ✅ | ✅ | ✅ |
+| **Timeline 표시** | ✅ | ✅ | ✅ |
 | **보기 모드 전환** | ✅ | ❌ | **❌ 누락** |
 | 상세 모달 | ✅ | ❌ | **❌ 누락** (인라인 뷰로 대체) |
 
@@ -79,7 +79,7 @@
 |-----|-----|---|------|
 | Cafe 선택 | ✅ | ✅ | ✅ |
 | Cafe 추가 | ✅ | ✅ | ✅ |
-| **Cafe 삭제** | ✅ | ❌ | **❌ 누락** |
+| **Cafe 삭제** | ✅ | ✅ | ✅ |
 
 ---
 
@@ -113,9 +113,9 @@
 | Skill 생성 | ✅ | ✅ | ✅ |
 | Skill 수정 | ✅ | ✅ | ✅ |
 | Skill 삭제 | ✅ | ✅ | ✅ |
-| **Skill 복제** | ✅ | ❌ | **❌ 누락** |
+| **Skill 복제** | ✅ | ✅ | ✅ |
 | Skill 보기 | ✅ | ⚠️ | ⚠️ 인라인 편집으로 대체 |
-| **카테고리 필터** | ✅ | ❌ | **❌ 누락** (검색만 있음) |
+| **카테고리 필터** | ✅ | ✅ | ✅ |
 
 ---
 
@@ -188,24 +188,24 @@
 
 ## 6. 누락 기능 요약
 
-### 🔴 Critical (핵심 기능 누락)
+### 🔴 Critical (핵심 기능 누락) - ✅ 모두 구현 완료
 
-| 컴포넌트 | 누락 기능 | 영향 |
-|---------|---------|-----|
-| NewCafeDashboard | **Order 취소** (`order.cancel`) | 실행 중인 주문 제어 불가 |
-| NewCafeDashboard | **Stage 이벤트 구독** | 진행 상황 추적 불가 |
-| NewCafeDashboard | **Stage 진행률 표시** | 사용자가 현재 단계 파악 불가 |
-| NewGlobalLobby | **Cafe 삭제** | Cafe 정리 불가 |
+| 컴포넌트 | 기능 | 상태 | 구현 위치 |
+|---------|------|------|---------|
+| NewCafeDashboard | **Order 취소** | ✅ 완료 | `App.tsx:handleCancelOrder` |
+| NewCafeDashboard | **Stage 이벤트 구독** | ✅ 완료 | `App.tsx:useEffect (Stage events)` |
+| NewCafeDashboard | **Stage 진행률 표시** | ✅ 완료 | `NewCafeDashboard.tsx:OrderStageProgressBar` |
+| NewGlobalLobby | **Cafe 삭제** | ✅ 완료 | `App.tsx:handleDeleteCafe` |
 
 ### 🟡 Medium (사용성 저하)
 
-| 컴포넌트 | 누락 기능 | 영향 |
-|---------|---------|-----|
-| NewCafeDashboard | 완료 주문 일괄 삭제 | 정리 불편 |
-| NewCafeDashboard | Grid/Kanban 모드 전환 | 보기 옵션 제한 |
-| NewCafeDashboard | Timeline 표시 | 이벤트 추적 제한 |
-| NewSkills | Skill 복제 | 빠른 생성 불가 |
-| NewSkills | 카테고리 필터 | 검색 효율 저하 |
+| 컴포넌트 | 누락 기능 | 상태 | 비고 |
+|---------|---------|------|-----|
+| NewCafeDashboard | 완료 주문 일괄 삭제 | ❌ 누락 | 정리 불편 |
+| NewCafeDashboard | Grid/Kanban 모드 전환 | ❌ 누락 | 보기 옵션 제한 |
+| NewCafeDashboard | Timeline 표시 | ✅ 완료 | `NewCafeDashboard.tsx:viewMode toggle` |
+| NewSkills | Skill 복제 | ✅ 완료 | `NewSkills.tsx:onDuplicateSkill` |
+| NewSkills | 카테고리 필터 | ✅ 완료 | `NewSkills.tsx:categoryFilter` |
 
 ### 🟢 Low (기능 대체됨)
 
@@ -266,19 +266,19 @@ const handleDeleteCafe = async (cafeId: string) => {
 - [x] Order 생성
 - [x] Order 삭제
 - [x] Order 실행 (자동)
-- [ ] **Order 취소**
+- [x] **Order 취소** ✅ 구현됨
 - [ ] **완료 주문 일괄 삭제**
 - [x] 입력 전송 (WAITING_INPUT)
-- [ ] **Stage 진행률 표시**
-- [ ] **Timeline 이벤트 표시**
-- [ ] **Stage 이벤트 구독**
+- [x] **Stage 진행률 표시** ✅ 구현됨
+- [x] **Timeline 이벤트 표시** ✅ 구현됨
+- [x] **Stage 이벤트 구독** ✅ 구현됨
 - [ ] **Grid/Kanban 보기 모드**
 
 ### Cafe 관리
 - [x] Cafe 목록
 - [x] Cafe 생성
 - [x] Cafe 선택
-- [ ] **Cafe 삭제**
+- [x] **Cafe 삭제** ✅ 구현됨
 
 ### Recipe 관리
 - [x] Recipe CRUD
@@ -288,8 +288,8 @@ const handleDeleteCafe = async (cafeId: string) => {
 
 ### Skill 관리
 - [x] Skill CRUD
-- [ ] **Skill 복제**
-- [ ] **카테고리 필터**
+- [x] **Skill 복제** ✅ 구현됨
+- [x] **카테고리 필터** ✅ 구현됨
 
 ### 기타
 - [ ] **Settings 페이지 연결**
