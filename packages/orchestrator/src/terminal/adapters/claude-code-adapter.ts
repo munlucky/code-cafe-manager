@@ -130,6 +130,7 @@ If the user's request is ambiguous or lacks details:
 export class ClaudeCodeAdapter implements IProviderAdapter {
   readonly providerType: ProviderType = 'claude-code';
   private config: ClaudeCodeAdapterConfig;
+  private onDataCallCount = 0;  // DEBUG: Count onData calls
 
   constructor(config?: ClaudeCodeAdapterConfig) {
     this.config = config || {};
@@ -400,34 +401,103 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         const chunk = data.toString();
         output += chunk;
 
+        // DEBUG: Log raw chunks for debugging
+        if (chunk.trim() && chunk.length < 500) {
+          console.log(`[ClaudeAdapter] stdout chunk (${chunk.length} chars):`, chunk.substring(0, 200));
+        }
+
         // Parse stream-json format and extract content
-        // Each line is a JSON object like: {"type":"assistant","message":{"content":"..."}}
+        // Claude Code stream-json format reference:
+        // - {"type":"assistant","message":{"role":"assistant","content":[...]}}
+        // - {"type":"content_block_delta","delta":{"type":"text_delta","text":"..."}}
+        // - {"type":"message","role":"assistant","content":"..."}
         const lines = chunk.split('\n').filter(line => line.trim());
         for (const line of lines) {
           let contentExtracted = false;
 
           try {
             const parsed = JSON.parse(line);
+
             // Extract content from various message types
             if (parsed.type === 'assistant' && parsed.message?.content) {
-              // Assistant text chunks
-              if (onData) onData(parsed.message.content);
-              contentExtracted = true;
+              // Assistant message with content array (Claude API format)
+              const contentArray = parsed.message.content;
+              if (Array.isArray(contentArray)) {
+                let hasTextContent = false;
+                for (const item of contentArray) {
+                  if (item.type === 'text' && item.text) {
+                    if (onData) onData(item.text);
+                    contentExtracted = true;
+                    hasTextContent = true;
+                  }
+                  // Note: tool_use items are skipped (not displayed in terminal)
+                }
+                // If only tool_use items exist, mark as extracted (don't log as unknown)
+                if (!hasTextContent && contentArray.length > 0) {
+                  contentExtracted = true;
+                }
+              } else if (typeof contentArray === 'string') {
+                if (onData) onData(contentArray);
+                contentExtracted = true;
+              }
             } else if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-              // Streaming text deltas
+              // Streaming text deltas (newer stream format)
+              if (onData) onData(parsed.delta.text);
+              contentExtracted = true;
+            } else if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta' && parsed.delta?.text) {
+              // Alternative delta format
               if (onData) onData(parsed.delta.text);
               contentExtracted = true;
             } else if (parsed.type === 'text' && parsed.text) {
               // Simple text output
               if (onData) onData(parsed.text);
               contentExtracted = true;
+            } else if (parsed.type === 'message' && parsed.role === 'assistant') {
+              // Message format with role
+              if (parsed.content) {
+                if (typeof parsed.content === 'string') {
+                  if (onData) onData(parsed.content);
+                  contentExtracted = true;
+                } else if (Array.isArray(parsed.content)) {
+                  let hasTextContent = false;
+                  for (const item of parsed.content) {
+                    if (item.type === 'text' && item.text) {
+                      if (onData) onData(item.text);
+                      contentExtracted = true;
+                      hasTextContent = true;
+                    }
+                    // Note: tool_use items are skipped
+                  }
+                  // If only tool_use items exist, mark as extracted
+                  if (!hasTextContent && parsed.content.length > 0) {
+                    contentExtracted = true;
+                  }
+                }
+              }
+            } else if (parsed.type === 'message_delta' && parsed.delta?.content) {
+              // Message delta format
+              if (typeof parsed.delta.content === 'string') {
+                if (onData) onData(parsed.delta.content);
+                contentExtracted = true;
+              }
+            } else if (parsed.type === 'result' && parsed.result) {
+              // Result format - contains final output
+              if (typeof parsed.result === 'string') {
+                if (onData) onData(parsed.result);
+                contentExtracted = true;
+              }
             } else if (parsed.content) {
               // Generic content field
-              if (onData) onData(parsed.content);
-              contentExtracted = true;
+              if (typeof parsed.content === 'string') {
+                if (onData) onData(parsed.content);
+                contentExtracted = true;
+              }
             } else if (parsed.type === 'message_start' || parsed.type === 'message_stop' ||
                        parsed.type === 'content_block_start' || parsed.type === 'content_block_stop') {
               // Stream control messages - skip silently
+              contentExtracted = true;
+            } else if (parsed.type === 'system' || parsed.type === 'user') {
+              // System and user messages - skip for terminal output
               contentExtracted = true;
             }
 
@@ -437,10 +507,24 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
               // Forward as formatted JSON for visibility
               onData(`${JSON_MARKER}${JSON.stringify(parsed)}`);
             }
+
+            // DEBUG: Log when content is successfully extracted and sent
+            if (contentExtracted && onData) {
+              // Count how many times onData was called
+              if (!this.onDataCallCount) {
+                (this as any).onDataCallCount = 0;
+              }
+              (this as any).onDataCallCount++;
+              if ((this as any).onDataCallCount <= 5) {
+                console.log(`[ClaudeAdapter] onData called (count: ${(this as any).onDataCallCount}), extracting content from type: ${parsed.type}`);
+              }
+            }
           } catch {
             // Not JSON or parsing failed - pass raw chunk as-is
             // (This can happen with partial chunks or plain text output)
             if (onData && line.trim()) {
+              // DEBUG: Log non-JSON lines
+              console.log(`[ClaudeAdapter] Non-JSON line (${line.length} chars):`, line.substring(0, 200));
               onData(line);
             }
           }

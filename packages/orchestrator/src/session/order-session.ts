@@ -203,6 +203,8 @@ export class OrderSession extends EventEmitter {
    * 워크플로우 실행
    */
   async execute(cwd: string): Promise<void> {
+    console.log(`[OrderSession] execute() called for order ${this.orderId}, cwd: ${cwd}`);
+
     if (!this.workflowConfig) {
       throw new Error(`No workflow configured for session ${this.orderId}`);
     }
@@ -211,6 +213,7 @@ export class OrderSession extends EventEmitter {
       throw new Error(`Session ${this.orderId} is not in created state`);
     }
 
+    console.log(`[OrderSession] Setting status to running and emitting session:started`);
     this.status = 'running';
     this.startedAt = new Date();
     this.currentCwd = cwd;
@@ -218,9 +221,12 @@ export class OrderSession extends EventEmitter {
 
     try {
       // 필요한 Provider 목록 추출
+      console.log(`[OrderSession] Extracting providers...`);
       const providers = this.extractProviders(this.workflowConfig.stages);
+      console.log(`[OrderSession] Providers extracted:`, providers);
 
       // TerminalGroup 생성
+      console.log(`[OrderSession] Creating TerminalGroup...`);
       this.terminalGroup = new TerminalGroup(
         {
           orderId: this.orderId,
@@ -230,6 +236,7 @@ export class OrderSession extends EventEmitter {
         this.terminalPool,
         this.sharedContext
       );
+      console.log(`[OrderSession] TerminalGroup created`);
 
       // 터미널 출력 이벤트 전파
       this.terminalGroup.on('stage:output', (eventData) => {
@@ -237,11 +244,15 @@ export class OrderSession extends EventEmitter {
       });
 
       // Stage 실행 계획 생성 및 저장
+      console.log(`[OrderSession] Building execution plan...`);
       const executionPlan = this.buildExecutionPlan(this.workflowConfig.stages);
       this.currentExecutionPlan = executionPlan;
+      console.log(`[OrderSession] Execution plan built with ${executionPlan.length} batches`);
 
       // 계획에 따라 Stage 실행 (오케스트레이터 판단 포함)
+      console.log(`[OrderSession] Calling executeWithOrchestrator...`);
       await this.executeWithOrchestrator(executionPlan, cwd);
+      console.log(`[OrderSession] executeWithOrchestrator completed`);
 
     } catch (error) {
       // 실패 상태로 전환하되 failedState 저장 (재시도 지원)

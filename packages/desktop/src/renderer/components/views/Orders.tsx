@@ -116,6 +116,29 @@ export function Orders(): JSX.Element {
 
   // Stage 이벤트 리스너 - stageResults 업데이트
   useEffect(() => {
+    // Session 시작 이벤트 - Order 상태를 RUNNING으로 업데이트
+    const cleanupSessionStarted = window.codecafe.order.onSessionStarted(
+      (data: { orderId: string }) => {
+        // Orders 목록을 갱신하여 RUNNING 상태 반영
+        fetchOrders();
+      }
+    );
+
+    // Session 완료 이벤트 - Orders 목록 갱신
+    const cleanupSessionCompleted = window.codecafe.order.onSessionCompleted(
+      (data: { orderId: string }) => {
+        fetchOrders();
+      }
+    );
+
+    // Session 실패 이벤트 - Orders 목록 갱신
+    const cleanupSessionFailed = window.codecafe.order.onSessionFailed(
+      (data: { orderId: string; error?: string }) => {
+        fetchOrders();
+      }
+    );
+
+    // Stage 이벤트 리스너
     const cleanupStageStarted = window.codecafe.order.onStageStarted(
       (data: { orderId: string; stageId: string; provider?: string }) => {
         updateStageResult(data.orderId, data.stageId, {
@@ -146,11 +169,14 @@ export function Orders(): JSX.Element {
     );
 
     return () => {
+      cleanupSessionStarted();
+      cleanupSessionCompleted();
+      cleanupSessionFailed();
       cleanupStageStarted();
       cleanupStageCompleted();
       cleanupStageFailed();
     };
-  }, [updateStageResult]);
+  }, [updateStageResult, fetchOrders]);
 
   // 주기적으로 갱신
   useEffect(() => {
@@ -194,42 +220,49 @@ export function Orders(): JSX.Element {
     const orderStages = workflowStages[order.workflowId] || [];
     const results = stageResults[order.id] || {};
 
+    // workflowStages가 없고 stageResults만 있는 경우 - stageResults 사용
     if (orderStages.length === 0 && Object.keys(results).length > 0) {
       return Object.values(results).map((r) => ({
-        name: r.stageId,
+        name: r.stageId.charAt(0).toUpperCase() + r.stageId.slice(1),
         status: r.status,
       }));
     }
 
-    return orderStages.map((stageId) => {
-      const stageResult = results[stageId];
-      const isCompleted = order.status === OrderStatus.COMPLETED;
-      const isFailed = order.status === OrderStatus.FAILED;
-      const isRunning = order.status === OrderStatus.RUNNING;
+    // workflowStages가 있는 경우 - workflowStages 기준으로 results 병합
+    if (orderStages.length > 0) {
+      return orderStages.map((stageId) => {
+        const stageResult = results[stageId];
+        const isCompleted = order.status === OrderStatus.COMPLETED;
+        const isFailed = order.status === OrderStatus.FAILED;
+        const isRunning = order.status === OrderStatus.RUNNING;
 
-      let status: StageInfo['status'] = 'pending';
+        let status: StageInfo['status'] = 'pending';
 
-      if (stageResult) {
-        status = stageResult.status;
-      } else if (isCompleted) {
-        status = 'completed';
-      } else if (isFailed) {
-        status = 'failed';
-      } else if (isRunning) {
-        const stageIndex = orderStages.indexOf(stageId);
-        const hasEarlierIncomplete = orderStages
-          .slice(0, stageIndex)
-          .some((s) => !results[s] || results[s].status !== 'completed');
-        if (!hasEarlierIncomplete) {
-          status = 'running';
+        if (stageResult) {
+          status = stageResult.status;
+        } else if (isCompleted) {
+          status = 'completed';
+        } else if (isFailed) {
+          status = 'failed';
+        } else if (isRunning) {
+          const stageIndex = orderStages.indexOf(stageId);
+          const hasEarlierIncomplete = orderStages
+            .slice(0, stageIndex)
+            .some((s) => !results[s] || results[s].status !== 'completed');
+          if (!hasEarlierIncomplete) {
+            status = 'running';
+          }
         }
-      }
 
-      return {
-        name: stageId.charAt(0).toUpperCase() + stageId.slice(1),
-        status,
-      };
-    });
+        return {
+          name: stageId.charAt(0).toUpperCase() + stageId.slice(1),
+          status,
+        };
+      });
+    }
+
+    // 둘 다 없는 경우 - 빈 배열 반환
+    return [];
   };
 
   // Order에 대한 Timeline 이벤트 생성

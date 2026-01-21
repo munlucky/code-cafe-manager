@@ -179,6 +179,7 @@ app.whenReady().then(async () => {
   const execManager = getExecutionManager();
   if (execManager) {
     execManager.setMainWindow(mainWindow);
+    console.log('[Main] ExecutionManager mainWindow reference set.');
   }
 
   app.on('activate', () => {

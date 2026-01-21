@@ -27,12 +27,18 @@ export interface SessionStatusSummary {
   totalCafes: number;
   totalSessions: number;
   runningCount: number;
+  awaitingInputCount: number;
   completedCount: number;
   failedCount: number;
   cafes: Array<{
     cafeId: string;
     sessionCount: number;
     runningCount: number;
+  }>;
+  sessions: Array<{
+    orderId: string;
+    cafeId: string;
+    status: SessionStatus;
   }>;
 }
 
@@ -180,6 +186,7 @@ export class CafeSessionManager extends EventEmitter {
   getStatusSummary(): SessionStatusSummary {
     let totalSessions = 0;
     let runningCount = 0;
+    let awaitingInputCount = 0;
     let completedCount = 0;
     let failedCount = 0;
 
@@ -189,6 +196,12 @@ export class CafeSessionManager extends EventEmitter {
       runningCount: number;
     }> = [];
 
+    const sessions: Array<{
+      orderId: string;
+      cafeId: string;
+      status: SessionStatus;
+    }> = [];
+
     for (const [cafeId, cafe] of this.cafes) {
       let cafeRunning = 0;
 
@@ -196,10 +209,20 @@ export class CafeSessionManager extends EventEmitter {
         totalSessions++;
         const status = session.getStatus().status;
 
+        // Add to sessions array
+        sessions.push({
+          orderId: session.orderId,
+          cafeId,
+          status,
+        });
+
         switch (status) {
           case 'running':
             runningCount++;
             cafeRunning++;
+            break;
+          case 'awaiting_input':
+            awaitingInputCount++;
             break;
           case 'completed':
             completedCount++;
@@ -222,9 +245,11 @@ export class CafeSessionManager extends EventEmitter {
       totalCafes: this.cafes.size,
       totalSessions,
       runningCount,
+      awaitingInputCount,
       completedCount,
       failedCount,
       cafes,
+      sessions,
     };
   }
 

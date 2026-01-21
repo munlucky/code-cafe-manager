@@ -59,6 +59,7 @@ export class BaristaEngineV2 extends EventEmitter {
       this.emit('order:output', { orderId: data.orderId, data: data.data });
     });
     this.sessionManager.on('session:started', (data) => {
+      console.log(`[BaristaEngineV2] session:started EVENT RECEIVED, emitting order:started for order: ${data.orderId}`);
       this.emit('order:started', data);
     });
     this.sessionManager.on('session:completed', (data) => {
@@ -93,11 +94,19 @@ export class BaristaEngineV2 extends EventEmitter {
     // Use provided workflow config or load default
     let workflowConfig = (order as OrderWithWorkflow).workflowConfig;
     if (!workflowConfig || workflowConfig.stages.length === 0) {
+      console.log(`[BaristaEngineV2] Loading default workflow...`);
       workflowConfig = await this.loadDefaultWorkflow(order.prompt || '');
+      console.log(`[BaristaEngineV2] Workflow loaded with ${workflowConfig.stages.length} stages`);
     }
 
+    // Force flush to ensure log is written
+    console.log(`[BaristaEngineV2] About to call executeWithSession...`);
+    await new Promise(resolve => setImmediate(resolve));
+
     // Always use session-based execution
+    console.log(`[BaristaEngineV2] Calling executeWithSession...`);
     await this.executeWithSession(order, barista, cafeId, cwd, workflowConfig);
+    console.log(`[BaristaEngineV2] executeWithSession completed`);
   }
 
   /**
@@ -109,9 +118,12 @@ export class BaristaEngineV2 extends EventEmitter {
     executionFn: () => Promise<void>
   ): Promise<void> {
     try {
+      console.log(`[BaristaEngineV2] _handleSessionExecution: Starting executionFn`);
       await executionFn();
+      console.log(`[BaristaEngineV2] _handleSessionExecution: executionFn completed`);
 
       const sessionStatus = session.getStatus().status;
+      console.log(`[BaristaEngineV2] _handleSessionExecution: Session status is ${sessionStatus}`);
 
       if (sessionStatus === 'awaiting_input') {
         console.log(`BaristaEngineV2: Order ${order.id} awaiting user input`);
@@ -143,6 +155,7 @@ export class BaristaEngineV2 extends EventEmitter {
     console.log(`BaristaEngineV2: Executing order ${order.id} with Session (workflow mode)`);
 
     // Session 생성
+    console.log(`[BaristaEngineV2] Creating session with workflow...`);
     const session = this.sessionManager.createSessionWithWorkflow(
       order,
       barista,
@@ -150,11 +163,14 @@ export class BaristaEngineV2 extends EventEmitter {
       cwd,
       workflowConfig
     );
+    console.log(`[BaristaEngineV2] Session created: ${session.orderId}`);
 
     // Active execution 등록
     this.activeExecutions.set(order.id, { baristaId: barista.id, session });
 
+    console.log(`[BaristaEngineV2] Starting session.execute...`);
     await this._handleSessionExecution(order, session, () => session.execute(cwd));
+    console.log(`[BaristaEngineV2] session.execute completed`);
   }
 
   /**
@@ -200,9 +216,21 @@ export class BaristaEngineV2 extends EventEmitter {
     const jsonFileName = skillNameMap[skillName] || skillName;
 
     // Load from desktop/skills/*.json (bundled with app)
+    // Try multiple possible paths similar to workflow loading
     const possiblePaths = [
-      path.join(projectRoot, `desktop/skills/${jsonFileName}.json`),
+      // In packaged app (Electron environment)
+      ...(typeof process !== 'undefined' && (process as any).resourcesPath
+        ? [path.join((process as any).resourcesPath, 'skills', `${jsonFileName}.json`)]
+        : []),
+      // Development environment - from project root
       path.join(projectRoot, `packages/desktop/skills/${jsonFileName}.json`),
+      path.join(projectRoot, `desktop/skills/${jsonFileName}.json`),
+      // From current working directory (may be packages/desktop)
+      path.join(process.cwd(), 'skills', `${jsonFileName}.json`),
+      path.join(process.cwd(), '../desktop/skills', `${jsonFileName}.json`),
+      // Relative to __dirname (orchestrator dist/src)
+      path.join(__dirname, '../../../desktop/skills', `${jsonFileName}.json`),
+      path.join(__dirname, '../../../packages/desktop/skills', `${jsonFileName}.json`),
     ];
 
     for (const skillPath of possiblePaths) {
@@ -224,6 +252,7 @@ export class BaristaEngineV2 extends EventEmitter {
     }
 
     console.warn(`[BaristaEngineV2] Skill not found or no instructions: ${skillName}`);
+    console.warn(`[BaristaEngineV2] Tried paths:`, possiblePaths);
     return null;
   }
 
@@ -313,15 +342,38 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
    * Load default workflow from moon.workflow.yml
    */
   private async loadDefaultWorkflow(orderPrompt: string): Promise<WorkflowConfig> {
-    // Get path relative to this file (works in both dev and built environments)
-    // In dev: packages/orchestrator/src/barista/ -> need ../../../desktop/workflows
-    // In prod: packages/orchestrator/dist/barista/ -> need ../../../../desktop/workflows
-    // Use project root by going up from dist/src
-    const projectRoot = path.join(__dirname, '../../..');
-    const workflowPath = path.join(
-      projectRoot,
-      'desktop/workflows/moon.workflow.yml'
-    );
+    // Try multiple possible workflow locations
+    const possiblePaths = [
+      // Relative to orchestrator dist/src
+      path.join(__dirname, '../../../packages/desktop/.orch/workflows/moon.workflow.yml'),
+      path.join(__dirname, '../../../desktop/.orch/workflows/moon.workflow.yml'),
+      // In packaged app (Electron environment)
+      ...(typeof process !== 'undefined' && (process as any).resourcesPath
+        ? [path.join((process as any).resourcesPath, 'workflows/moon.workflow.yml')]
+        : []),
+      // Development environment
+      path.join(process.cwd(), 'packages/desktop/.orch/workflows/moon.workflow.yml'),
+    ];
+
+    let workflowPath: string | null = null;
+    let projectRoot = process.cwd();
+
+    for (const possiblePath of possiblePaths) {
+      try {
+        await fs.access(possiblePath);
+        workflowPath = possiblePath;
+        // Determine project root from workflow path
+        projectRoot = path.dirname(path.dirname(path.dirname(possiblePath)));
+        break;
+      } catch {
+        // Path doesn't exist, try next
+      }
+    }
+
+    if (!workflowPath) {
+      console.warn('[BaristaEngineV2] Workflow file not found in any expected location');
+      return this.createFallbackWorkflow(orderPrompt);
+    }
 
     try {
       const content = await fs.readFile(workflowPath, 'utf-8');
@@ -357,6 +409,8 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
             skillContents
           );
 
+          console.log(`[BaristaEngineV2] Stage ${stageId} prompt built, length: ${stagePrompt.length}`);
+
           return {
             id: stageId,
             name: stageConfig.role || stageId,
@@ -369,23 +423,31 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
         })
       );
 
-      console.log(`[BaristaEngineV2] Loaded workflow with ${stages.length} stages`);
+      console.log(`[BaristaEngineV2] All stages processed, total: ${stages.length}`);
+      console.log(`[BaristaEngineV2] Loaded workflow with ${stages.length} stages from ${workflowPath}`);
       return { stages, vars: {} };
     } catch (error) {
-      console.warn('[BaristaEngineV2] Failed to load default workflow:', error);
-      // Fallback to single-stage workflow with order prompt
-      return {
-        stages: [{
-          id: 'main',
-          name: 'Main',
-          provider: 'claude-code',
-          prompt: orderPrompt,
-          mode: 'sequential',
-          dependsOn: [],
-        }],
-        vars: {},
-      };
+      console.warn('[BaristaEngineV2] Failed to load workflow file:', error);
+      return this.createFallbackWorkflow(orderPrompt);
     }
+  }
+
+  /**
+   * Create fallback single-stage workflow when workflow file is not available
+   */
+  private createFallbackWorkflow(orderPrompt: string): WorkflowConfig {
+    console.log('[BaristaEngineV2] Using fallback single-stage workflow');
+    return {
+      stages: [{
+        id: 'main',
+        name: 'Main',
+        provider: 'claude-code',
+        prompt: orderPrompt,
+        mode: 'sequential',
+        dependsOn: [],
+      }],
+      vars: {},
+    };
   }
 
   /**

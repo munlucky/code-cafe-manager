@@ -211,8 +211,14 @@ export class ExecutionManager {
     });
 
     // Session 관련 이벤트들
-    this.baristaEngine.on('order:started', (data: OrderStartedEvent) => {
+    this.baristaEngine.on('order:started', async (data: OrderStartedEvent) => {
+      console.log(`[ExecutionManager] order:started EVENT RECEIVED for order: ${data.orderId}`);
       const now = Date.now();
+
+      // **중요**: Orchestrator의 Order 상태를 PENDING → RUNNING으로 변경
+      console.log(`[ExecutionManager] Calling orchestrator.startOrder for order: ${data.orderId}`);
+      await this.orchestrator.startOrder(data.orderId);
+      console.log(`[ExecutionManager] orchestrator.startOrder completed for order: ${data.orderId}`);
 
       // 메트릭 초기화 및 시작 시각 기록
       let metrics = this.outputMetrics.get(data.orderId);
@@ -231,7 +237,9 @@ export class ExecutionManager {
       this.outputMetrics.set(data.orderId, metrics);
 
       console.log(`[ExecutionManager] Order STARTED: ${data.orderId} at ${new Date(now).toISOString()}`);
+      console.log(`[ExecutionManager] Sending order:session-started to renderer`);
       this.sendToRenderer('order:session-started', data);
+      console.log(`[ExecutionManager] order:session-started sent successfully`);
     });
 
     this.baristaEngine.on('order:completed', (data: OrderCompletedEvent) => {
@@ -296,6 +304,12 @@ export class ExecutionManager {
         stageId: data.stageId,
         error: data.error,
       });
+    });
+
+    // order:awaiting-input - 사용자 입력 대기 상태
+    this.baristaEngine.on('order:awaiting-input', (data: { orderId: string }) => {
+      console.log(`[ExecutionManager] Order AWAITING INPUT: ${data.orderId}`);
+      this.sendToRenderer('order:awaiting-input', data);
     });
 
     // 이벤트 리스너 등록 완료 표시
