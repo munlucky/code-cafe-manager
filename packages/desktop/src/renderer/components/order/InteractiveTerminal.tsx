@@ -26,20 +26,6 @@ interface InteractiveTerminalProps {
 }
 
 /**
- * ANSI escape 코드 제거
- * 터미널 색상, 커서 제어 등의 코드를 strip
- */
-function stripAnsi(text: string): string {
-  // ANSI escape 코드 패턴들
-  // - CSI sequences: ESC[ ... 또는 \x1b[ ...
-  // - OSC sequences: ESC] ... ST (terminated by BEL or ESC)
-  // - Other escape sequences
-  // 참고: 모든 ANSI escape sequence는 \x1b (ESC)로 시작해야 함
-  const ansiPattern = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07\x1b]*[\x07\x1b]|\x1b[PX^_][^\x1b]*\x1b\\|\x1b[@-Z\\-_]/g;
-  return text.replace(ansiPattern, '');
-}
-
-/**
  * 로그 항목 고유 키 생성 (중복 검사용)
  */
 function getLogKey(event: OrderOutputEvent): string {
@@ -75,18 +61,13 @@ export function InteractiveTerminal({
     }
     seenKeysRef.current.add(key);
 
-    // ANSI escape 코드 제거
-    const cleanedEvent: OrderOutputEvent = {
-      ...event,
-      content: stripAnsi(event.content),
-    };
-
     // 빈 내용 필터링
-    if (!cleanedEvent.content.trim()) {
+    if (!event.content.trim()) {
       return;
     }
 
-    setOutput((prev) => [...prev, cleanedEvent]);
+    // content는 이미 execution-manager에서 ANSI를 HTML로 변환함
+    setOutput((prev) => [...prev, event]);
   }, []);
 
   useEffect(() => {
@@ -286,7 +267,12 @@ export function InteractiveTerminal({
               )}>
                 {e.type === 'user-input' && <span className="mr-2 text-yellow-500">➜</span>}
                 {e.type === 'system' && <span className="mr-2 text-blue-400">🤖</span>}
-                {e.content}
+                {/*
+                  Render HTML content (ANSI colors converted by execution-manager)
+                  SECURITY: Content is sanitized by convertAnsiToHtml (output-utils.ts)
+                  which escapes all HTML special characters before ANSI conversion
+                */}
+                <span dangerouslySetInnerHTML={{ __html: e.content }} />
               </div>
             </div>
           ))}
