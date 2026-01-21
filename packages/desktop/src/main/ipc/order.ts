@@ -11,8 +11,8 @@ import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { promises as fs } from 'fs';
 import { getExecutionManager } from '../execution-manager.js';
-import { convertAnsiToHtml } from '../common/output-utils.js';
-import { parseOutputType } from '../common/output-markers.js';
+import { convertAnsiToHtml } from '../../common/output-utils.js';
+import { parseOutputType } from '../../common/output-markers.js';
 
 /**
  * Cafe Registry 타입 (간소화)
