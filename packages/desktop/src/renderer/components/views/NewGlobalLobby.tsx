@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { FolderPlus, GitBranch, HardDrive, Clock, ArrowRight, Coffee } from 'lucide-react';
+import { FolderPlus, GitBranch, HardDrive, Clock, ArrowRight, Coffee, Trash2 } from 'lucide-react';
 import type { Cafe } from '../../types/design';
 
 interface NewGlobalLobbyProps {
   cafes: Cafe[];
   onCreateCafe: (path: string) => void;
   onSelectCafe: (id: string) => void;
+  onDeleteCafe: (id: string) => void;
 }
 
-export const NewGlobalLobby: React.FC<NewGlobalLobbyProps> = ({ cafes, onCreateCafe, onSelectCafe }) => {
+export const NewGlobalLobby: React.FC<NewGlobalLobbyProps> = ({ cafes, onCreateCafe, onSelectCafe, onDeleteCafe }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [newPath, setNewPath] = useState('');
 
@@ -128,8 +129,22 @@ export const NewGlobalLobby: React.FC<NewGlobalLobbyProps> = ({ cafes, onCreateC
                   <Clock className="w-3.5 h-3.5 mr-1.5" />
                   Last brewed: Today
                 </div>
-                <div className="flex items-center text-brand-light opacity-0 group-hover:opacity-100 transform translate-x-[-10px] group-hover:translate-x-0 transition-all duration-300 font-medium">
-                  Enter Cafe <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`Delete "${cafe.name}"? This will remove the cafe from the registry.`)) {
+                        onDeleteCafe(cafe.id);
+                      }
+                    }}
+                    className="p-1.5 text-cafe-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                    title="Delete Cafe"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <div className="flex items-center text-brand-light opacity-0 group-hover:opacity-100 transform translate-x-[-10px] group-hover:translate-x-0 transition-all duration-300 font-medium">
+                    Enter Cafe <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                  </div>
                 </div>
               </div>
             </div>

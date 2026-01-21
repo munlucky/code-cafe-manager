@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Zap, Plus, Search, Lock, Trash2, Edit2, Check, X, BrainCircuit } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Zap, Plus, Search, Lock, Trash2, Edit2, Check, X, BrainCircuit, Copy, Filter } from 'lucide-react';
 import type { Skill, SkillCategory } from '../../types/design';
 
 interface NewSkillsProps {
@@ -7,6 +7,7 @@ interface NewSkillsProps {
   onAddSkill: (skill: Skill) => void;
   onUpdateSkill: (skill: Skill) => void;
   onDeleteSkill: (id: string) => void;
+  onDuplicateSkill: (skill: Skill) => void;
 }
 
 const CATEGORY_COLORS: Record<SkillCategory, string> = {
@@ -20,10 +21,12 @@ export const NewSkills: React.FC<NewSkillsProps> = ({
   skills,
   onAddSkill,
   onUpdateSkill,
-  onDeleteSkill
+  onDeleteSkill,
+  onDuplicateSkill
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<SkillCategory | 'all'>('all');
 
   // Form State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -35,10 +38,22 @@ export const NewSkills: React.FC<NewSkillsProps> = ({
     isBuiltIn: false
   });
 
-  const filteredSkills = skills.filter(s =>
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredSkills = useMemo(() => {
+    return skills.filter(s => {
+      const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.description.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = categoryFilter === 'all' || s.category === categoryFilter;
+      return matchesSearch && matchesCategory;
+    });
+  }, [skills, searchTerm, categoryFilter]);
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: skills.length };
+    skills.forEach(s => {
+      counts[s.category] = (counts[s.category] || 0) + 1;
+    });
+    return counts;
+  }, [skills]);
 
   const handleEdit = (skill: Skill) => {
     setEditingId(skill.id);
@@ -93,7 +108,7 @@ export const NewSkills: React.FC<NewSkillsProps> = ({
         </button>
       </div>
 
-      <div className="mb-6 relative">
+      <div className="mb-4 relative">
         <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-cafe-500" />
         <input
           type="text"
@@ -102,6 +117,34 @@ export const NewSkills: React.FC<NewSkillsProps> = ({
           placeholder="Search skills..."
           className="w-full bg-cafe-900 border border-cafe-700 text-cafe-200 pl-12 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-brand outline-none"
         />
+      </div>
+
+      {/* Category Filter */}
+      <div className="mb-6 flex flex-wrap gap-2">
+        <button
+          onClick={() => setCategoryFilter('all')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${
+            categoryFilter === 'all'
+              ? 'bg-cafe-700 text-white'
+              : 'bg-cafe-900 text-cafe-400 hover:bg-cafe-800'
+          }`}
+        >
+          <Filter className="w-3.5 h-3.5" />
+          All ({categoryCounts.all})
+        </button>
+        {(['planning', 'implementation', 'verification', 'review'] as SkillCategory[]).map(cat => (
+          <button
+            key={cat}
+            onClick={() => setCategoryFilter(cat)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              categoryFilter === cat
+                ? CATEGORY_COLORS[cat]
+                : 'bg-cafe-900 text-cafe-400 hover:bg-cafe-800'
+            }`}
+          >
+            {cat.charAt(0).toUpperCase() + cat.slice(1)} ({categoryCounts[cat] || 0})
+          </button>
+        ))}
       </div>
 
       {isEditing ? (
@@ -188,11 +231,21 @@ export const NewSkills: React.FC<NewSkillsProps> = ({
                   {skill.category}
                 </span>
                 {skill.isBuiltIn ? (
-                  <Lock className="w-4 h-4 text-cafe-600" aria-label="Built-in Skill" />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onDuplicateSkill(skill)}
+                      className="p-1 hover:text-brand-light text-cafe-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Duplicate Skill"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    <Lock className="w-4 h-4 text-cafe-600" aria-label="Built-in Skill" />
+                  </div>
                 ) : (
                   <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => handleEdit(skill)} className="p-1 hover:text-brand-light text-cafe-500"><Edit2 className="w-4 h-4" /></button>
-                    <button onClick={() => onDeleteSkill(skill.id)} className="p-1 hover:text-red-400 text-cafe-500"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => onDuplicateSkill(skill)} className="p-1 hover:text-brand-light text-cafe-500" title="Duplicate Skill"><Copy className="w-4 h-4" /></button>
+                    <button onClick={() => handleEdit(skill)} className="p-1 hover:text-brand-light text-cafe-500" title="Edit Skill"><Edit2 className="w-4 h-4" /></button>
+                    <button onClick={() => onDeleteSkill(skill.id)} className="p-1 hover:text-red-400 text-cafe-500" title="Delete Skill"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 )}
               </div>

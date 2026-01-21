@@ -14,9 +14,14 @@ import {
   Split,
   Box,
   Coffee,
-  Sparkles
+  Sparkles,
+  XCircle,
+  Clock,
+  List
 } from 'lucide-react';
 import type { Cafe, DesignOrder, Recipe, OrderStatus } from '../../types/design';
+import { OrderStageProgressBar, type StageInfo } from '../order/OrderStageProgress';
+import { OrderTimelineView, type TimelineEvent } from '../orders/OrderTimelineView';
 
 interface NewCafeDashboardProps {
   cafe: Cafe;
@@ -24,7 +29,10 @@ interface NewCafeDashboardProps {
   workflows: Recipe[];
   onCreateOrder: (cafeId: string, workflowId: string, description: string, useWorktree: boolean) => void;
   onDeleteOrder: (orderId: string) => void;
+  onCancelOrder: (orderId: string) => void;
   onSendInput: (orderId: string, input: string) => void;
+  getStagesForOrder: (order: DesignOrder) => StageInfo[];
+  timelineEvents: Record<string, TimelineEvent[]>;
 }
 
 const StatusBadge = ({ status, size = 'sm' }: { status: OrderStatus, size?: 'sm' | 'lg' }) => {
@@ -51,10 +59,14 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
   workflows,
   onCreateOrder,
   onDeleteOrder,
-  onSendInput
+  onCancelOrder,
+  onSendInput,
+  getStagesForOrder,
+  timelineEvents
 }) => {
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [viewMode, setViewMode] = useState<'logs' | 'timeline'>('logs');
 
   // Create Order Form State
   const [selectedWorkflow, setSelectedWorkflow] = useState(workflows[0]?.id || '');
@@ -146,6 +158,12 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
                   <h3 className={`text-sm font-semibold mb-1.5 ${activeOrderId === order.id ? 'text-white' : 'text-cafe-300'}`}>
                     {order.workflowName}
                   </h3>
+                  {/* Stage Progress Bar */}
+                  {getStagesForOrder(order).length > 0 && (
+                    <div className="mt-2">
+                      <OrderStageProgressBar stages={getStagesForOrder(order)} />
+                    </div>
+                  )}
                   {order.worktreeInfo && (
                     <div className="flex items-center text-[10px] text-cafe-500 mt-2 bg-cafe-950/50 p-1.5 rounded border border-cafe-800/50">
                       <Split className="w-3 h-3 mr-1.5 text-brand/70" />
@@ -190,7 +208,38 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
                       </span>
                     </div>
                  )}
+                {/* View Mode Toggle */}
+                <div className="flex border border-cafe-700 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setViewMode('logs')}
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                      viewMode === 'logs' ? 'bg-brand text-white' : 'bg-cafe-900 text-cafe-400 hover:text-white'
+                    }`}
+                  >
+                    <TerminalIcon className="w-3.5 h-3.5" />
+                    Logs
+                  </button>
+                  <button
+                    onClick={() => setViewMode('timeline')}
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                      viewMode === 'timeline' ? 'bg-brand text-white' : 'bg-cafe-900 text-cafe-400 hover:text-white'
+                    }`}
+                  >
+                    <List className="w-3.5 h-3.5" />
+                    Timeline
+                  </button>
+                </div>
                 <div className="h-6 w-px bg-cafe-800 mx-2"></div>
+                {/* Cancel Button - only for running orders */}
+                {(activeOrder.status === 'RUNNING' || activeOrder.status === 'WAITING_INPUT') && (
+                  <button
+                    onClick={() => onCancelOrder(activeOrder.id)}
+                    className="p-2 text-cafe-500 hover:text-yellow-400 hover:bg-yellow-900/10 rounded-lg transition-colors"
+                    title="Cancel Order"
+                  >
+                    <XCircle className="w-4 h-4" />
+                  </button>
+                )}
                 <button
                   onClick={() => onDeleteOrder(activeOrder.id)}
                   className="p-2 text-cafe-500 hover:text-red-400 hover:bg-red-900/10 rounded-lg transition-colors"
@@ -201,48 +250,54 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
               </div>
             </div>
 
-            {/* Terminal View */}
-            <div className="flex-1 bg-terminal-bg p-8 overflow-y-auto terminal-scroll font-mono text-sm relative shadow-inner">
-               {/* Welcome Banner in Terminal */}
-               <div className="mb-8 pb-6 border-b border-cafe-800/30">
-                  <div className="text-cafe-500 mb-2 font-medium flex items-center">
-                    <Sparkles className="w-4 h-4 mr-2 text-brand" />
-                    Started execution via <span className="text-brand ml-1.5">BaristaEngineV2</span>
-                  </div>
-                  <div className="text-cafe-600 text-xs flex gap-4">
-                    <span>Workflow: <span className="text-cafe-400">{activeOrder.workflowName}</span></span>
-                    <span>Provider: <span className="text-cafe-400">Claude Code</span></span>
-                    <span>Isolation: <span className="text-cafe-400">{activeOrder.worktreeInfo ? 'Enabled' : 'Disabled'}</span></span>
-                  </div>
-               </div>
+            {/* Content View - Logs or Timeline */}
+            {viewMode === 'logs' ? (
+              <div className="flex-1 bg-terminal-bg p-8 overflow-y-auto terminal-scroll font-mono text-sm relative shadow-inner">
+                 {/* Welcome Banner in Terminal */}
+                 <div className="mb-8 pb-6 border-b border-cafe-800/30">
+                    <div className="text-cafe-500 mb-2 font-medium flex items-center">
+                      <Sparkles className="w-4 h-4 mr-2 text-brand" />
+                      Started execution via <span className="text-brand ml-1.5">BaristaEngineV2</span>
+                    </div>
+                    <div className="text-cafe-600 text-xs flex gap-4">
+                      <span>Workflow: <span className="text-cafe-400">{activeOrder.workflowName}</span></span>
+                      <span>Provider: <span className="text-cafe-400">Claude Code</span></span>
+                      <span>Isolation: <span className="text-cafe-400">{activeOrder.worktreeInfo ? 'Enabled' : 'Disabled'}</span></span>
+                    </div>
+                 </div>
 
-               {/* Logs */}
-               <div className="space-y-4 max-w-5xl">
-                 {activeOrder.logs.map((log) => (
-                   <div key={log.id} className="flex group animate-in fade-in duration-300 items-start">
-                     <span className="text-cafe-700 text-[11px] w-20 shrink-0 select-none pt-1 font-mono tracking-tighter opacity-70">{log.timestamp}</span>
-                     <div className={`flex-1 break-all whitespace-pre-wrap leading-relaxed ${
-                       log.type === 'error' ? 'text-red-400 bg-red-950/10 p-2 rounded -mt-2' :
-                       log.type === 'success' ? 'text-emerald-400 font-medium' :
-                       log.type === 'system' ? 'text-blue-400 opacity-80' :
-                       log.type === 'ai' ? 'text-cafe-200' :
-                       'text-cafe-400'
-                     }`}>
-                       {log.type === 'system' && <span className="mr-2 opacity-50">➜</span>}
-                       {log.type === 'ai' && <span className="mr-2 text-brand">🤖</span>}
-                       <span dangerouslySetInnerHTML={{ __html: log.content }} />
+                 {/* Logs */}
+                 <div className="space-y-4 max-w-5xl">
+                   {activeOrder.logs.map((log) => (
+                     <div key={log.id} className="flex group animate-in fade-in duration-300 items-start">
+                       <span className="text-cafe-700 text-[11px] w-20 shrink-0 select-none pt-1 font-mono tracking-tighter opacity-70">{log.timestamp}</span>
+                       <div className={`flex-1 break-all whitespace-pre-wrap leading-relaxed ${
+                         log.type === 'error' ? 'text-red-400 bg-red-950/10 p-2 rounded -mt-2' :
+                         log.type === 'success' ? 'text-emerald-400 font-medium' :
+                         log.type === 'system' ? 'text-blue-400 opacity-80' :
+                         log.type === 'ai' ? 'text-cafe-200' :
+                         'text-cafe-400'
+                       }`}>
+                         {log.type === 'system' && <span className="mr-2 opacity-50">➜</span>}
+                         {log.type === 'ai' && <span className="mr-2 text-brand">🤖</span>}
+                         <span dangerouslySetInnerHTML={{ __html: log.content }} />
+                       </div>
                      </div>
-                   </div>
-                 ))}
-                 {activeOrder.status === 'RUNNING' && (
-                   <div className="flex items-center text-cafe-500 mt-4 animate-pulse ml-20">
-                     <span className="w-1.5 h-3 bg-brand block mr-2.5"></span>
-                     Thinking...
-                   </div>
-                 )}
-                 <div ref={terminalEndRef} />
-               </div>
-            </div>
+                   ))}
+                   {activeOrder.status === 'RUNNING' && (
+                     <div className="flex items-center text-cafe-500 mt-4 animate-pulse ml-20">
+                       <span className="w-1.5 h-3 bg-brand block mr-2.5"></span>
+                       Thinking...
+                     </div>
+                   )}
+                   <div ref={terminalEndRef} />
+                 </div>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-hidden">
+                <OrderTimelineView events={timelineEvents[activeOrder.id] || []} />
+              </div>
+            )}
 
             {/* Input Area (Conditional) */}
             {activeOrder.status === 'WAITING_INPUT' ? (
