@@ -114,6 +114,34 @@ export function Orders(): JSX.Element {
     fetchOrders();
   }, [fetchOrders]);
 
+  // Session 이벤트 리스너 - Order 상태 변경 시 목록 갱신
+  useEffect(() => {
+    const cleanupSessionStarted = window.codecafe.order.onSessionStarted(
+      (data: { orderId: string }) => {
+        // Order 상태가 RUNNING으로 변경됨 - 목록 갱신
+        fetchOrders();
+      }
+    );
+
+    const cleanupSessionCompleted = window.codecafe.order.onSessionCompleted(
+      (data: { orderId: string }) => {
+        fetchOrders();
+      }
+    );
+
+    const cleanupSessionFailed = window.codecafe.order.onSessionFailed(
+      (data: { orderId: string; error?: string }) => {
+        fetchOrders();
+      }
+    );
+
+    return () => {
+      cleanupSessionStarted();
+      cleanupSessionCompleted();
+      cleanupSessionFailed();
+    };
+  }, [fetchOrders]);
+
   // Stage 이벤트 리스너 - stageResults 업데이트
   useEffect(() => {
     const cleanupStageStarted = window.codecafe.order.onStageStarted(

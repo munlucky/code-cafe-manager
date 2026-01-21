@@ -169,6 +169,7 @@ export class ExecutionManager {
       this.baristaEngine.removeAllListeners('order:started');
       this.baristaEngine.removeAllListeners('order:completed');
       this.baristaEngine.removeAllListeners('order:failed');
+      this.baristaEngine.removeAllListeners('order:awaiting-input');
       this.baristaEngine.removeAllListeners('stage:started');
       this.baristaEngine.removeAllListeners('stage:completed');
       this.baristaEngine.removeAllListeners('stage:failed');
@@ -220,8 +221,16 @@ export class ExecutionManager {
     });
 
     // Session 관련 이벤트들
-    this.baristaEngine.on('order:started', (data: OrderStartedEvent) => {
+    this.baristaEngine.on('order:started', async (data: OrderStartedEvent) => {
       const now = Date.now();
+
+      // Orchestrator의 Order 상태를 PENDING → RUNNING으로 변경
+      try {
+        await this.orchestrator.startOrder(data.orderId);
+        console.log(`[ExecutionManager] Order status changed to RUNNING: ${data.orderId}`);
+      } catch (err) {
+        console.error(`[ExecutionManager] Failed to update order status:`, err);
+      }
 
       // 메트릭 초기화 및 시작 시각 기록
       let metrics = this.outputMetrics.get(data.orderId);
@@ -305,6 +314,12 @@ export class ExecutionManager {
         stageId: data.stageId,
         error: data.error,
       });
+    });
+
+    // order:awaiting-input - 사용자 입력 대기 상태
+    this.baristaEngine.on('order:awaiting-input', (data: { orderId: string }) => {
+      console.log(`[ExecutionManager] Order AWAITING INPUT: ${data.orderId}`);
+      this.sendToRenderer('order:awaiting-input', data);
     });
 
     // 이벤트 리스너 등록 완료 표시

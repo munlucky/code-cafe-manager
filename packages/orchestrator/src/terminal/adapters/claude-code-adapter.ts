@@ -467,6 +467,35 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
               // Streaming text deltas
               if (onData) onData(parsed.delta.text);
               contentExtracted = true;
+            } else if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta' && parsed.delta?.text) {
+              // Alternative delta format
+              if (onData) onData(parsed.delta.text);
+              contentExtracted = true;
+            } else if (parsed.type === 'message' && parsed.role === 'assistant') {
+              // Message format with role
+              if (parsed.content) {
+                if (typeof parsed.content === 'string') {
+                  if (onData) onData(parsed.content);
+                  contentExtracted = true;
+                } else if (Array.isArray(parsed.content)) {
+                  for (const item of parsed.content) {
+                    if (item.type === 'text' && item.text) {
+                      if (onData) onData(item.text);
+                      contentExtracted = true;
+                    }
+                  }
+                  // If only tool_use items exist, mark as extracted
+                  if (!contentExtracted && parsed.content.length > 0) {
+                    contentExtracted = true;
+                  }
+                }
+              }
+            } else if (parsed.type === 'message_delta' && parsed.delta?.content) {
+              // Message delta format
+              if (typeof parsed.delta.content === 'string') {
+                if (onData) onData(parsed.delta.content);
+                contentExtracted = true;
+              }
             } else if (parsed.type === 'text' && parsed.text) {
               // Simple text output
               if (onData) onData(parsed.text);
