@@ -128,7 +128,16 @@ If the user's request is ambiguous or lacks details:
 /**
  * Message handler type for stream parsing
  */
-type MessageHandler = (parsed: any, onData?: (data: string) => void) => boolean;
+type MessageHandler = (parsed: unknown, onData?: (data: string) => void) => boolean;
+
+/**
+ * Todo item type
+ */
+type TodoItem = {
+  status: 'completed' | 'in_progress' | 'pending';
+  content: string;
+  activeForm?: string;
+};
 
 /**
  * Claude Code CLI Adapter
@@ -157,9 +166,10 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
    * Handle assistant message type
    */
   private handleAssistantMessage: MessageHandler = (parsed, onData) => {
-    if (parsed.type !== 'assistant' || !parsed.message?.content) return false;
+    const p = parsed as any;
+    if (p.type !== 'assistant' || !p.message?.content) return false;
 
-    const content = parsed.message.content;
+    const content = p.message.content;
     if (typeof content === 'string') {
       if (onData) onData(content);
       return true;
@@ -186,12 +196,13 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
    * Handle user message type (tool results)
    */
   private handleUserMessage: MessageHandler = (parsed, onData) => {
-    if (parsed.type !== 'user' || !parsed.message?.content) return false;
+    const p = parsed as any;
+    if (p.type !== 'user' || !p.message?.content) return false;
 
     // Extract todo progress if available
-    const toolUseResult = parsed.tool_use_result;
+    const toolUseResult = p.tool_use_result;
     if (toolUseResult?.newTodos && Array.isArray(toolUseResult.newTodos)) {
-      const todos = toolUseResult.newTodos as Array<{ status: 'completed' | 'in_progress' | 'pending'; content: string; activeForm?: string }>;
+      const todos = toolUseResult.newTodos as TodoItem[];
       const completed = todos.filter((t) => t.status === 'completed').length;
       const inProgress = todos.filter((t) => t.status === 'in_progress').length;
       const total = todos.length;
@@ -201,8 +212,8 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
     }
 
     // Forward tool result content for logging visibility
-    if (onData && Array.isArray(parsed.message.content)) {
-      for (const block of parsed.message.content) {
+    if (onData && Array.isArray(p.message.content)) {
+      for (const block of p.message.content) {
         if (block.type === 'tool_result' && block.content) {
           const resultContent = typeof block.content === 'string'
             ? block.content
@@ -222,8 +233,9 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
    * Handle content_block_delta message type
    */
   private handleContentBlockDelta: MessageHandler = (parsed, onData) => {
-    if (parsed.type !== 'content_block_delta' || !parsed.delta?.text) return false;
-    if (onData) onData(parsed.delta.text);
+    const p = parsed as any;
+    if (p.type !== 'content_block_delta' || !p.delta?.text) return false;
+    if (onData) onData(p.delta.text);
     return true;
   };
 
@@ -231,25 +243,26 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
    * Handle message with role (assistant)
    */
   private handleMessageWithRole: MessageHandler = (parsed, onData) => {
-    if (parsed.type !== 'message' || parsed.role !== 'assistant') return false;
+    const p = parsed as any;
+    if (p.type !== 'message' || p.role !== 'assistant') return false;
 
-    if (!parsed.content) return false;
+    if (!p.content) return false;
 
-    if (typeof parsed.content === 'string') {
-      if (onData) onData(parsed.content);
+    if (typeof p.content === 'string') {
+      if (onData) onData(p.content);
       return true;
     }
 
-    if (Array.isArray(parsed.content)) {
+    if (Array.isArray(p.content)) {
       let extracted = false;
-      for (const item of parsed.content) {
+      for (const item of p.content) {
         if (item.type === 'text' && item.text) {
           if (onData) onData(item.text);
           extracted = true;
         }
       }
       // If only tool_use items exist, mark as extracted
-      if (!extracted && parsed.content.length > 0) {
+      if (!extracted && p.content.length > 0) {
         extracted = true;
       }
       return extracted;
@@ -262,9 +275,10 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
    * Handle message_delta type
    */
   private handleMessageDelta: MessageHandler = (parsed, onData) => {
-    if (parsed.type !== 'message_delta' || !parsed.delta?.content) return false;
-    if (typeof parsed.delta.content === 'string') {
-      if (onData) onData(parsed.delta.content);
+    const p = parsed as any;
+    if (p.type !== 'message_delta' || !p.delta?.content) return false;
+    if (typeof p.delta.content === 'string') {
+      if (onData) onData(p.delta.content);
       return true;
     }
     return false;
@@ -274,8 +288,9 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
    * Handle simple text output
    */
   private handleTextOutput: MessageHandler = (parsed, onData) => {
-    if (parsed.type !== 'text' || !parsed.text) return false;
-    if (onData) onData(parsed.text);
+    const p = parsed as any;
+    if (p.type !== 'text' || !p.text) return false;
+    if (onData) onData(p.text);
     return true;
   };
 
@@ -283,8 +298,9 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
    * Handle generic content field
    */
   private handleGenericContent: MessageHandler = (parsed, onData) => {
-    if (!parsed.content || parsed.type) return false; // Skip if type is already defined
-    if (onData) onData(typeof parsed.content === 'string' ? parsed.content : JSON.stringify(parsed.content));
+    const p = parsed as any;
+    if (!p.content || p.type) return false; // Skip if type is already defined
+    if (onData) onData(typeof p.content === 'string' ? p.content : JSON.stringify(p.content));
     return true;
   };
 
@@ -292,24 +308,27 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
    * Handle stream control messages
    */
   private handleStreamControl: MessageHandler = (parsed) => {
+    const p = parsed as any;
     const controlTypes = ['message_start', 'message_stop', 'content_block_start', 'content_block_stop'];
-    return controlTypes.includes(parsed.type);
+    return controlTypes.includes(p.type);
   };
 
   /**
    * Handle system messages
    */
   private handleSystemMessage: MessageHandler = (parsed) => {
-    return parsed.type === 'system';
+    const p = parsed as any;
+    return p.type === 'system';
   };
 
   /**
    * Handle result message
    */
   private handleResultMessage: MessageHandler = (parsed, onData) => {
-    if (parsed.type !== 'result') return false;
-    if (parsed.result && onData) {
-      onData(`[RESULT] ${typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result)}\n`);
+    const p = parsed as any;
+    if (p.type !== 'result') return false;
+    if (p.result && onData) {
+      onData(`[RESULT] ${typeof p.result === 'string' ? p.result : JSON.stringify(p.result)}\n`);
     }
     return true;
   };
