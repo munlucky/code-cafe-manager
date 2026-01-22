@@ -371,12 +371,14 @@ export class OrderSession extends EventEmitter {
       }
     }
 
-    // 모든 Stage 완료
-    this.status = 'completed';
-    this.emit('session:completed', {
-      orderId: this.orderId,
-      context: this.sharedContext.snapshot(),
-    });
+    // 모든 Stage 완료 (awaiting_input 상태가 아닐 때만)
+    if (this.status !== 'awaiting_input') {
+      this.status = 'completed';
+      this.emit('session:completed', {
+        orderId: this.orderId,
+        context: this.sharedContext.snapshot(),
+      });
+    }
   }
 
   /**
