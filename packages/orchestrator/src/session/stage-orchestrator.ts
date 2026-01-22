@@ -173,6 +173,7 @@ export class StageOrchestrator extends EventEmitter {
     // 1. 출력 길이 확인 - 실질적인 출력이 있는가?
     const outputLength = output.length;
     const hasSubstantialOutput = outputLength > 500;
+    const hasVerySubstantialOutput = outputLength > 10000; // 10KB 이상이면 매우 충분한 출력
 
     // 2. 작업 완료 지표 확인
     const completionIndicators = [
@@ -189,9 +190,26 @@ export class StageOrchestrator extends EventEmitter {
     // 3. 불확실성 지표 확인
     const hasUncertainty = this.hasUncertaintyIndicators(output);
     const questionCount = (output.match(/\?/g) || []).length;
-    const hasExcessiveQuestions = questionCount >= 5;
+    // 출력 대비 질문 비율 계산 (긴 출력에서는 질문이 자연스럽게 많을 수 있음)
+    const questionDensity = questionCount / (outputLength / 1000); // 1KB당 질문 수
+    const hasExcessiveQuestions = questionCount >= 5 && questionDensity > 2; // 1KB당 2개 이상의 질문이면 과다
 
-    // 4. 판단 로직
+    // 4. 스테이지별 특화 처리
+    const isAnalyzeStage = stageId === 'analyze' || stageId.includes('analyze');
+    const isPlanStage = stageId === 'plan' || stageId.includes('plan');
+
+    // analyze/plan 스테이지에서는 질문이 많아도 출력이 충분하면 완료로 판단
+    // 분석 과정에서 "이 파일을 수정해야 하나?" 같은 질문이 자연스럽게 포함됨
+    if ((isAnalyzeStage || isPlanStage) && hasVerySubstantialOutput && hasCompletionIndicators) {
+      console.log(`[StageOrchestrator] Inferring completion for ${stageId}: very substantial output (${outputLength} chars) with completion indicators (ignoring ${questionCount} questions)`);
+      return {
+        action: 'proceed',
+        reason: `Inferred completion from substantial ${stageId} output (questions are part of analysis)`,
+        usedAI: true,
+      };
+    }
+
+    // 5. 일반 판단 로직
     if (hasSubstantialOutput && hasCompletionIndicators && !hasExcessiveQuestions) {
       // 실질적인 작업이 수행된 것으로 보임 - proceed
       console.log(`[StageOrchestrator] Inferring completion: substantial output (${outputLength} chars) with completion indicators`);
@@ -204,7 +222,7 @@ export class StageOrchestrator extends EventEmitter {
 
     if (hasUncertainty || hasExcessiveQuestions) {
       // 명확한 불확실성이 있음 - await_user
-      console.log(`[StageOrchestrator] Inferring uncertainty: ${questionCount} questions, uncertainty indicators: ${hasUncertainty}`);
+      console.log(`[StageOrchestrator] Inferring uncertainty: ${questionCount} questions (density: ${questionDensity.toFixed(2)}/KB), uncertainty indicators: ${hasUncertainty}`);
       return {
         action: 'await_user',
         reason: 'No signals block found and output contains uncertainty indicators',
@@ -213,7 +231,7 @@ export class StageOrchestrator extends EventEmitter {
       };
     }
 
-    // 5. 기본: signals 블록이 없고 판단하기 어려우면 await_user
+    // 6. 기본: signals 블록이 없고 판단하기 어려우면 await_user
     console.log(`[StageOrchestrator] Cannot infer completion: insufficient indicators (output: ${outputLength} chars)`);
     return {
       action: 'await_user',

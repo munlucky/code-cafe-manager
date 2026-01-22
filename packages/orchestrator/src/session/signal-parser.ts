@@ -29,7 +29,7 @@ export interface ParseResult {
  */
 export class SignalParser {
   /**
-   * YAML signals 블록 패턴
+   * YAML signals 블록 패턴 - signals가 첫 줄에 있는 경우
    * ```yaml
    * signals:
    *   nextAction: proceed
@@ -40,12 +40,27 @@ export class SignalParser {
     /```ya?ml\s*\n(signals:\s*\n[\s\S]*?)```/i;
 
   /**
+   * 마지막 YAML 블록 패턴 - 출력 끝부분에 있는 signals 찾기
+   * Claude가 긴 출력 후 마지막에 signals 블록을 넣는 경우 대응
+   */
+  private static readonly LAST_YAML_BLOCK_PATTERN =
+    /```ya?ml\s*[\s\S]*?(signals:\s*\n(?:[ \t]+\w+:.*\n?)*)```/i;
+
+  /**
    * 인라인 signals 패턴 (코드 블록 없이)
    * signals:
    *   nextAction: proceed
    */
   private static readonly INLINE_PATTERN =
     /^signals:\s*\n((?:\s+\w+:.*\n?)+)/m;
+
+  /**
+   * 인라인 signals 패턴 - 들여쓰기 없이
+   * signals:
+   *   nextAction: proceed
+   */
+  private static readonly INLINE_NO_INDENT_PATTERN =
+    /signals:\s*\n((?:\w+:.*\n?)+)/m;
 
   /**
    * Stage 출력에서 시그널 파싱
@@ -156,13 +171,33 @@ export class SignalParser {
   }
 
   /**
-   * YAML 코드 블록에서 signals 추출
+   * 여러 패턴을 순차적으로 시도하여 YAML 코드 블록에서 signals 추출
    */
   private extractYamlBlock(output: string): string | null {
-    const match = output.match(SignalParser.YAML_BLOCK_PATTERN);
-    if (match && match[1]) {
+    // 1. signals가 첫 줄에 있는 기본 패턴
+    let match = output.match(SignalParser.YAML_BLOCK_PATTERN);
+    if (match?.[1]) {
       return match[1].trim();
     }
+
+    // 2. 마지막 YAML 블록에서 signals 찾기 (출력 끝에 있는 경우가 많음)
+    const lastYamlMatch = output.match(SignalParser.LAST_YAML_BLOCK_PATTERN);
+    if (lastYamlMatch?.[1]) {
+      const signalsContent = lastYamlMatch[1].trim();
+      // 전체 YAML 블록을 추출
+      const fullYamlMatch = output.match(/```ya?ml\s*[\s\S]*?```/gi);
+      if (fullYamlMatch) {
+        const lastBlock = fullYamlMatch[fullYamlMatch.length - 1];
+        return signalsContent;
+      }
+    }
+
+    // 3. 들여쓰기 없는 인라인 패턴
+    const noIndentMatch = output.match(SignalParser.INLINE_NO_INDENT_PATTERN);
+    if (noIndentMatch?.[1]) {
+      return `signals:\n${noIndentMatch[1]}`;
+    }
+
     return null;
   }
 
@@ -184,7 +219,9 @@ export class SignalParser {
     if (!output) return false;
     return (
       SignalParser.YAML_BLOCK_PATTERN.test(output) ||
-      SignalParser.INLINE_PATTERN.test(output)
+      SignalParser.LAST_YAML_BLOCK_PATTERN.test(output) ||
+      SignalParser.INLINE_PATTERN.test(output) ||
+      SignalParser.INLINE_NO_INDENT_PATTERN.test(output)
     );
   }
 }
