@@ -46,7 +46,7 @@ export interface ExecutionContext {
   continueSession?: boolean;
   streaming?: boolean;
   cwd?: string;
-  skipPermissions?: boolean;  // 권한 요청 건너뛰기
+  skipPermissions?: boolean; // 권한 요청 건너뛰기
 }
 
 /**
@@ -154,12 +154,14 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
    * Structured log helper
    */
   private log(step: string, details: Record<string, unknown> = {}): void {
-    console.log(JSON.stringify({
-      scope: 'claude-adapter-print',
-      step,
-      timestamp: new Date().toISOString(),
-      ...details,
-    }));
+    console.log(
+      JSON.stringify({
+        scope: 'claude-adapter-print',
+        step,
+        timestamp: new Date().toISOString(),
+        ...details,
+      })
+    );
   }
 
   /**
@@ -218,12 +220,12 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
     if (onData && Array.isArray(p.message.content)) {
       for (const block of p.message.content) {
         if (block.type === 'tool_result' && block.content) {
-          const resultContent = typeof block.content === 'string'
-            ? block.content
-            : JSON.stringify(block.content);
-          const truncated = resultContent.length > CONFIG.MAX_TOOL_RESULT_LOG_LENGTH
-            ? resultContent.substring(0, CONFIG.MAX_TOOL_RESULT_LOG_LENGTH) + '...(truncated)'
-            : resultContent;
+          const resultContent =
+            typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+          const truncated =
+            resultContent.length > CONFIG.MAX_TOOL_RESULT_LOG_LENGTH
+              ? resultContent.substring(0, CONFIG.MAX_TOOL_RESULT_LOG_LENGTH) + '...(truncated)'
+              : resultContent;
           onData(`[TOOL_RESULT] ${truncated}\n`);
         }
       }
@@ -312,7 +314,12 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
    */
   private handleStreamControl: MessageHandler = (parsed) => {
     const p = parsed as any;
-    const controlTypes = ['message_start', 'message_stop', 'content_block_start', 'content_block_stop'];
+    const controlTypes = [
+      'message_start',
+      'message_stop',
+      'content_block_start',
+      'content_block_stop',
+    ];
     return controlTypes.includes(p.type);
   };
 
@@ -366,11 +373,7 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
           `${homedir}\\AppData\\Local\\Programs\\claude\\claude.exe`,
           process.env.CLAUDE_CODE_PATH,
         ]
-      : [
-          `${homedir}/.local/bin/claude`,
-          '/usr/local/bin/claude',
-          process.env.CLAUDE_CODE_PATH,
-        ];
+      : [`${homedir}/.local/bin/claude`, '/usr/local/bin/claude', process.env.CLAUDE_CODE_PATH];
 
     for (const p of paths.filter(Boolean) as string[]) {
       try {
@@ -420,11 +423,19 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
     const cleanPrompt = this.sanitizePrompt(ctx.prompt);
 
     // 인자에는 프롬프트를 포함하지 않음
-    const args: string[] = ['-p'];  // -p만 지정, stdin에서 입력을 읽음
+    const args: string[] = ['-p']; // -p만 지정, stdin에서 입력을 읽음
 
     const envVerbose = process.env.CODECAFE_CLAUDE_VERBOSE;
+    const envStreaming = process.env.CODECAFE_CLAUDE_STREAMING || 0;
     const verboseEnabled = this.config.verbose ?? (envVerbose === '1' || envVerbose === 'true');
-    if (verboseEnabled) {
+    const streamingEnabled =
+      ctx.streaming ??
+      this.config.streaming ??
+      (envStreaming ? envStreaming === '1' || envStreaming === 'true' : true);
+    if (streamingEnabled) {
+      // --output-format=stream-json requires --verbose
+      args.push('--verbose');
+    } else if (verboseEnabled) {
       args.push('--verbose');
     }
 
@@ -441,7 +452,9 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
 
     // Enable streaming by default for real-time output
     // stream-json format provides incremental updates
-    args.push('--output-format=stream-json');
+    if (streamingEnabled) {
+      args.push('--output-format=stream-json');
+    }
 
     return { args, prompt: cleanPrompt };
   }
@@ -554,9 +567,8 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
     const cwd = wrapper.getCwd();
 
     // Build execution context
-    const ctx: ExecutionContext = typeof context === 'string'
-      ? { prompt: context, cwd }
-      : { ...context, cwd };
+    const ctx: ExecutionContext =
+      typeof context === 'string' ? { prompt: context, cwd } : { ...context, cwd };
 
     // Apply default system prompt if needed
     // Prepend default prompt to ensure non-interactive behavior
@@ -590,9 +602,9 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       const childProc = spawn(claudePath, args, {
         cwd,
         env: process.env,
-        shell: false,        // shell 사용 안 함 (escaping 문제 해결)
-        windowsHide: true,   // Hide window on Windows
-        stdio: ['pipe', 'pipe', 'pipe'],  // 명시적 파이프 설정
+        shell: false, // shell 사용 안 함 (escaping 문제 해결)
+        windowsHide: true, // Hide window on Windows
+        stdio: ['pipe', 'pipe', 'pipe'], // 명시적 파이프 설정
       });
 
       wrapper.setProcess(childProc);
@@ -601,7 +613,7 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       // 이 방식으로 인자 길이 제한(~8191자 on Windows)을 완전히 회피
       if (childProc.stdin) {
         childProc.stdin.write(stdinPrompt, 'utf-8');
-        childProc.stdin.end();  // EOF 전송
+        childProc.stdin.end(); // EOF 전송
       }
 
       childProc.stdout?.on('data', (data: Buffer) => {
@@ -612,7 +624,7 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         // Claude Code stream-json format:
         // - assistant: {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"..."}]}}
         // - user (tool_result): {"type":"user","message":{"role":"user","content":[{"type":"tool_result",...}]},"tool_use_result":{...}}
-        const lines = chunk.split('\n').filter(line => line.trim());
+        const lines = chunk.split('\n').filter((line) => line.trim());
         for (const line of lines) {
           let contentExtracted = false;
 
@@ -717,10 +729,14 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
     onData?: (data: string) => void
   ): Promise<{ success: boolean; output?: string; error?: string }> {
     const wrapper = new ChildProcessWrapper(cwd);
-    return this.execute(wrapper, {
-      prompt,
-      systemPrompt,
-      continueSession: true,
-    }, onData);
+    return this.execute(
+      wrapper,
+      {
+        prompt,
+        systemPrompt,
+        continueSession: true,
+      },
+      onData
+    );
   }
 }

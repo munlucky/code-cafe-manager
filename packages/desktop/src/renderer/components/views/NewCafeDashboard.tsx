@@ -67,6 +67,7 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewMode, setViewMode] = useState<'logs' | 'timeline'>('logs');
+  const [elapsedByOrderId, setElapsedByOrderId] = useState<Record<string, number>>({});
 
   // Create Order Form State
   const [selectedWorkflow, setSelectedWorkflow] = useState(workflows[0]?.id || '');
@@ -78,6 +79,63 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
   const activeOrder = orders.find(o => o.id === activeOrderId);
+
+  useEffect(() => {
+    if (!activeOrder) {
+      return;
+    }
+
+    const isActive = activeOrder.status === 'RUNNING' || activeOrder.status === 'WAITING_INPUT';
+    if (!isActive) {
+      return;
+    }
+
+    const startValue = activeOrder.startedAt || activeOrder.createdAt;
+    const startMs = new Date(startValue as any).getTime();
+    if (Number.isNaN(startMs)) {
+      return;
+    }
+
+    const tick = () => {
+      const elapsed = Date.now() - startMs;
+      setElapsedByOrderId((prev) => ({
+        ...prev,
+        [activeOrder.id]: elapsed,
+      }));
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [activeOrder?.id, activeOrder?.status, activeOrder?.startedAt, activeOrder?.createdAt]);
+
+  useEffect(() => {
+    if (orders.length === 0) {
+      setElapsedByOrderId({});
+      return;
+    }
+
+    const orderIds = new Set(orders.map((o) => o.id));
+    setElapsedByOrderId((prev) => {
+      const next: Record<string, number> = {};
+      for (const [orderId, elapsed] of Object.entries(prev)) {
+        if (orderIds.has(orderId)) {
+          next[orderId] = elapsed;
+        }
+      }
+      return next;
+    });
+  }, [orders]);
+
+  const formatElapsed = (ms: number): string => {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return `${hours}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`;
+    }
+    return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+  };
 
   // Auto-scroll terminal
   useEffect(() => {
@@ -196,6 +254,11 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
                   <div className="flex items-center">
                     <h2 className="font-bold text-cafe-100 mr-3 text-lg">Order #{activeOrder.id.substring(0,8)}</h2>
                     <StatusBadge status={activeOrder.status} size="lg" />
+                    {elapsedByOrderId[activeOrder.id] !== undefined && (
+                      <span className="ml-2 text-[11px] font-mono text-cafe-400 bg-cafe-950/60 border border-cafe-800 px-2 py-1 rounded">
+                        {formatElapsed(elapsedByOrderId[activeOrder.id])}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
