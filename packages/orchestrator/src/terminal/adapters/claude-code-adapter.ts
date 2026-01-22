@@ -184,6 +184,9 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         } else if (block.type === 'tool_use') {
           if (onData) onData(`[TOOL] ${block.name}\n`);
           extracted = true;
+        } else if (block.type === 'thinking') {
+          // Thinking block - skip silently (internal reasoning)
+          extracted = true;
         }
       }
       return extracted;
