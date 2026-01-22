@@ -19,6 +19,7 @@ import type {
 import { DEFAULT_TERMINAL_POOL_CONFIG } from './config/terminal-pool.config.js';
 import { convertAnsiToHtml } from '../common/output-utils.js';
 import { parseOutputType } from '../common/output-markers.js';
+import { terminalLogger } from './file-logger.js';
 
 interface ExecutionManagerConfig {
   orchestrator: Orchestrator;
@@ -215,8 +216,14 @@ export class ExecutionManager {
       }
 
       // 3. 로그 저장 (지속성용) - 원본 그대로 저장 (마커 포함)
+      // 3-1. Orchestrator의 Order별 로그 파일 (기존)
       this.orchestrator.appendOrderLog(data.orderId, data.data).catch((err: Error) => {
         console.error(`[ExecutionManager] Failed to append log for order ${data.orderId}:`, err);
+      });
+
+      // 3-2. 통합 터미널 로그 파일 (신규)
+      terminalLogger.log(data.orderId, data.data).catch((err: Error) => {
+        console.error(`[ExecutionManager] Failed to write terminal log for order ${data.orderId}:`, err);
       });
     });
 

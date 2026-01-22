@@ -14,6 +14,7 @@ import { registerOrderHandlers, cleanupOrderHandlers } from './ipc/order.js';
 import { registerWorkflowHandlers } from './ipc/workflow.js';
 import { registerSkillHandlers } from './ipc/skill.js';
 import { initExecutionManager, cleanupExecutionManager, getExecutionManager } from './execution-manager.js';
+import { setupMainProcessLogger } from './file-logger.js';
 
 import { existsSync } from 'fs';
 
@@ -168,6 +169,9 @@ function setupIpcHandlers(): void {
 }
 
 // Application Lifecycle
+// 파일 로거를 가장 먼저 설정 (모든 console.log가 파일에 기록되도록)
+setupMainProcessLogger();
+
 app.whenReady().then(async () => {
   console.log('[Main] App is ready.');
   await initOrchestrator();
