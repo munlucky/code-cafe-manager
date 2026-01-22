@@ -168,6 +168,13 @@ export function useIpcEffect() {
       updateTodoProgress(data);
     });
 
+    // Order Status Changed (for retry status updates)
+    const cleanupStatusChanged = window.codecafe.order.onStatusChanged?.((data: { orderId: string; status: string }) => {
+      console.log('[IpcEffect] Order Status Changed:', data);
+      // status string을 OrderStatus enum으로 변환
+      updateOrder(data.orderId, { status: data.status as OrderStatus });
+    });
+
     // Cleanup
     return () => {
       cleanupSessionStarted?.();
@@ -180,6 +187,7 @@ export function useIpcEffect() {
       cleanupOrderCompleted?.();
       cleanupOrderFailed?.();
       cleanupTodoProgress?.();
+      cleanupStatusChanged?.();
     };
   }, [
     updateBarista,

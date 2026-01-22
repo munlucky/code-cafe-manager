@@ -166,8 +166,22 @@ export function App(): JSX.Element {
 
   // Subscribe to order output events
   useEffect(() => {
+    const outputTypeMap: Record<string, WorkflowLog['type']> = {
+      stderr: 'error',
+      result: 'success',
+      tool: 'system',
+      tool_result: 'system',
+      todo_progress: 'system',
+      'user-input': 'system',
+      system: 'system',
+      stdout: 'ai',
+    };
+
     const cleanup = window.codecafe.order.onOutput((event) => {
-      const { orderId, type, message, timestamp } = event;
+      const { orderId, type, content, timestamp } = event;
+      if (!orderId || !content) {
+        return;
+      }
 
       setOrderLogs(prev => {
         const existingLogs = prev[orderId] || [];
@@ -177,9 +191,9 @@ export function App(): JSX.Element {
             ...existingLogs,
             {
               id: crypto.randomUUID(),
-              timestamp: new Date(timestamp).toLocaleTimeString([], { hour12: false }),
-              content: message,
-              type: type === 'error' ? 'error' : type === 'success' ? 'success' : 'info',
+              timestamp: new Date(timestamp || Date.now()).toLocaleTimeString([], { hour12: false }),
+              content,
+              type: outputTypeMap[type] || 'info',
             }
           ]
         };

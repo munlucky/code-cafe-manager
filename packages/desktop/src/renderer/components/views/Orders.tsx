@@ -507,6 +507,7 @@ export function Orders(): JSX.Element {
                         orderId={activeOrder.id}
                         onSendInput={async (input) => handleSendInput(activeOrder.id, input)}
                         isRunning={activeOrder.status === OrderStatus.RUNNING}
+                        startedAt={activeOrder.startedAt}
                       />
                     </div>
                   </div>

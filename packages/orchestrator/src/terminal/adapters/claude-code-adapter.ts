@@ -422,8 +422,11 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
     // 인자에는 프롬프트를 포함하지 않음
     const args: string[] = ['-p'];  // -p만 지정, stdin에서 입력을 읽음
 
-    // Always use verbose for better output
-    args.push('--verbose');
+    const envVerbose = process.env.CODECAFE_CLAUDE_VERBOSE;
+    const verboseEnabled = this.config.verbose ?? (envVerbose === '1' || envVerbose === 'true');
+    if (verboseEnabled) {
+      args.push('--verbose');
+    }
 
     // Skip permission prompts for automated execution
     args.push('--dangerously-skip-permissions');

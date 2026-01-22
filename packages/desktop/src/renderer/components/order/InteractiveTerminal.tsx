@@ -23,6 +23,7 @@ interface InteractiveTerminalProps {
   isRunning?: boolean;
   isAwaitingInput?: boolean;
   worktreePath?: string;
+  startedAt?: string | Date | null;
 }
 
 /**
@@ -39,6 +40,7 @@ export function InteractiveTerminal({
   isRunning = true,
   isAwaitingInput = false,
   worktreePath,
+  startedAt,
 }: InteractiveTerminalProps): JSX.Element {
   const [output, setOutput] = useState<OrderOutputEvent[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -47,6 +49,7 @@ export function InteractiveTerminal({
   const [autoScroll, setAutoScroll] = useState(true);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const outputRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
@@ -71,20 +74,10 @@ export function InteractiveTerminal({
   }, []);
 
   useEffect(() => {
+    let isActive = true;
     setLoading(true);
     setOutput([]);
     seenKeysRef.current.clear();
-
-    // 구독 시작
-    window.codecafe.order.subscribeOutput(orderId).then((result: any) => {
-      if (result.success) {
-        console.log('[InteractiveTerminal] Subscribed to order:', orderId);
-        setLoading(false);
-      } else {
-        console.error('[InteractiveTerminal] Failed to subscribe:', result.error);
-        setLoading(false);
-      }
-    });
 
     // 출력 이벤트 리스너
     const cleanup = window.codecafe.order.onOutput((event: OrderOutputEvent) => {
@@ -93,7 +86,23 @@ export function InteractiveTerminal({
       }
     });
 
+    // 구독 시작 (히스토리 포함)
+    window.codecafe.order.subscribeOutput(orderId).then((result) => {
+      if (!isActive) return;
+      if (result.success) {
+        const history = result.data?.history || [];
+        if (history.length > 0) {
+          history.forEach((event) => addOutputEvent(event as OrderOutputEvent));
+        }
+        console.log('[InteractiveTerminal] Subscribed to order:', orderId);
+      } else {
+        console.error('[InteractiveTerminal] Failed to subscribe:', result.error);
+      }
+      setLoading(false);
+    });
+
     return () => {
+      isActive = false;
       window.codecafe.order.unsubscribeOutput(orderId);
       if (cleanup) cleanup();
     };
@@ -106,14 +115,28 @@ export function InteractiveTerminal({
     }
   }, [output, autoScroll]);
 
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('ko-KR', {
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
+  useEffect(() => {
+    const startMs = startedAt ? new Date(startedAt).getTime() : NaN;
+    if (!isRunning || !startedAt || Number.isNaN(startMs)) {
+      setElapsedMs(null);
+      return;
+    }
+
+    const tick = () => setElapsedMs(Date.now() - startMs);
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [isRunning, startedAt]);
+
+  const formatElapsed = (ms: number): string => {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return `${hours}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`;
+    }
+    return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
   };
 
   const getTypeColor = (type: string) => {
@@ -213,6 +236,18 @@ export function InteractiveTerminal({
         <div className="flex items-center text-cafe-400 text-xs">
           <TerminalIcon className="w-3.5 h-3.5 mr-2" />
           <span>Console Output</span>
+          {isRunning && (
+            <div className="flex items-center gap-2 ml-3">
+              <span className="text-[10px] px-2 py-0.5 rounded bg-brand/20 text-brand border border-brand/30">
+                RUNNING
+              </span>
+              {elapsedMs !== null && (
+                <span className="text-[10px] font-mono text-cafe-500">
+                  {formatElapsed(elapsedMs)}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -255,9 +290,6 @@ export function InteractiveTerminal({
         <div className="space-y-1">
           {output.map((e, i) => (
             <div key={i} className="flex group items-start hover:bg-white/5 px-2 py-0.5 rounded -mx-2 transition-colors">
-              <span className="text-cafe-700 text-[10px] w-14 shrink-0 select-none pt-0.5 tracking-tighter opacity-50 font-sans">
-                {formatTimestamp(e.timestamp)}
-              </span>
               <div className={cn(
                 'flex-1 break-all whitespace-pre-wrap leading-relaxed',
                 e.type === 'stderr' ? 'text-red-400' :

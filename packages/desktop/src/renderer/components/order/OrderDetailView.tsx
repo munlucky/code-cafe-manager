@@ -418,6 +418,7 @@ export function OrderDetailView({
             orderId={currentOrder.id}
             onSendInput={isRunning ? handleSendInput : undefined}
             isRunning={isRunning}
+            startedAt={currentOrder.startedAt}
             className="h-full"
           />
         </div>

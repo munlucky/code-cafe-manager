@@ -68,6 +68,8 @@ contextBridge.exposeInMainWorld('codecafe', {
     onAwaitingInput: (callback: (data: any) => void) => setupIpcListener('order:awaiting-input', callback),
     // Todo progress event (from Claude's TodoWrite)
     onTodoProgress: (callback: (data: any) => void) => setupIpcListener('order:todo-progress', callback),
+    // Order status changed event (for retry status updates)
+    onStatusChanged: (callback: (data: any) => void) => setupIpcListener('order:status-changed', callback),
   },
 
   receipt: {

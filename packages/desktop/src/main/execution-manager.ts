@@ -342,6 +342,7 @@ export class ExecutionManager {
     if (this.eventListenersRegistered) {
       this.orchestrator.removeAllListeners('order:execution-started');
       this.orchestrator.removeAllListeners('order:input');
+      this.orchestrator.removeAllListeners('order:event');
     }
 
     // order:execution-started 이벤트 처리
@@ -354,6 +355,18 @@ export class ExecutionManager {
     this.orchestrator.on('order:input', async (data: { orderId: string; message: string }) => {
       console.log('[ExecutionManager] Received order:input:', data);
       await this.handleOrderInput(data.orderId, data.message);
+    });
+
+    // order:event 이벤트 처리 (status 변경 등을 renderer에 전파)
+    this.orchestrator.on('order:event', (event: { type: string; orderId: string; data: any }) => {
+      console.log('[ExecutionManager] Received order:event:', event);
+      // Order 상태 변경 이벤트를 renderer에 전송
+      if (event.type === 'ORDER_STATUS_CHANGED') {
+        this.sendToRenderer('order:status-changed', {
+          orderId: event.orderId,
+          status: event.data.status,
+        });
+      }
     });
   }
 

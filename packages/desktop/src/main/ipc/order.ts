@@ -253,8 +253,6 @@ function getBaristaEngine() {
  */
 class OrderManager {
   private static outputIntervals = new Map<string, NodeJS.Timeout>();
-  // Track which orders have already received history (prevent duplicate on Strict Mode remount)
-  private static historySent = new Set<string>();
 
   /**
    * Register Order IPC Handlers
@@ -486,7 +484,7 @@ class OrderManager {
      * - 실시간 출력은 ExecutionManager에서 order:output 이벤트로 전송
      * - 폴링 제거하여 로그 중복 방지
      */
-  ipcMain.handle('order:subscribeOutput', async (event, orderId: string) =>
+  ipcMain.handle('order:subscribeOutput', async (_event, orderId: string) =>
     handleIpc(async () => {
       // LogManager와 동일한 경로 사용: ~/.codecafe/logs/${orderId}.log
       const logsDir = join(homedir(), '.codecafe', 'logs');
@@ -503,10 +501,9 @@ class OrderManager {
         OrderManager.outputIntervals.delete(intervalKey);
       }
 
-      // 기존 로그 파일이 있으면 히스토리로 한 번 전송 (중복 방지)
-      const historyKey = `history:${orderId}`;
-      if (existsSync(logPath) && !OrderManager.historySent.has(historyKey)) {
-        OrderManager.historySent.add(historyKey);
+      // 기존 로그 파일이 있으면 히스토리로 반환
+      const history: Array<{ orderId: string; timestamp: string; type: string; content: string }> = [];
+      if (existsSync(logPath)) {
         try {
           const content = await fs.readFile(logPath, 'utf-8');
           if (content.trim()) {
@@ -518,7 +515,7 @@ class OrderManager {
               const { type, content } = parseOutputType(chunk.message);
 
               // SECURITY: convertAnsiToHtml properly escapes HTML to prevent XSS
-              event.sender.send('order:output', {
+              history.push({
                 orderId,
                 timestamp: chunk.timestamp,
                 type,
@@ -526,7 +523,7 @@ class OrderManager {
               });
             }
 
-            console.log(`[Order IPC] Sent ${chunks.length} history entries for order: ${orderId}`);
+            console.log(`[Order IPC] Prepared ${chunks.length} history entries for order: ${orderId}`);
           }
         } catch (error) {
           console.error('[Order IPC] Failed to read history log file:', error);
@@ -534,8 +531,8 @@ class OrderManager {
       }
 
       // 실시간 출력은 ExecutionManager에서 order:output 이벤트로 직접 전송됨
-      // 폴링 없이 구독 완료 반환
-      return { subscribed: true };
+      // 폴링 없이 구독 완료 반환 (히스토리 포함)
+      return { subscribed: true, history };
     }, 'order:subscribeOutput')
   );
 
@@ -615,6 +612,9 @@ class OrderManager {
           const { orderId, fromStageId } = params;
           console.log('[Order IPC] Retrying order from stage:', { orderId, fromStageId });
 
+          // Retry 전에 order 상태를 RUNNING으로 변경 (FAILED -> RUNNING)
+          await orchestrator.startOrder(orderId);
+
           const baristaEngine = getBaristaEngine();
           await baristaEngine.retryFromStage(orderId, fromStageId);
           return { started: true };
@@ -650,6 +650,9 @@ class OrderManager {
         handleIpc(async () => {
           const { orderId, preserveContext = true } = params;
           console.log('[Order IPC] Retrying order from beginning:', { orderId, preserveContext });
+
+          // Retry 전에 order 상태를 RUNNING으로 변경 (FAILED -> RUNNING)
+          await orchestrator.startOrder(orderId);
 
           const baristaEngine = getBaristaEngine();
           await baristaEngine.retryFromBeginning(orderId, preserveContext);

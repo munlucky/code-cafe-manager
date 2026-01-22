@@ -288,7 +288,10 @@ declare global {
         createWithWorktree: (
           params: CreateOrderWithWorktreeParams
         ) => Promise<IpcResponse<CreateOrderWithWorktreeResult>>;
-        subscribeOutput: (orderId: string) => Promise<IpcResponse<{ subscribed: boolean }>>;
+        subscribeOutput: (orderId: string) => Promise<IpcResponse<{
+          subscribed: boolean;
+          history?: Array<{ orderId: string; timestamp: string; type: string; content: string }>;
+        }>>;
         unsubscribeOutput: (orderId: string) => Promise<IpcResponse<{ unsubscribed: boolean }>>;
         // Retry support
         retryFromStage: (orderId: string, fromStageId?: string) => Promise<IpcResponse<{ started: boolean }>>;
@@ -322,6 +325,8 @@ declare global {
             activeForm?: string;
           }>;
         }) => void) => () => void;
+        // Order status changed event (for retry status updates)
+        onStatusChanged: (callback: (data: { orderId: string; status: string }) => void) => () => void;
       };
 
       // Order 관리 (Legacy flat API - backward compatibility)

@@ -82,6 +82,10 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
       if (!isMounted || cleanupCalled) return;
 
       if (result.success) {
+        const history = result.data?.history || [];
+        if (history.length > 0) {
+          setOutput(history as OrderOutputEvent[]);
+        }
         console.log('[TerminalOutputPanel] Subscribed to order:', orderId);
         setLoading(false);
         setStatus('ready');
