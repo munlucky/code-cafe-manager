@@ -169,18 +169,21 @@ export function App(): JSX.Element {
     const cleanup = window.codecafe.order.onOutput((event) => {
       const { orderId, type, message, timestamp } = event;
 
-      setOrderLogs(prev => ({
-        ...prev,
-        [orderId]: [
-          ...(prev[orderId] || []),
-          {
-            id: `${orderId}-${Date.now()}`,
-            timestamp: new Date(timestamp).toLocaleTimeString([], { hour12: false }),
-            content: message,
-            type: type === 'error' ? 'error' : type === 'success' ? 'success' : 'info',
-          }
-        ]
-      }));
+      setOrderLogs(prev => {
+        const existingLogs = prev[orderId] || [];
+        return {
+          ...prev,
+          [orderId]: [
+            ...existingLogs,
+            {
+              id: `${orderId}-${Date.now()}-${existingLogs.length}`,
+              timestamp: new Date(timestamp).toLocaleTimeString([], { hour12: false }),
+              content: message,
+              type: type === 'error' ? 'error' : type === 'success' ? 'success' : 'info',
+            }
+          ]
+        };
+      });
     });
     return cleanup;
   }, []);
