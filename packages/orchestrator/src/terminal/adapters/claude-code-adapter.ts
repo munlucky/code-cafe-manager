@@ -401,33 +401,121 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         output += chunk;
 
         // Parse stream-json format and extract content
-        // Each line is a JSON object like: {"type":"assistant","message":{"content":"..."}}
+        // Claude Code stream-json format:
+        // - assistant: {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"..."}]}}
+        // - user (tool_result): {"type":"user","message":{"role":"user","content":[{"type":"tool_result",...}]},"tool_use_result":{...}}
         const lines = chunk.split('\n').filter(line => line.trim());
         for (const line of lines) {
           let contentExtracted = false;
 
           try {
             const parsed = JSON.parse(line);
+
             // Extract content from various message types
             if (parsed.type === 'assistant' && parsed.message?.content) {
-              // Assistant text chunks
-              if (onData) onData(parsed.message.content);
+              // Assistant text chunks - content can be string or array of content blocks
+              const content = parsed.message.content;
+              if (typeof content === 'string') {
+                if (onData) onData(content);
+                contentExtracted = true;
+              } else if (Array.isArray(content)) {
+                // Claude Code format: content is array of blocks
+                for (const block of content) {
+                  if (block.type === 'text' && block.text) {
+                    // Text content from assistant
+                    if (onData) onData(block.text);
+                    contentExtracted = true;
+                  } else if (block.type === 'tool_use') {
+                    // Tool use block - log tool name for visibility
+                    if (onData) onData(`[TOOL] ${block.name}\n`);
+                    contentExtracted = true;
+                  }
+                }
+              }
+            } else if (parsed.type === 'user' && parsed.message?.content) {
+              // User messages (tool_result) - extract todo progress if available
+              const toolUseResult = parsed.tool_use_result;
+              if (toolUseResult?.newTodos && Array.isArray(toolUseResult.newTodos)) {
+                // Extract todo progress information
+                const todos = toolUseResult.newTodos;
+                const completed = todos.filter((t: any) => t.status === 'completed').length;
+                const inProgress = todos.filter((t: any) => t.status === 'in_progress').length;
+                const total = todos.length;
+                // Forward todo progress with special marker
+                if (onData) {
+                  onData(`[TODO_PROGRESS] ${JSON.stringify({ completed, inProgress, total, todos })}\n`);
+                }
+                contentExtracted = true;
+              }
+              // Also forward tool result content for logging visibility
+              if (onData && Array.isArray(parsed.message.content)) {
+                for (const block of parsed.message.content) {
+                  if (block.type === 'tool_result' && block.content) {
+                    // Truncate long tool results for readability
+                    const resultContent = typeof block.content === 'string'
+                      ? block.content
+                      : JSON.stringify(block.content);
+                    const truncated = resultContent.length > 500
+                      ? resultContent.substring(0, 500) + '...(truncated)'
+                      : resultContent;
+                    onData(`[TOOL_RESULT] ${truncated}\n`);
+                  }
+                }
+              }
               contentExtracted = true;
             } else if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
               // Streaming text deltas
               if (onData) onData(parsed.delta.text);
               contentExtracted = true;
+            } else if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta' && parsed.delta?.text) {
+              // Alternative delta format
+              if (onData) onData(parsed.delta.text);
+              contentExtracted = true;
+            } else if (parsed.type === 'message' && parsed.role === 'assistant') {
+              // Message format with role
+              if (parsed.content) {
+                if (typeof parsed.content === 'string') {
+                  if (onData) onData(parsed.content);
+                  contentExtracted = true;
+                } else if (Array.isArray(parsed.content)) {
+                  for (const item of parsed.content) {
+                    if (item.type === 'text' && item.text) {
+                      if (onData) onData(item.text);
+                      contentExtracted = true;
+                    }
+                  }
+                  // If only tool_use items exist, mark as extracted
+                  if (!contentExtracted && parsed.content.length > 0) {
+                    contentExtracted = true;
+                  }
+                }
+              }
+            } else if (parsed.type === 'message_delta' && parsed.delta?.content) {
+              // Message delta format
+              if (typeof parsed.delta.content === 'string') {
+                if (onData) onData(parsed.delta.content);
+                contentExtracted = true;
+              }
             } else if (parsed.type === 'text' && parsed.text) {
               // Simple text output
               if (onData) onData(parsed.text);
               contentExtracted = true;
             } else if (parsed.content) {
               // Generic content field
-              if (onData) onData(parsed.content);
+              if (onData) onData(typeof parsed.content === 'string' ? parsed.content : JSON.stringify(parsed.content));
               contentExtracted = true;
             } else if (parsed.type === 'message_start' || parsed.type === 'message_stop' ||
                        parsed.type === 'content_block_start' || parsed.type === 'content_block_stop') {
               // Stream control messages - skip silently
+              contentExtracted = true;
+            } else if (parsed.type === 'system') {
+              // System messages (init, etc.) - skip silently but mark as extracted
+              contentExtracted = true;
+            } else if (parsed.type === 'result') {
+              // Final result message
+              if (parsed.result && onData) {
+                onData(`[RESULT] ${typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result)}\n`);
+              }
               contentExtracted = true;
             }
 

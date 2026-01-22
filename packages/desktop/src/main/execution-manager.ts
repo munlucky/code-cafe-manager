@@ -169,6 +169,7 @@ export class ExecutionManager {
       this.baristaEngine.removeAllListeners('order:started');
       this.baristaEngine.removeAllListeners('order:completed');
       this.baristaEngine.removeAllListeners('order:failed');
+      this.baristaEngine.removeAllListeners('order:awaiting-input');
       this.baristaEngine.removeAllListeners('stage:started');
       this.baristaEngine.removeAllListeners('stage:completed');
       this.baristaEngine.removeAllListeners('stage:failed');
@@ -193,7 +194,7 @@ export class ExecutionManager {
       metrics.totalChunks++;
 
       // Parse output type from markers (uses parseOutputType helper)
-      const { type, content } = parseOutputType(data.data);
+      const { type, content, todoProgress } = parseOutputType(data.data);
 
       // 1. UI 전송 (실시간 보기용) - order:output 형식으로 전송 (ANSI를 HTML로 변환)
       // SECURITY: convertAnsiToHtml properly escapes HTML to prevent XSS
@@ -204,15 +205,32 @@ export class ExecutionManager {
         content: convertAnsiToHtml(content),
       });
 
-      // 2. 로그 저장 (지속성용) - 원본 그대로 저장 (마커 포함)
+      // 2. Todo 진행률이 있으면 별도 이벤트로 전송
+      if (todoProgress) {
+        this.sendToRenderer('order:todo-progress', {
+          orderId: data.orderId,
+          timestamp: new Date().toISOString(),
+          ...todoProgress,
+        });
+      }
+
+      // 3. 로그 저장 (지속성용) - 원본 그대로 저장 (마커 포함)
       this.orchestrator.appendOrderLog(data.orderId, data.data).catch((err: Error) => {
         console.error(`[ExecutionManager] Failed to append log for order ${data.orderId}:`, err);
       });
     });
 
     // Session 관련 이벤트들
-    this.baristaEngine.on('order:started', (data: OrderStartedEvent) => {
+    this.baristaEngine.on('order:started', async (data: OrderStartedEvent) => {
       const now = Date.now();
+
+      // Orchestrator의 Order 상태를 PENDING → RUNNING으로 변경
+      try {
+        await this.orchestrator.startOrder(data.orderId);
+        console.log(`[ExecutionManager] Order status changed to RUNNING: ${data.orderId}`);
+      } catch (err) {
+        console.error(`[ExecutionManager] Failed to update order status:`, err);
+      }
 
       // 메트릭 초기화 및 시작 시각 기록
       let metrics = this.outputMetrics.get(data.orderId);
@@ -296,6 +314,12 @@ export class ExecutionManager {
         stageId: data.stageId,
         error: data.error,
       });
+    });
+
+    // order:awaiting-input - 사용자 입력 대기 상태
+    this.baristaEngine.on('order:awaiting-input', (data: { orderId: string }) => {
+      console.log(`[ExecutionManager] Order AWAITING INPUT: ${data.orderId}`);
+      this.sendToRenderer('order:awaiting-input', data);
     });
 
     // 이벤트 리스너 등록 완료 표시
