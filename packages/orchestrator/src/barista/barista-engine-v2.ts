@@ -310,7 +310,7 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
   }
 
   /**
-   * Load default workflow from moon.workflow.yml
+   * Load default workflow from moonshot-lite.workflow.yml
    */
   private async loadDefaultWorkflow(orderPrompt: string): Promise<WorkflowConfig> {
     // Get path relative to this file (works in both dev and built environments)
@@ -320,7 +320,7 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
     const projectRoot = path.join(__dirname, '../../..');
     const workflowPath = path.join(
       projectRoot,
-      'desktop/workflows/moon.workflow.yml'
+      'desktop/workflows/moonshot-lite.workflow.yml'
     );
 
     try {

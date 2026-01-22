@@ -169,18 +169,21 @@ export function App(): JSX.Element {
     const cleanup = window.codecafe.order.onOutput((event) => {
       const { orderId, type, message, timestamp } = event;
 
-      setOrderLogs(prev => ({
-        ...prev,
-        [orderId]: [
-          ...(prev[orderId] || []),
-          {
-            id: `${orderId}-${Date.now()}`,
-            timestamp: new Date(timestamp).toLocaleTimeString([], { hour12: false }),
-            content: message,
-            type: type === 'error' ? 'error' : type === 'success' ? 'success' : 'info',
-          }
-        ]
-      }));
+      setOrderLogs(prev => {
+        const existingLogs = prev[orderId] || [];
+        return {
+          ...prev,
+          [orderId]: [
+            ...existingLogs,
+            {
+              id: crypto.randomUUID(),
+              timestamp: new Date(timestamp).toLocaleTimeString([], { hour12: false }),
+              content: message,
+              type: type === 'error' ? 'error' : type === 'success' ? 'success' : 'info',
+            }
+          ]
+        };
+      });
     });
     return cleanup;
   }, []);
@@ -205,7 +208,7 @@ export function App(): JSX.Element {
         [data.orderId]: [
           ...(prev[data.orderId] || []),
           {
-            id: `${data.stageId}-start-${Date.now()}`,
+            id: crypto.randomUUID(),
             type: 'stage_start',
             timestamp,
             content: 'Stage started',
@@ -233,7 +236,7 @@ export function App(): JSX.Element {
         [data.orderId]: [
           ...(prev[data.orderId] || []),
           {
-            id: `${data.stageId}-complete-${Date.now()}`,
+            id: crypto.randomUUID(),
             type: 'stage_complete',
             timestamp,
             content: `Stage completed${data.duration ? ` in ${data.duration}ms` : ''}`,
@@ -262,7 +265,7 @@ export function App(): JSX.Element {
         [data.orderId]: [
           ...(prev[data.orderId] || []),
           {
-            id: `${data.stageId}-fail-${Date.now()}`,
+            id: crypto.randomUUID(),
             type: 'stage_fail',
             timestamp,
             content: data.error || 'Stage failed',
