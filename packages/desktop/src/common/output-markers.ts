@@ -93,7 +93,8 @@ export function parseOutputType(content: string): { type: OutputType; content: s
         content: `Tasks: ${todoProgress.completed}/${todoProgress.total} completed`,
         todoProgress,
       };
-    } catch {
+    } catch (error) {
+      console.error(`[parseOutputType] Failed to parse TODO_PROGRESS JSON:`, error, jsonStr);
       return {
         type: 'todo_progress',
         content: jsonStr,

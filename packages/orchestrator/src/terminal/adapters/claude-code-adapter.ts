@@ -20,6 +20,7 @@ const CONFIG = {
   EXECUTE_TIMEOUT: 600000, // 10 minutes for execution
   TERM_COLS: 120,
   TERM_ROWS: 30,
+  MAX_TOOL_RESULT_LOG_LENGTH: 500, // Maximum characters to log for tool results
 } as const;
 
 /**
@@ -125,6 +126,11 @@ If the user's request is ambiguous or lacks details:
 `.trim();
 
 /**
+ * Message handler type for stream parsing
+ */
+type MessageHandler = (parsed: any, onData?: (data: string) => void) => boolean;
+
+/**
  * Claude Code CLI Adapter
  */
 export class ClaudeCodeAdapter implements IProviderAdapter {
@@ -146,6 +152,183 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
       ...details,
     }));
   }
+
+  /**
+   * Handle assistant message type
+   */
+  private handleAssistantMessage: MessageHandler = (parsed, onData) => {
+    if (parsed.type !== 'assistant' || !parsed.message?.content) return false;
+
+    const content = parsed.message.content;
+    if (typeof content === 'string') {
+      if (onData) onData(content);
+      return true;
+    }
+
+    if (Array.isArray(content)) {
+      let extracted = false;
+      for (const block of content) {
+        if (block.type === 'text' && block.text) {
+          if (onData) onData(block.text);
+          extracted = true;
+        } else if (block.type === 'tool_use') {
+          if (onData) onData(`[TOOL] ${block.name}\n`);
+          extracted = true;
+        }
+      }
+      return extracted;
+    }
+
+    return false;
+  };
+
+  /**
+   * Handle user message type (tool results)
+   */
+  private handleUserMessage: MessageHandler = (parsed, onData) => {
+    if (parsed.type !== 'user' || !parsed.message?.content) return false;
+
+    // Extract todo progress if available
+    const toolUseResult = parsed.tool_use_result;
+    if (toolUseResult?.newTodos && Array.isArray(toolUseResult.newTodos)) {
+      const todos = toolUseResult.newTodos as Array<{ status: 'completed' | 'in_progress' | 'pending'; content: string; activeForm?: string }>;
+      const completed = todos.filter((t) => t.status === 'completed').length;
+      const inProgress = todos.filter((t) => t.status === 'in_progress').length;
+      const total = todos.length;
+      if (onData) {
+        onData(`[TODO_PROGRESS] ${JSON.stringify({ completed, inProgress, total, todos })}\n`);
+      }
+    }
+
+    // Forward tool result content for logging visibility
+    if (onData && Array.isArray(parsed.message.content)) {
+      for (const block of parsed.message.content) {
+        if (block.type === 'tool_result' && block.content) {
+          const resultContent = typeof block.content === 'string'
+            ? block.content
+            : JSON.stringify(block.content);
+          const truncated = resultContent.length > CONFIG.MAX_TOOL_RESULT_LOG_LENGTH
+            ? resultContent.substring(0, CONFIG.MAX_TOOL_RESULT_LOG_LENGTH) + '...(truncated)'
+            : resultContent;
+          onData(`[TOOL_RESULT] ${truncated}\n`);
+        }
+      }
+    }
+
+    return true;
+  };
+
+  /**
+   * Handle content_block_delta message type
+   */
+  private handleContentBlockDelta: MessageHandler = (parsed, onData) => {
+    if (parsed.type !== 'content_block_delta' || !parsed.delta?.text) return false;
+    if (onData) onData(parsed.delta.text);
+    return true;
+  };
+
+  /**
+   * Handle message with role (assistant)
+   */
+  private handleMessageWithRole: MessageHandler = (parsed, onData) => {
+    if (parsed.type !== 'message' || parsed.role !== 'assistant') return false;
+
+    if (!parsed.content) return false;
+
+    if (typeof parsed.content === 'string') {
+      if (onData) onData(parsed.content);
+      return true;
+    }
+
+    if (Array.isArray(parsed.content)) {
+      let extracted = false;
+      for (const item of parsed.content) {
+        if (item.type === 'text' && item.text) {
+          if (onData) onData(item.text);
+          extracted = true;
+        }
+      }
+      // If only tool_use items exist, mark as extracted
+      if (!extracted && parsed.content.length > 0) {
+        extracted = true;
+      }
+      return extracted;
+    }
+
+    return false;
+  };
+
+  /**
+   * Handle message_delta type
+   */
+  private handleMessageDelta: MessageHandler = (parsed, onData) => {
+    if (parsed.type !== 'message_delta' || !parsed.delta?.content) return false;
+    if (typeof parsed.delta.content === 'string') {
+      if (onData) onData(parsed.delta.content);
+      return true;
+    }
+    return false;
+  };
+
+  /**
+   * Handle simple text output
+   */
+  private handleTextOutput: MessageHandler = (parsed, onData) => {
+    if (parsed.type !== 'text' || !parsed.text) return false;
+    if (onData) onData(parsed.text);
+    return true;
+  };
+
+  /**
+   * Handle generic content field
+   */
+  private handleGenericContent: MessageHandler = (parsed, onData) => {
+    if (!parsed.content || parsed.type) return false; // Skip if type is already defined
+    if (onData) onData(typeof parsed.content === 'string' ? parsed.content : JSON.stringify(parsed.content));
+    return true;
+  };
+
+  /**
+   * Handle stream control messages
+   */
+  private handleStreamControl: MessageHandler = (parsed) => {
+    const controlTypes = ['message_start', 'message_stop', 'content_block_start', 'content_block_stop'];
+    return controlTypes.includes(parsed.type);
+  };
+
+  /**
+   * Handle system messages
+   */
+  private handleSystemMessage: MessageHandler = (parsed) => {
+    return parsed.type === 'system';
+  };
+
+  /**
+   * Handle result message
+   */
+  private handleResultMessage: MessageHandler = (parsed, onData) => {
+    if (parsed.type !== 'result') return false;
+    if (parsed.result && onData) {
+      onData(`[RESULT] ${typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result)}\n`);
+    }
+    return true;
+  };
+
+  /**
+   * Message handlers registry
+   */
+  private messageHandlers: MessageHandler[] = [
+    this.handleAssistantMessage,
+    this.handleUserMessage,
+    this.handleContentBlockDelta,
+    this.handleMessageWithRole,
+    this.handleMessageDelta,
+    this.handleTextOutput,
+    this.handleStreamControl,
+    this.handleSystemMessage,
+    this.handleResultMessage,
+    this.handleGenericContent,
+  ];
 
   /**
    * Find Claude CLI executable path
@@ -411,112 +594,12 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
           try {
             const parsed = JSON.parse(line);
 
-            // Extract content from various message types
-            if (parsed.type === 'assistant' && parsed.message?.content) {
-              // Assistant text chunks - content can be string or array of content blocks
-              const content = parsed.message.content;
-              if (typeof content === 'string') {
-                if (onData) onData(content);
+            // Try each handler in sequence
+            for (const handler of this.messageHandlers) {
+              if (handler(parsed, onData)) {
                 contentExtracted = true;
-              } else if (Array.isArray(content)) {
-                // Claude Code format: content is array of blocks
-                for (const block of content) {
-                  if (block.type === 'text' && block.text) {
-                    // Text content from assistant
-                    if (onData) onData(block.text);
-                    contentExtracted = true;
-                  } else if (block.type === 'tool_use') {
-                    // Tool use block - log tool name for visibility
-                    if (onData) onData(`[TOOL] ${block.name}\n`);
-                    contentExtracted = true;
-                  }
-                }
+                break;
               }
-            } else if (parsed.type === 'user' && parsed.message?.content) {
-              // User messages (tool_result) - extract todo progress if available
-              const toolUseResult = parsed.tool_use_result;
-              if (toolUseResult?.newTodos && Array.isArray(toolUseResult.newTodos)) {
-                // Extract todo progress information
-                const todos = toolUseResult.newTodos;
-                const completed = todos.filter((t: any) => t.status === 'completed').length;
-                const inProgress = todos.filter((t: any) => t.status === 'in_progress').length;
-                const total = todos.length;
-                // Forward todo progress with special marker
-                if (onData) {
-                  onData(`[TODO_PROGRESS] ${JSON.stringify({ completed, inProgress, total, todos })}\n`);
-                }
-                contentExtracted = true;
-              }
-              // Also forward tool result content for logging visibility
-              if (onData && Array.isArray(parsed.message.content)) {
-                for (const block of parsed.message.content) {
-                  if (block.type === 'tool_result' && block.content) {
-                    // Truncate long tool results for readability
-                    const resultContent = typeof block.content === 'string'
-                      ? block.content
-                      : JSON.stringify(block.content);
-                    const truncated = resultContent.length > 500
-                      ? resultContent.substring(0, 500) + '...(truncated)'
-                      : resultContent;
-                    onData(`[TOOL_RESULT] ${truncated}\n`);
-                  }
-                }
-              }
-              contentExtracted = true;
-            } else if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-              // Streaming text deltas
-              if (onData) onData(parsed.delta.text);
-              contentExtracted = true;
-            } else if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta' && parsed.delta?.text) {
-              // Alternative delta format
-              if (onData) onData(parsed.delta.text);
-              contentExtracted = true;
-            } else if (parsed.type === 'message' && parsed.role === 'assistant') {
-              // Message format with role
-              if (parsed.content) {
-                if (typeof parsed.content === 'string') {
-                  if (onData) onData(parsed.content);
-                  contentExtracted = true;
-                } else if (Array.isArray(parsed.content)) {
-                  for (const item of parsed.content) {
-                    if (item.type === 'text' && item.text) {
-                      if (onData) onData(item.text);
-                      contentExtracted = true;
-                    }
-                  }
-                  // If only tool_use items exist, mark as extracted
-                  if (!contentExtracted && parsed.content.length > 0) {
-                    contentExtracted = true;
-                  }
-                }
-              }
-            } else if (parsed.type === 'message_delta' && parsed.delta?.content) {
-              // Message delta format
-              if (typeof parsed.delta.content === 'string') {
-                if (onData) onData(parsed.delta.content);
-                contentExtracted = true;
-              }
-            } else if (parsed.type === 'text' && parsed.text) {
-              // Simple text output
-              if (onData) onData(parsed.text);
-              contentExtracted = true;
-            } else if (parsed.content) {
-              // Generic content field
-              if (onData) onData(typeof parsed.content === 'string' ? parsed.content : JSON.stringify(parsed.content));
-              contentExtracted = true;
-            } else if (parsed.type === 'message_start' || parsed.type === 'message_stop' ||
-                       parsed.type === 'content_block_start' || parsed.type === 'content_block_stop') {
-              // Stream control messages - skip silently
-              contentExtracted = true;
-            } else if (parsed.type === 'system') {
-              // System messages (init, etc.) - skip silently but mark as extracted
-              contentExtracted = true;
-            } else if (parsed.type === 'result') {
-              // Final result message
-              if (parsed.result && onData) {
-                onData(`[RESULT] ${typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result)}\n`);
-              }
-              contentExtracted = true;
             }
 
             // If JSON parsed but no known content field, log for debugging
