@@ -104,9 +104,12 @@ export function parseMarkdownCodeBlocks(text: string): ParsedContent[] {
     }
   }
 
-  // 코드블럭이 없으면 전체를 텍스트로
-  if (parts.length === 0) {
-    parts.push({ type: 'text', content: text });
+  // 코드블럭이 없으면 전체를 텍스트로 (일관성 있게 trim 및 빈 문자열 체크)
+  if (parts.length === 0 && text) {
+    const trimmedContent = text.trim();
+    if (trimmedContent) {
+      parts.push({ type: 'text', content: trimmedContent });
+    }
   }
 
   return parts;

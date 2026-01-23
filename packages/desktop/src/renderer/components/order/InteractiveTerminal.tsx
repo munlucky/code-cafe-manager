@@ -177,17 +177,19 @@ export function InteractiveTerminal({
       return;
     }
 
-    // startedAt이 있으면 사용, 없으면 현재 시간부터 시작
-    const startMs = startedAt
-      ? new Date(startedAt).getTime()
-      : (runningStartRef.current ??= Date.now());
+    // 시작 시간 결정 로직을 명확하게 분리
+    const getStartTime = (): number => {
+      if (startedAt) {
+        const time = new Date(startedAt).getTime();
+        if (!Number.isNaN(time)) {
+          return time;
+        }
+      }
+      // startedAt이 없거나 유효하지 않은 경우 fallback
+      return (runningStartRef.current ??= Date.now());
+    };
 
-    if (Number.isNaN(startMs)) {
-      runningStartRef.current = Date.now();
-    }
-
-    const actualStartMs = Number.isNaN(startMs) ? runningStartRef.current! : startMs;
-
+    const actualStartMs = getStartTime();
     const tick = () => setElapsedMs(Date.now() - actualStartMs);
     tick();
     const timer = setInterval(tick, 1000);

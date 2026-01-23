@@ -16,7 +16,7 @@ import { LogBadge } from './LogBadge';
 import { CollapsibleContent } from './CollapsibleContent';
 import { FilePreview } from './FilePreview';
 import { JSONViewer } from './JSONViewer';
-import { CodeBlock, parseMarkdownCodeBlocks } from './CodeBlock';
+import { MarkdownContentRenderer } from './MarkdownContentRenderer';
 
 interface TerminalLogEntryProps {
   entry: ParsedLogEntry;
@@ -106,42 +106,13 @@ function renderContent(entry: ParsedLogEntry): JSX.Element {
     }
   }
 
-  // 마크다운 코드블럭 파싱
-  const parsedContent = parseMarkdownCodeBlocks(entry.content);
-  const hasCodeBlocks = parsedContent.some((p) => p.type === 'code');
-
-  if (hasCodeBlocks) {
-    return (
-      <div className="space-y-2 px-1 py-1">
-        {parsedContent.map((part, index) =>
-          part.type === 'code' ? (
-            <CodeBlock key={index} code={part.content} language={part.language} />
-          ) : (
-            <div
-              key={index}
-              className={cn(
-                'text-xs whitespace-pre-wrap break-words',
-                contentType === 'error' ? 'text-red-400' : 'text-cafe-300'
-              )}
-            >
-              {part.content}
-            </div>
-          )
-        )}
-      </div>
-    );
-  }
-
-  // Plain text or error
+  // 마크다운 콘텐츠 렌더링 (코드블럭 포함)
   return (
-    <div
-      className={cn(
-        'px-3 py-2 text-xs whitespace-pre-wrap break-all',
-        contentType === 'error' ? 'text-red-400' : 'text-cafe-300'
-      )}
-    >
-      {entry.content}
-    </div>
+    <MarkdownContentRenderer
+      content={entry.content}
+      isError={contentType === 'error'}
+      className="px-1 py-1"
+    />
   );
 }
 

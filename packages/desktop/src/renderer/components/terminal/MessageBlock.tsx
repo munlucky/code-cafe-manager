@@ -6,7 +6,7 @@
 import { User, Sparkles } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import type { InteractionGroup } from '../../types/terminal';
-import { CodeBlock, parseMarkdownCodeBlocks } from './CodeBlock';
+import { MarkdownContentRenderer } from './MarkdownContentRenderer';
 
 interface MessageBlockProps {
   group: InteractionGroup;
@@ -70,33 +70,14 @@ export function MessageBlock({ group, className }: MessageBlockProps): JSX.Eleme
 
         {/* 메시지 콘텐츠 - 폴딩 없이 전체 표시 */}
         <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg px-4 py-3 w-full space-y-3">
-          {group.entries.map((entry) => {
-            // 마크다운 코드블럭 파싱
-            const parsedContent = parseMarkdownCodeBlocks(entry.content);
-            const hasCodeBlocks = parsedContent.some((p) => p.type === 'code');
-
-            return (
-              <div key={entry.id} className="text-sm text-cafe-100 leading-relaxed">
-                {hasCodeBlocks ? (
-                  <div className="space-y-3">
-                    {parsedContent.map((part, index) =>
-                      part.type === 'code' ? (
-                        <CodeBlock key={index} code={part.content} language={part.language} />
-                      ) : (
-                        <div key={index} className="whitespace-pre-wrap break-words">
-                          {part.content}
-                        </div>
-                      )
-                    )}
-                  </div>
-                ) : (
-                  <div className="whitespace-pre-wrap break-words">
-                    {entry.content}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {group.entries.map((entry) => (
+            <MarkdownContentRenderer
+              key={entry.id}
+              content={entry.content}
+              textSize="text-sm"
+              textColor="text-cafe-100"
+            />
+          ))}
         </div>
       </div>
     </div>
