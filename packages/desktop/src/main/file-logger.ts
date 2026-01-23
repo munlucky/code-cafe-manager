@@ -114,15 +114,171 @@ export function setupMainProcessLogger(): void {
 }
 
 /**
+ * Tool input 요약 (최대 100자)
+ */
+function summarizeToolInput(input: unknown): string {
+  if (!input || typeof input !== 'object') {
+    return String(input).slice(0, 100);
+  }
+
+  const obj = input as Record<string, unknown>;
+  const parts: string[] = [];
+
+  if (obj.file_path) {
+    parts.push(`file: ${obj.file_path}`);
+  }
+  if (obj.command) {
+    parts.push(`cmd: ${String(obj.command).slice(0, 50)}`);
+  }
+  if (obj.pattern) {
+    parts.push(`pattern: ${obj.pattern}`);
+  }
+  if (obj.path) {
+    parts.push(`path: ${obj.path}`);
+  }
+  if (obj.query) {
+    parts.push(`query: ${String(obj.query).slice(0, 50)}`);
+  }
+
+  if (parts.length === 0) {
+    const keys = Object.keys(obj).slice(0, 3).join(', ');
+    return `{${keys}}`;
+  }
+
+  const result = parts.join(' | ');
+  return result.length > 100 ? result.slice(0, 97) + '...' : result;
+}
+
+/**
+ * Tool result 요약
+ */
+function summarizeToolResult(content: unknown): string {
+  if (content === null || content === undefined) {
+    return '[empty]';
+  }
+
+  const str = typeof content === 'string' ? content : JSON.stringify(content);
+
+  // File content detection (line number pattern: ^\s*\d+->)
+  const fileLinePattern = /^\s*\d+->/m;
+  if (fileLinePattern.test(str)) {
+    const lines = str.split('\n').filter((l) => fileLinePattern.test(l));
+    const lineCount = lines.length;
+    const preview = str.slice(0, 50).replace(/\n/g, ' ');
+    return `[File: ${lineCount} lines] ${preview}...`;
+  }
+
+  // JSON detection
+  if (str.startsWith('{') || str.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(str);
+      const keys = Array.isArray(parsed)
+        ? `array[${parsed.length}]`
+        : Object.keys(parsed).slice(0, 5).join(', ');
+      return `[JSON] {${keys}} (${str.length} chars)`;
+    } catch {
+      // Not valid JSON, continue
+    }
+  }
+
+  // Plain text (max 150 chars)
+  const cleaned = str.replace(/\s+/g, ' ').trim();
+  return cleaned.length > 150 ? cleaned.slice(0, 147) + '...' : cleaned;
+}
+
+/**
+ * 메시지 타입별 포맷팅
+ */
+function formatParsedMessage(msg: unknown): string[] | null {
+  if (!msg || typeof msg !== 'object') {
+    return null;
+  }
+
+  const message = msg as Record<string, unknown>;
+  const results: string[] = [];
+  const msgType = message.type as string;
+
+  // assistant message
+  if (msgType === 'assistant' && message.message) {
+    const inner = message.message as Record<string, unknown>;
+    const content = inner.content;
+
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        if (block.type === 'text' && block.text) {
+          const text = String(block.text).slice(0, 100);
+          results.push(`[ASSISTANT] ${text}${block.text.length > 100 ? '...' : ''}`);
+        } else if (block.type === 'tool_use') {
+          const toolName = block.name || 'unknown';
+          const inputSummary = summarizeToolInput(block.input);
+          results.push(`[TOOL_USE:${toolName}] ${inputSummary}`);
+        }
+      }
+    }
+  }
+
+  // user message (tool_result)
+  if (msgType === 'user' && message.message) {
+    const inner = message.message as Record<string, unknown>;
+    const content = inner.content;
+
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        if (block.type === 'tool_result') {
+          const toolId = block.tool_use_id
+            ? String(block.tool_use_id).slice(-8)
+            : 'unknown';
+          const summary = summarizeToolResult(block.content);
+          results.push(`[TOOL_RESULT:${toolId}] ${summary}`);
+        }
+      }
+    }
+  }
+
+  // system message
+  if (msgType === 'system') {
+    const content = message.message || message.content || '';
+    const text =
+      typeof content === 'string' ? content : JSON.stringify(content);
+    results.push(`[SYSTEM] ${text.slice(0, 100)}${text.length > 100 ? '...' : ''}`);
+  }
+
+  return results.length > 0 ? results : null;
+}
+
+/**
+ * 터미널 데이터 파싱 및 포맷팅
+ */
+function parseAndFormatTerminalData(orderId: string, data: string): string {
+  const timestamp = getTimestamp();
+  const prefix = `[${timestamp}] [Order:${orderId}]`;
+
+  // Try to parse as JSON
+  try {
+    const parsed = JSON.parse(data);
+    const formatted = formatParsedMessage(parsed);
+
+    if (formatted && formatted.length > 0) {
+      return formatted.map((line) => `${prefix} ${line}`).join('\n');
+    }
+  } catch {
+    // Not JSON, use original
+  }
+
+  // Fallback: original format (truncated for readability)
+  const truncated = data.length > 500 ? data.slice(0, 497) + '...' : data;
+  return `${prefix} ${truncated}`;
+}
+
+/**
  * 터미널 로그 전용 로거
  */
 export const terminalLogger = {
   /**
-   * 터미널 출력 로그 기록
+   * 터미널 출력 로그 기록 (human-readable format)
    */
   log: async (orderId: string, data: string): Promise<void> => {
-    const timestamp = getTimestamp();
-    const message = `[${timestamp}] [Order:${orderId}] ${data}\n`;
+    const message = parseAndFormatTerminalData(orderId, data) + '\n';
     await writeToFile(TERMINAL_LOG_FILE, message);
   },
 

@@ -6,8 +6,12 @@
  */
 
 import { useEffect, useState, useRef, useCallback, type KeyboardEvent } from 'react';
-import { Terminal as TerminalIcon, ArrowRight, Sparkles, MessageSquare, ArrowUp, ArrowDown } from 'lucide-react';
+import { Terminal as TerminalIcon, ArrowRight, Sparkles, MessageSquare, ArrowUp, ArrowDown, ChevronsDown } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import type { ParsedLogEntry } from '../../types/terminal';
+import { parseTerminalOutput, generateId } from '../../utils/terminal-log-parser';
+import { TerminalLogEntry } from '../terminal';
+import { useSmartScroll } from '../../hooks/useSmartScroll';
 
 interface OrderOutputEvent {
   orderId: string;
@@ -42,21 +46,23 @@ export function InteractiveTerminal({
   worktreePath,
   startedAt,
 }: InteractiveTerminalProps): JSX.Element {
-  const [output, setOutput] = useState<OrderOutputEvent[]>([]);
+  const [entries, setEntries] = useState<ParsedLogEntry[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
-  const [autoScroll, setAutoScroll] = useState(true);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
-  const outputRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const terminalEndRef = useRef<HTMLDivElement>(null);
   // 중복 검사를 위한 Set (타임스탬프+내용 기반)
   const seenKeysRef = useRef<Set<string>>(new Set());
 
-  // 중복 없이 로그 추가
+  // Smart scroll hook
+  const { containerRef, endRef, isAtBottom, scrollToBottom } = useSmartScroll({
+    threshold: 100,
+  });
+
+  // 중복 없이 로그 추가 (ParsedLogEntry로 변환)
   const addOutputEvent = useCallback((event: OrderOutputEvent) => {
     const key = getLogKey(event);
     if (seenKeysRef.current.has(key)) {
@@ -69,14 +75,26 @@ export function InteractiveTerminal({
       return;
     }
 
-    // content는 이미 execution-manager에서 ANSI를 HTML로 변환함
-    setOutput((prev) => [...prev, event]);
+    // Parse raw content into structured ParsedLogEntry
+    const parsedEntry = parseTerminalOutput(event.content);
+
+    // Override type based on event type for better badge display
+    if (event.type === 'stderr') {
+      parsedEntry.type = 'system';
+    } else if (event.type === 'user-input') {
+      parsedEntry.type = 'user';
+    }
+
+    // Use event timestamp for consistency
+    parsedEntry.timestamp = event.timestamp;
+
+    setEntries((prev) => [...prev, parsedEntry]);
   }, []);
 
   useEffect(() => {
     let isActive = true;
     setLoading(true);
-    setOutput([]);
+    setEntries([]);
     seenKeysRef.current.clear();
 
     // 출력 이벤트 리스너
@@ -108,13 +126,6 @@ export function InteractiveTerminal({
     };
   }, [orderId, addOutputEvent]);
 
-  // Auto-scroll - smooth scroll to terminal end
-  useEffect(() => {
-    if (autoScroll && terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [output, autoScroll]);
-
   useEffect(() => {
     const startMs = startedAt ? new Date(startedAt).getTime() : NaN;
     if (!isRunning || !startedAt || Number.isNaN(startMs)) {
@@ -139,32 +150,6 @@ export function InteractiveTerminal({
     return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
   };
 
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'stderr':
-        return 'text-red-400';
-      case 'system':
-        return 'text-blue-400';
-      case 'user-input':
-        return 'text-yellow-400';
-      default:
-        return 'text-gray-300';
-    }
-  };
-
-  const getTypePrefix = (type: string) => {
-    switch (type) {
-      case 'stderr':
-        return '[ERR]';
-      case 'system':
-        return '[SYS]';
-      case 'user-input':
-        return '[YOU]';
-      default:
-        return '';
-    }
-  };
-
   const handleSendInput = async () => {
     if (!inputValue.trim() || !onSendInput || sending) return;
 
@@ -175,31 +160,29 @@ export function InteractiveTerminal({
     // 히스토리에 추가
     setInputHistory((prev) => [message, ...prev.slice(0, 49)]);
 
-    // 로컬 출력에 추가
-    setOutput((prev) => [
-      ...prev,
-      {
-        orderId,
-        timestamp: new Date().toISOString(),
-        type: 'user-input',
-        content: message,
-      },
-    ]);
+    // 로컬 출력에 추가 (ParsedLogEntry로 생성)
+    const userEntry: ParsedLogEntry = {
+      id: generateId(),
+      timestamp: new Date().toISOString(),
+      type: 'user',
+      content: message,
+      isCollapsible: false,
+    };
+    setEntries((prev) => [...prev, userEntry]);
 
     setSending(true);
     try {
       await onSendInput(message);
     } catch (error) {
       console.error('[InteractiveTerminal] Failed to send input:', error);
-      setOutput((prev) => [
-        ...prev,
-        {
-          orderId,
-          timestamp: new Date().toISOString(),
-          type: 'stderr',
-          content: `Failed to send: ${error instanceof Error ? error.message : String(error)}`,
-        },
-      ]);
+      const errorEntry: ParsedLogEntry = {
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        type: 'system',
+        content: `Failed to send: ${error instanceof Error ? error.message : String(error)}`,
+        isCollapsible: false,
+      };
+      setEntries((prev) => [...prev, errorEntry]);
     } finally {
       setSending(false);
     }
@@ -250,17 +233,6 @@ export function InteractiveTerminal({
           )}
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setAutoScroll(!autoScroll)}
-            className={cn(
-              'text-[10px] px-2 py-0.5 rounded transition-colors',
-              autoScroll
-                ? 'bg-brand/20 text-brand border border-brand/30'
-                : 'bg-cafe-800 text-cafe-500 border border-cafe-700'
-            )}
-          >
-            {autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
-          </button>
           <div className="flex gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/50"></div>
             <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/20 border border-yellow-500/50"></div>
@@ -270,7 +242,7 @@ export function InteractiveTerminal({
       </div>
 
       {/* Logs Area */}
-      <div ref={outputRef} className="flex-1 overflow-y-auto p-4 terminal-scroll">
+      <div ref={containerRef} className="flex-1 overflow-y-auto p-4 terminal-scroll relative">
         {/* Welcome Message */}
         <div className="mb-6 pb-4 border-b border-cafe-800/30 text-cafe-500/60 text-xs">
           <div className="flex items-center mb-1">
@@ -283,41 +255,41 @@ export function InteractiveTerminal({
         {loading && (
           <div className="text-cafe-600 animate-pulse">Connecting to terminal...</div>
         )}
-        {!loading && output.length === 0 && (
+        {!loading && entries.length === 0 && (
           <div className="text-cafe-600">Waiting for output...</div>
         )}
 
-        <div className="space-y-1">
-          {output.map((e, i) => (
-            <div key={i} className="flex group items-start hover:bg-white/5 px-2 py-0.5 rounded -mx-2 transition-colors">
-              <div className={cn(
-                'flex-1 break-all whitespace-pre-wrap leading-relaxed',
-                e.type === 'stderr' ? 'text-red-400' :
-                e.type === 'system' ? 'text-blue-400' :
-                e.type === 'user-input' ? 'text-yellow-400 italic' :
-                'text-cafe-400'
-              )}>
-                {e.type === 'user-input' && <span className="mr-2 text-yellow-500">➜</span>}
-                {e.type === 'system' && <span className="mr-2 text-blue-400">🤖</span>}
-                {/*
-                  Render HTML content (ANSI colors converted by execution-manager)
-                  SECURITY: Content is sanitized by convertAnsiToHtml (output-utils.ts)
-                  which escapes all HTML special characters before ANSI conversion
-                */}
-                <span dangerouslySetInnerHTML={{ __html: e.content }} />
-              </div>
-            </div>
+        <div className="space-y-0.5">
+          {entries.map((entry) => (
+            <TerminalLogEntry key={entry.id} entry={entry} />
           ))}
           {/* Thinking Indicator */}
-          {isRunning && output.length > 0 && (
+          {isRunning && entries.length > 0 && (
             <div className="flex items-center text-cafe-600 mt-2 pl-16 animate-pulse">
               <span className="w-1.5 h-3 bg-brand block mr-2"></span>
               <span className="text-xs">Processing...</span>
             </div>
           )}
-          <div ref={terminalEndRef} />
+          <div ref={endRef} />
         </div>
       </div>
+
+      {/* Scroll to Bottom Button */}
+      {!isAtBottom && (
+        <button
+          onClick={scrollToBottom}
+          className={cn(
+            'absolute bottom-24 right-4 z-10',
+            'flex items-center gap-1 px-3 py-1.5 rounded-full',
+            'bg-cafe-800/90 hover:bg-cafe-700 border border-cafe-600',
+            'text-cafe-300 text-xs shadow-lg transition-all',
+            'backdrop-blur-sm'
+          )}
+        >
+          <ChevronsDown className="w-3.5 h-3.5" />
+          <span>Scroll to bottom</span>
+        </button>
+      )}
 
       {/* Input Area - Highlight when awaiting input */}
       {(isAwaitingInput || isRunning) && onSendInput && (
@@ -361,7 +333,7 @@ export function InteractiveTerminal({
 
       {/* Footer */}
       <div className="px-4 py-1.5 border-t border-cafe-800 bg-cafe-900/50 text-[10px] text-cafe-600 flex justify-between">
-        <span>{output.length} lines</span>
+        <span>{entries.length} entries</span>
         {inputHistory.length > 0 && (
           <span>{inputHistory.length} in history</span>
         )}
