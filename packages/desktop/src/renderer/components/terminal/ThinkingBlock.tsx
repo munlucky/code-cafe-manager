@@ -13,6 +13,10 @@ interface ThinkingBlockProps {
   group: InteractionGroup;
   className?: string;
   isRunning?: boolean;
+  /** 외부에서 제어하는 펼침 상태 */
+  expanded?: boolean;
+  /** 펼침/접기 토글 핸들러 */
+  onToggle?: () => void;
 }
 
 function formatSummary(entries: InteractionGroup['entries']): string {
@@ -46,8 +50,26 @@ function formatSummary(entries: InteractionGroup['entries']): string {
   return `${entryCount}개 작업 수행 중...`;
 }
 
-export function ThinkingBlock({ group, className, isRunning }: ThinkingBlockProps): JSX.Element {
-  const [expanded, setExpanded] = useState(false);
+export function ThinkingBlock({
+  group,
+  className,
+  isRunning,
+  expanded: externalExpanded,
+  onToggle,
+}: ThinkingBlockProps): JSX.Element {
+  // 외부 제어 모드: expanded와 onToggle이 모두 제공되면 외부 상태 사용
+  const isControlled = externalExpanded !== undefined && onToggle !== undefined;
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const expanded = isControlled ? externalExpanded : internalExpanded;
+
+  const handleToggle = () => {
+    if (isControlled) {
+      onToggle();
+    } else {
+      setInternalExpanded((prev) => !prev);
+    }
+  };
+
   const summary = formatSummary(group.entries);
   const hasError = group.entries.some((e) => e.type === 'system' && e.content.toLowerCase().includes('error'));
 
@@ -56,7 +78,7 @@ export function ThinkingBlock({ group, className, isRunning }: ThinkingBlockProp
       {/* Header - clickable to toggle */}
       <button
         type="button"
-        onClick={() => setExpanded(!expanded)}
+        onClick={handleToggle}
         className={cn(
           'w-full flex items-center gap-2 p-2.5 rounded-lg text-left transition-all border select-none',
           expanded
