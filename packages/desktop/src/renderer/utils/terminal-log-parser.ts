@@ -51,6 +51,60 @@ export function isJSONContent(content: string): boolean {
 }
 
 /**
+ * 코드/스크립트 콘텐츠 여부 감지
+ * HTML, JavaScript 등의 코드가 포함된 경우 true 반환
+ */
+function isCodeContent(content: string): boolean {
+  const codePatterns = [
+    /<script[\s>]/i,
+    /<\/script>/i,
+    /function\s+\w+\s*\(/,
+    /=>\s*{/,
+    /const\s+\w+\s*=/,
+    /let\s+\w+\s*=/,
+    /var\s+\w+\s*=/,
+    /<html[\s>]/i,
+    /document\.\w+/,
+    /window\.\w+/,
+    /console\.\w+/,
+  ];
+  return codePatterns.some((pattern) => pattern.test(content));
+}
+
+/**
+ * 실제 에러 메시지인지 확인
+ * 단순 키워드 포함이 아닌, 실제 에러 출력 패턴 감지
+ */
+function isActualError(content: string): boolean {
+  // 코드 콘텐츠 내의 error 키워드는 무시
+  if (isCodeContent(content)) {
+    return false;
+  }
+
+  // 실제 에러 출력 패턴 (줄 시작에서 에러 키워드)
+  const errorPatterns = [
+    /^error:/im,
+    /^Error:/m,
+    /^ERROR:/m,
+    /^\[error\]/im,
+    /^Exception:/m,
+    /^EXCEPTION:/m,
+    /^Uncaught\s+(Error|Exception)/m,
+    /^TypeError:/m,
+    /^SyntaxError:/m,
+    /^ReferenceError:/m,
+    /^FATAL:/m,
+    /^FAIL:/m,
+    /failed with exit code/i,
+    /command failed/i,
+    /build failed/i,
+    /compilation failed/i,
+  ];
+
+  return errorPatterns.some((pattern) => pattern.test(content));
+}
+
+/**
  * 콘텐츠 유형 감지
  */
 export function detectContentType(content: string): ContentType {
@@ -60,13 +114,8 @@ export function detectContentType(content: string): ContentType {
   if (isJSONContent(content)) {
     return 'json';
   }
-  // 에러 패턴 감지
-  const lowerContent = content.toLowerCase();
-  if (
-    lowerContent.includes('error:') ||
-    lowerContent.includes('exception') ||
-    lowerContent.includes('failed')
-  ) {
+  // 실제 에러 패턴 감지 (더 정교한 로직)
+  if (isActualError(content)) {
     return 'error';
   }
   return 'text';
