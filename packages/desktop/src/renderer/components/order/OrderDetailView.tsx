@@ -419,6 +419,7 @@ export function OrderDetailView({
             onSendInput={isRunning ? handleSendInput : undefined}
             isRunning={isRunning}
             startedAt={currentOrder.startedAt}
+            initialPrompt={currentOrder.prompt}
             className="h-full"
           />
         </div>
