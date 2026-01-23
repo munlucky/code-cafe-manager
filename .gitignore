@@ -25,4 +25,5 @@ tmpclaude-*
 .claude/docs/moonshot-analysis.yaml
 .claude/skills/moonshot-classify-task/context.yaml
 .claude/docs/tasks/*
-.claude/skills/moonshot-classify-task/output.yaml
+.claude/skills/*/output.yaml
+.claude/skills/*/output.yaml

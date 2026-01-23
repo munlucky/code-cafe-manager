@@ -16,15 +16,12 @@ const COLLAPSIBLE_THRESHOLD = 500;
 /** 파일 라인 번호 패턴 (예: "     1->" 또는 "   123->") */
 const FILE_LINE_PATTERN = /^\s*\d+->/m;
 
-/** 고유 ID 생성을 위한 카운터 */
-let idCounter = 0;
-
 /**
  * 고유 ID 생성
+ * crypto.randomUUID() 사용하여 테스트 간 간섭 방지
  */
 export function generateId(): string {
-  idCounter += 1;
-  return `log-${Date.now()}-${idCounter}`;
+  return `log-${crypto.randomUUID()}`;
 }
 
 /**
