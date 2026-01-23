@@ -183,7 +183,6 @@ export function JSONViewer({
   const [expanded, setExpanded] = useState(defaultExpanded);
   const displayLabel = label || generateLabel(data);
   const fieldCount = countFields(data);
-  const jsonString = JSON.stringify(data, null, 2);
 
   return (
     <div className={cn('mt-1 mb-2', className)}>
