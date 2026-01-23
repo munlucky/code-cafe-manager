@@ -4,7 +4,7 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import { ChevronDown, type LucideIcon } from 'lucide-react';
+import { ChevronDown, ChevronRight, type LucideIcon } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
 interface CollapsibleContentProps {
@@ -37,27 +37,26 @@ export function CollapsibleContent({
     .join(' | ');
 
   return (
-    <div className={cn('rounded border border-cafe-800', className)}>
+    <div className={cn('rounded-lg border border-cafe-800 overflow-hidden bg-cafe-950/50', className)}>
       {/* Header - clickable to toggle */}
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
         className={cn(
-          'w-full flex items-center gap-2 px-3 py-2 text-left',
-          'bg-cafe-900/50 hover:bg-cafe-900 transition-colors',
+          'w-full flex items-center gap-2 px-3 py-1.5 text-left select-none',
+          'bg-cafe-900/80 hover:bg-cafe-800 transition-colors',
           'text-xs text-cafe-400'
         )}
       >
-        <ChevronDown
-          className={cn(
-            'w-4 h-4 transition-transform duration-200 flex-shrink-0',
-            expanded ? 'rotate-0' : '-rotate-90'
-          )}
-        />
-        {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" />}
-        <span className="truncate flex-1">{summary}</span>
+        {expanded ? (
+          <ChevronDown className="w-3 h-3 flex-shrink-0 text-cafe-500" />
+        ) : (
+          <ChevronRight className="w-3 h-3 flex-shrink-0 text-cafe-500" />
+        )}
+        {Icon && <Icon className="w-3 h-3 flex-shrink-0 text-brand" />}
+        <span className="truncate flex-1 font-mono text-cafe-300">{summary}</span>
         {metadataText && (
-          <span className="text-cafe-600 text-[10px] flex-shrink-0">
+          <span className="text-[10px] text-cafe-600 flex-shrink-0">
             {metadataText}
           </span>
         )}
@@ -65,8 +64,10 @@ export function CollapsibleContent({
 
       {/* Content */}
       {expanded && (
-        <div className="max-h-96 overflow-auto bg-cafe-950/50">
-          {children}
+        <div className="p-3 overflow-x-auto max-h-96 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150">
+          <div className="font-mono text-[11px] leading-relaxed text-cafe-300">
+            {children}
+          </div>
         </div>
       )}
     </div>
