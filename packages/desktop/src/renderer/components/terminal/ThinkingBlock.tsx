@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { ChevronDown, Brain, Activity } from 'lucide-react';
+import { ChevronDown, ChevronRight, BrainCircuit, AlertCircle } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import type { InteractionGroup } from '../../types/terminal';
 import { TerminalLogEntry } from './TerminalLogEntry';
@@ -12,6 +12,7 @@ import { TerminalLogEntry } from './TerminalLogEntry';
 interface ThinkingBlockProps {
   group: InteractionGroup;
   className?: string;
+  isRunning?: boolean;
 }
 
 function formatSummary(entries: InteractionGroup['entries']): string {
@@ -45,44 +46,55 @@ function formatSummary(entries: InteractionGroup['entries']): string {
   return `${entryCount}개 작업 수행 중...`;
 }
 
-export function ThinkingBlock({ group, className }: ThinkingBlockProps): JSX.Element {
+export function ThinkingBlock({ group, className, isRunning }: ThinkingBlockProps): JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const summary = formatSummary(group.entries);
+  const hasError = group.entries.some((e) => e.type === 'system' && e.content.toLowerCase().includes('error'));
 
   return (
-    <div className={cn('rounded border border-cafe-800 bg-cafe-900/30', className)}>
+    <div className={cn('my-3 rounded-lg', className)}>
       {/* Header - clickable to toggle */}
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
         className={cn(
-          'w-full flex items-center gap-2 px-4 py-2.5 text-left',
-          'hover:bg-cafe-800/50 transition-colors',
-          'text-xs text-cafe-400'
+          'w-full flex items-center gap-2 p-2.5 rounded-lg text-left transition-all border select-none',
+          expanded
+            ? 'bg-cafe-900 border-cafe-700'
+            : 'bg-cafe-900/40 border-cafe-800 hover:bg-cafe-900 hover:border-cafe-700'
         )}
       >
-        <ChevronDown
-          className={cn(
-            'w-4 h-4 transition-transform duration-200 flex-shrink-0 text-cafe-500',
-            expanded ? 'rotate-0' : '-rotate-90'
+        {/* Toggle Icon */}
+        <div className={cn('p-1 rounded', expanded ? 'bg-cafe-800' : 'bg-transparent')}>
+          {expanded ? (
+            <ChevronDown className="w-3.5 h-3.5 text-cafe-400" />
+          ) : (
+            <ChevronRight className="w-3.5 h-3.5 text-cafe-500" />
           )}
-        />
-        <Brain className="w-3.5 h-3.5 flex-shrink-0 text-indigo-400" />
-        <Activity className="w-3.5 h-3.5 flex-shrink-0 text-brand animate-pulse" />
-        <span className="flex-1">{summary}</span>
-        <span className="text-cafe-600 text-[10px] flex-shrink-0">
-          {group.entries.length} entries
-        </span>
+        </div>
+
+        {/* Title Area */}
+        <div className="flex items-center gap-2 flex-1">
+          <BrainCircuit
+            className={cn('w-4 h-4', isRunning ? 'text-brand animate-pulse' : 'text-cafe-500')}
+          />
+          <span className="text-xs font-medium text-cafe-300">
+            {isRunning ? 'Processing thought chain...' : summary}
+          </span>
+          <span className="text-[10px] text-cafe-600 bg-cafe-950 px-1.5 py-0.5 rounded">
+            {group.entries.length} steps
+          </span>
+        </div>
+
+        {hasError && <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />}
       </button>
 
-      {/* Content - internal logs */}
+      {/* Content - internal logs with left border line */}
       {expanded && (
-        <div className="max-h-96 overflow-auto bg-cafe-950/50 border-t border-cafe-800">
-          <div className="p-2 space-y-0.5">
-            {group.entries.map((entry) => (
-              <TerminalLogEntry key={entry.id} entry={entry} />
-            ))}
-          </div>
+        <div className="mt-1 ml-4 pl-3 border-l-2 border-cafe-800 space-y-0.5 py-2 animate-in slide-in-from-top-1 fade-in duration-200">
+          {group.entries.map((entry) => (
+            <TerminalLogEntry key={entry.id} entry={entry} />
+          ))}
         </div>
       )}
     </div>
