@@ -6,7 +6,7 @@
 import { User, Sparkles } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import type { InteractionGroup } from '../../types/terminal';
-import { TerminalLogEntry } from './TerminalLogEntry';
+import { CodeBlock, parseMarkdownCodeBlocks } from './CodeBlock';
 
 interface MessageBlockProps {
   group: InteractionGroup;
@@ -55,10 +55,10 @@ export function MessageBlock({ group, className }: MessageBlockProps): JSX.Eleme
     );
   }
 
-  // assistant 타입: 좌측 정렬, Markdown 렌더링
+  // assistant 타입: 좌측 정렬, 폴딩 없이 항상 전체 표시
   return (
     <div className={cn('flex justify-start my-3', className)}>
-      <div className="max-w-[85%] flex flex-col items-start gap-1">
+      <div className="max-w-[90%] flex flex-col items-start gap-1">
         {/* 메시지 헤더 */}
         <div className="flex items-center gap-2 text-[10px] text-cafe-600">
           <div className="flex items-center gap-1 text-purple-400">
@@ -68,19 +68,35 @@ export function MessageBlock({ group, className }: MessageBlockProps): JSX.Eleme
           <span>{timestamp}</span>
         </div>
 
-        {/* 메시지 콘텐츠 */}
-        <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg px-4 py-3 w-full">
-          {group.entries.map((entry) => (
-            <div key={entry.id} className="text-sm text-cafe-100 leading-relaxed">
-              {entry.isCollapsible && entry.summary ? (
-                <TerminalLogEntry entry={entry} />
-              ) : (
-                <div className="whitespace-pre-wrap break-words">
-                  {entry.content}
-                </div>
-              )}
-            </div>
-          ))}
+        {/* 메시지 콘텐츠 - 폴딩 없이 전체 표시 */}
+        <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg px-4 py-3 w-full space-y-3">
+          {group.entries.map((entry) => {
+            // 마크다운 코드블럭 파싱
+            const parsedContent = parseMarkdownCodeBlocks(entry.content);
+            const hasCodeBlocks = parsedContent.some((p) => p.type === 'code');
+
+            return (
+              <div key={entry.id} className="text-sm text-cafe-100 leading-relaxed">
+                {hasCodeBlocks ? (
+                  <div className="space-y-3">
+                    {parsedContent.map((part, index) =>
+                      part.type === 'code' ? (
+                        <CodeBlock key={index} code={part.content} language={part.language} />
+                      ) : (
+                        <div key={index} className="whitespace-pre-wrap break-words">
+                          {part.content}
+                        </div>
+                      )
+                    )}
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-wrap break-words">
+                    {entry.content}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

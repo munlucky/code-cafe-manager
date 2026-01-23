@@ -167,14 +167,28 @@ export function InteractiveTerminal({
     };
   }, [orderId, addOutputEvent]);
 
+  // Running 시작 시간 추적 (startedAt이 없을 때 fallback)
+  const runningStartRef = useRef<number | null>(null);
+
   useEffect(() => {
-    const startMs = startedAt ? new Date(startedAt).getTime() : NaN;
-    if (!isRunning || !startedAt || Number.isNaN(startMs)) {
+    if (!isRunning) {
       setElapsedMs(null);
+      runningStartRef.current = null;
       return;
     }
 
-    const tick = () => setElapsedMs(Date.now() - startMs);
+    // startedAt이 있으면 사용, 없으면 현재 시간부터 시작
+    const startMs = startedAt
+      ? new Date(startedAt).getTime()
+      : (runningStartRef.current ??= Date.now());
+
+    if (Number.isNaN(startMs)) {
+      runningStartRef.current = Date.now();
+    }
+
+    const actualStartMs = Number.isNaN(startMs) ? runningStartRef.current! : startMs;
+
+    const tick = () => setElapsedMs(Date.now() - actualStartMs);
     tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
