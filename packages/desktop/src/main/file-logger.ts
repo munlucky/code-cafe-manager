@@ -157,7 +157,16 @@ function summarizeToolResult(content: unknown): string {
     return '[empty]';
   }
 
-  const str = typeof content === 'string' ? content : JSON.stringify(content);
+  let str: string;
+  if (typeof content === 'string') {
+    str = content;
+  } else {
+    try {
+      str = JSON.stringify(content);
+    } catch {
+      str = String(content);
+    }
+  }
 
   // File content detection (line number pattern: ^\s*\d+->)
   const fileLinePattern = /^\s*\d+->/m;
@@ -187,29 +196,63 @@ function summarizeToolResult(content: unknown): string {
 }
 
 /**
+ * 메시지 블록 타입
+ */
+interface MessageBlock {
+  type: 'text' | 'tool_use' | 'tool_result' | 'thinking';
+  text?: string;
+  name?: string;
+  id?: string;
+  tool_use_id?: string;
+  input?: unknown;
+  content?: string | unknown;
+}
+
+/**
+ * 메시지 구조
+ */
+interface StructuredMessage {
+  type?: 'assistant' | 'user' | 'system';
+  message?: {
+    content?: MessageBlock[] | unknown;
+  } | unknown;
+  content?: unknown;
+}
+
+/**
+ * 안전한 객체 타입 가드
+ */
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+/**
  * 메시지 타입별 포맷팅
  */
 function formatParsedMessage(msg: unknown): string[] | null {
-  if (!msg || typeof msg !== 'object') {
+  if (!isObject(msg)) {
     return null;
   }
 
-  const message = msg as Record<string, unknown>;
+  const message = msg as StructuredMessage;
   const results: string[] = [];
-  const msgType = message.type as string;
+  const msgType = typeof message.type === 'string' ? message.type : '';
 
   // assistant message
-  if (msgType === 'assistant' && message.message) {
-    const inner = message.message as Record<string, unknown>;
+  if (msgType === 'assistant' && isObject(message.message)) {
+    const inner = message.message;
     const content = inner.content;
 
     if (Array.isArray(content)) {
       for (const block of content) {
-        if (block.type === 'text' && block.text) {
-          const text = String(block.text).slice(0, 100);
+        if (!isObject(block)) continue;
+
+        const blockType = block.type;
+        if (blockType === 'text' && typeof block.text === 'string') {
+          const text = block.text.slice(0, 100);
           results.push(`[ASSISTANT] ${text}${block.text.length > 100 ? '...' : ''}`);
-        } else if (block.type === 'tool_use') {
-          const toolName = block.name || 'unknown';
+        } else if (blockType === 'tool_use') {
+          const toolName = typeof block.name === 'string' ? block.name : 'unknown';
           const inputSummary = summarizeToolInput(block.input);
           results.push(`[TOOL_USE:${toolName}] ${inputSummary}`);
         }
@@ -218,15 +261,17 @@ function formatParsedMessage(msg: unknown): string[] | null {
   }
 
   // user message (tool_result)
-  if (msgType === 'user' && message.message) {
-    const inner = message.message as Record<string, unknown>;
+  if (msgType === 'user' && isObject(message.message)) {
+    const inner = message.message;
     const content = inner.content;
 
     if (Array.isArray(content)) {
       for (const block of content) {
+        if (!isObject(block)) continue;
+
         if (block.type === 'tool_result') {
-          const toolId = block.tool_use_id
-            ? String(block.tool_use_id).slice(-8)
+          const toolId = typeof block.tool_use_id === 'string'
+            ? block.tool_use_id.slice(-8)
             : 'unknown';
           const summary = summarizeToolResult(block.content);
           results.push(`[TOOL_RESULT:${toolId}] ${summary}`);
@@ -237,9 +282,21 @@ function formatParsedMessage(msg: unknown): string[] | null {
 
   // system message
   if (msgType === 'system') {
-    const content = message.message || message.content || '';
-    const text =
-      typeof content === 'string' ? content : JSON.stringify(content);
+    const content = message.message ?? message.content ?? '';
+    let text: string;
+
+    if (typeof content === 'string') {
+      text = content;
+    } else if (isObject(content)) {
+      try {
+        text = JSON.stringify(content);
+      } catch {
+        text = '[Serialization Error] ' + String(content);
+      }
+    } else {
+      text = String(content);
+    }
+
     results.push(`[SYSTEM] ${text.slice(0, 100)}${text.length > 100 ? '...' : ''}`);
   }
 

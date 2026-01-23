@@ -1,4 +1,5 @@
 import { type ReactElement, useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   CheckCircle2,
   Circle,
@@ -27,13 +28,13 @@ interface OrderTimelineViewProps {
   className?: string;
 }
 
-function formatTime(isoString: string): string {
+function formatTime(isoString: string, locale: string): string {
   try {
-    return new Date(isoString).toLocaleTimeString('ko-KR', { 
-      hour12: false, 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      second: '2-digit' 
+    return new Date(isoString).toLocaleTimeString(locale, {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
     });
   } catch (e) {
     return isoString;
@@ -44,6 +45,8 @@ export function OrderTimelineView({
   events,
   className
 }: OrderTimelineViewProps): ReactElement {
+  const { i18n } = useTranslation();
+
   // Group logs between major events
   const groupedEvents = useMemo(() => {
     const groups: Array<{
@@ -98,10 +101,10 @@ export function OrderTimelineView({
         {groupedEvents.map((group, idx) => {
           if (group.type === 'event') {
             const event = group.data as TimelineEvent;
-            return <TimelineEventItem key={group.id} event={event} index={idx} />;
+            return <TimelineEventItem key={group.id} event={event} index={idx} locale={i18n.language} />;
           } else {
             const logs = group.data as TimelineEvent[];
-            return <LogGroup key={group.id} logs={logs} />;
+            return <LogGroup key={group.id} logs={logs} locale={i18n.language} />;
           }
         })}
       </div>
@@ -109,7 +112,7 @@ export function OrderTimelineView({
   );
 }
 
-function TimelineEventItem({ event, index = 0 }: { event: TimelineEvent; index?: number }) {
+function TimelineEventItem({ event, index = 0, locale }: { event: TimelineEvent; index?: number; locale: string }) {
   const getIcon = () => {
     switch (event.type) {
       case 'stage_start': return <Play className="w-3.5 h-3.5" />;
@@ -172,7 +175,7 @@ function TimelineEventItem({ event, index = 0 }: { event: TimelineEvent; index?:
           <span className={cn('text-xs font-bold uppercase tracking-wider', getLabelStyle())}>
             {event.type.replace('_', ' ')}
           </span>
-          <span className="text-[10px] font-mono text-cafe-600">{formatTime(event.timestamp)}</span>
+          <span className="text-[10px] font-mono text-cafe-600">{formatTime(event.timestamp, locale)}</span>
         </div>
 
         <div className={cn('p-3 rounded-lg border text-sm', getContentStyle())}>
@@ -186,7 +189,7 @@ function TimelineEventItem({ event, index = 0 }: { event: TimelineEvent; index?:
   );
 }
 
-function LogGroup({ logs }: { logs: TimelineEvent[] }) {
+function LogGroup({ logs, locale }: { logs: TimelineEvent[]; locale: string }) {
   const [expanded, setExpanded] = useState(false);
   const previewCount = 3;
   const hasMore = logs.length > previewCount;
@@ -196,7 +199,7 @@ function LogGroup({ logs }: { logs: TimelineEvent[] }) {
       {/* Preview logs */}
       {(expanded ? logs : logs.slice(0, previewCount)).map(log => (
         <div key={log.id} className="text-xs font-mono text-cafe-400 flex gap-2 hover:bg-cafe-800/50 rounded px-2 py-0.5">
-          <span className="text-cafe-600 shrink-0 select-none">{formatTime(log.timestamp)}</span>
+          <span className="text-cafe-600 shrink-0 select-none">{formatTime(log.timestamp, locale)}</span>
           <span className="break-all whitespace-pre-wrap">{log.content}</span>
         </div>
       ))}

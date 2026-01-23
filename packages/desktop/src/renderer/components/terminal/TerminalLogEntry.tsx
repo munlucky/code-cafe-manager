@@ -4,6 +4,7 @@
  */
 
 import { FileText, Code } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '../../utils/cn';
 import type { ParsedLogEntry } from '../../types/terminal';
 import {
@@ -21,9 +22,9 @@ interface TerminalLogEntryProps {
   className?: string;
 }
 
-function formatTimestamp(isoString: string): string {
+function formatTimestamp(isoString: string, locale: string): string {
   const date = new Date(isoString);
-  return date.toLocaleTimeString('ko-KR', {
+  return date.toLocaleTimeString(locale, {
     hour12: false,
     hour: '2-digit',
     minute: '2-digit',
@@ -72,6 +73,7 @@ export function TerminalLogEntry({
   entry,
   className,
 }: TerminalLogEntryProps): JSX.Element {
+  const { i18n } = useTranslation();
   const badgeType = getBadgeType(entry.type);
   const contentType = detectContentType(entry.content);
 
@@ -88,7 +90,7 @@ export function TerminalLogEntry({
     >
       {/* Timestamp */}
       <span className="flex-shrink-0 text-[10px] text-cafe-600 pt-0.5 select-none min-w-[60px]">
-        {formatTimestamp(entry.timestamp)}
+        {formatTimestamp(entry.timestamp, i18n.language)}
       </span>
 
       {/* Badge */}

@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import Ansi from 'ansi-to-html';
 
 interface OrderOutputEvent {
@@ -31,6 +32,7 @@ function stripAnsiCodes(text: string): string {
 }
 
 export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.Element {
+  const { i18n } = useTranslation();
   const [output, setOutput] = useState<OrderOutputEvent[]>([]);
   const [autoScroll, setAutoScroll] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -140,7 +142,7 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString('ko-KR', {
+    return date.toLocaleTimeString(i18n.language, {
       hour12: false,
       hour: '2-digit',
       minute: '2-digit',
