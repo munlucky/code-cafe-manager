@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Play,
   Plus,
@@ -9,19 +9,17 @@ import {
   CheckCircle2,
   Loader2,
   Trash2,
-  MessageSquare,
   ArrowRight,
   Split,
   Box,
   Coffee,
-  Sparkles,
   XCircle,
-  Clock,
   List
 } from 'lucide-react';
 import type { Cafe, DesignOrder, Recipe, OrderStatus } from '../../types/design';
 import { OrderStageProgressBar, type StageInfo } from '../order/OrderStageProgress';
 import { OrderTimelineView, type TimelineEvent } from '../orders/OrderTimelineView';
+import { InteractiveTerminal } from '../order/InteractiveTerminal';
 
 interface NewCafeDashboardProps {
   cafe: Cafe;
@@ -67,82 +65,13 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewMode, setViewMode] = useState<'logs' | 'timeline'>('logs');
-  const [elapsedByOrderId, setElapsedByOrderId] = useState<Record<string, number>>({});
 
   // Create Order Form State
   const [selectedWorkflow, setSelectedWorkflow] = useState(workflows[0]?.id || '');
   const [description, setDescription] = useState('');
   const [useWorktree, setUseWorktree] = useState(true);
 
-  // Terminal State
-  const [inputBuffer, setInputBuffer] = useState('');
-  const terminalEndRef = useRef<HTMLDivElement>(null);
-
   const activeOrder = orders.find(o => o.id === activeOrderId);
-
-  useEffect(() => {
-    if (!activeOrder) {
-      return;
-    }
-
-    const isActive = activeOrder.status === 'RUNNING' || activeOrder.status === 'WAITING_INPUT';
-    if (!isActive) {
-      return;
-    }
-
-    const startValue = activeOrder.startedAt || activeOrder.createdAt;
-    const startMs = new Date(startValue as any).getTime();
-    if (Number.isNaN(startMs)) {
-      return;
-    }
-
-    const tick = () => {
-      const elapsed = Date.now() - startMs;
-      setElapsedByOrderId((prev) => ({
-        ...prev,
-        [activeOrder.id]: elapsed,
-      }));
-    };
-    tick();
-    const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
-  }, [activeOrder?.id, activeOrder?.status, activeOrder?.startedAt, activeOrder?.createdAt]);
-
-  useEffect(() => {
-    if (orders.length === 0) {
-      setElapsedByOrderId({});
-      return;
-    }
-
-    const orderIds = new Set(orders.map((o) => o.id));
-    setElapsedByOrderId((prev) => {
-      const next: Record<string, number> = {};
-      for (const [orderId, elapsed] of Object.entries(prev)) {
-        if (orderIds.has(orderId)) {
-          next[orderId] = elapsed;
-        }
-      }
-      return next;
-    });
-  }, [orders]);
-
-  const formatElapsed = (ms: number): string => {
-    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    if (hours > 0) {
-      return `${hours}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`;
-    }
-    return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
-  };
-
-  // Auto-scroll terminal
-  useEffect(() => {
-    if (activeOrder && terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [activeOrder?.logs.length, activeOrderId]);
 
   // Set first order as active when none selected
   useEffect(() => {
@@ -158,11 +87,9 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
     setDescription('');
   };
 
-  const handleTerminalSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeOrder || !inputBuffer.trim()) return;
-    onSendInput(activeOrder.id, inputBuffer);
-    setInputBuffer('');
+  const handleSendInput = async (message: string) => {
+    if (!activeOrder) return;
+    onSendInput(activeOrder.id, message);
   };
 
   return (
@@ -254,11 +181,6 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
                   <div className="flex items-center">
                     <h2 className="font-bold text-cafe-100 mr-3 text-lg">Order #{activeOrder.id.substring(0,8)}</h2>
                     <StatusBadge status={activeOrder.status} size="lg" />
-                    {elapsedByOrderId[activeOrder.id] !== undefined && (
-                      <span className="ml-2 text-[11px] font-mono text-cafe-400 bg-cafe-950/60 border border-cafe-800 px-2 py-1 rounded">
-                        {formatElapsed(elapsedByOrderId[activeOrder.id])}
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>
@@ -315,83 +237,21 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
 
             {/* Content View - Logs or Timeline */}
             {viewMode === 'logs' ? (
-              <div className="flex-1 bg-terminal-bg p-8 overflow-y-auto terminal-scroll font-mono text-sm relative shadow-inner">
-                 {/* Welcome Banner in Terminal */}
-                 <div className="mb-8 pb-6 border-b border-cafe-800/30">
-                    <div className="text-cafe-500 mb-2 font-medium flex items-center">
-                      <Sparkles className="w-4 h-4 mr-2 text-brand" />
-                      Started execution via <span className="text-brand ml-1.5">BaristaEngineV2</span>
-                    </div>
-                    <div className="text-cafe-600 text-xs flex gap-4">
-                      <span>Workflow: <span className="text-cafe-400">{activeOrder.workflowName}</span></span>
-                      <span>Provider: <span className="text-cafe-400">Claude Code</span></span>
-                      <span>Isolation: <span className="text-cafe-400">{activeOrder.worktreeInfo ? 'Enabled' : 'Disabled'}</span></span>
-                    </div>
-                 </div>
-
-                 {/* Logs */}
-                 <div className="space-y-4 max-w-5xl">
-                   {activeOrder.logs.map((log) => (
-                     <div key={log.id} className="flex group animate-in fade-in duration-300 items-start">
-                       <span className="text-cafe-700 text-[11px] w-20 shrink-0 select-none pt-1 font-mono tracking-tighter opacity-70">{log.timestamp}</span>
-                       <div className={`flex-1 break-all whitespace-pre-wrap leading-relaxed ${
-                         log.type === 'error' ? 'text-red-400 bg-red-950/10 p-2 rounded -mt-2' :
-                         log.type === 'success' ? 'text-emerald-400 font-medium' :
-                         log.type === 'system' ? 'text-blue-400 opacity-80' :
-                         log.type === 'ai' ? 'text-cafe-200' :
-                         'text-cafe-400'
-                       }`}>
-                         {log.type === 'system' && <span className="mr-2 opacity-50">➜</span>}
-                         {log.type === 'ai' && <span className="mr-2 text-brand">🤖</span>}
-                         <span dangerouslySetInnerHTML={{ __html: log.content }} />
-                       </div>
-                     </div>
-                   ))}
-                   {activeOrder.status === 'RUNNING' && (
-                     <div className="flex items-center text-cafe-500 mt-4 animate-pulse ml-20">
-                       <span className="w-1.5 h-3 bg-brand block mr-2.5"></span>
-                       Thinking...
-                     </div>
-                   )}
-                   <div ref={terminalEndRef} />
-                 </div>
+              <div className="flex-1 overflow-hidden">
+                <InteractiveTerminal
+                  orderId={activeOrder.id}
+                  onSendInput={activeOrder.status === 'RUNNING' || activeOrder.status === 'WAITING_INPUT' ? handleSendInput : undefined}
+                  isRunning={activeOrder.status === 'RUNNING'}
+                  isAwaitingInput={activeOrder.status === 'WAITING_INPUT'}
+                  worktreePath={activeOrder.worktreeInfo?.path}
+                  startedAt={activeOrder.startedAt}
+                  className="h-full"
+                />
               </div>
             ) : (
               <div className="flex-1 overflow-hidden">
                 <OrderTimelineView events={timelineEvents[activeOrder.id] || []} />
               </div>
-            )}
-
-            {/* Input Area (Conditional) */}
-            {activeOrder.status === 'WAITING_INPUT' ? (
-              <div className="border-t border-brand/30 bg-cafe-900/90 backdrop-blur-sm p-6 animate-in slide-in-from-bottom-2 absolute bottom-0 w-full z-20 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-                <div className="max-w-4xl mx-auto">
-                  <div className="flex items-center mb-3 text-brand-light text-sm font-bold tracking-wide">
-                    <div className="w-2 h-2 rounded-full bg-brand animate-ping mr-2.5"></div>
-                    <MessageSquare className="w-4 h-4 mr-2" />
-                    INPUT REQUIRED
-                  </div>
-                  <form onSubmit={handleTerminalSubmit} className="relative group">
-                    <input
-                      autoFocus
-                      type="text"
-                      value={inputBuffer}
-                      onChange={(e) => setInputBuffer(e.target.value)}
-                      placeholder="Type your response to the barista..."
-                      className="w-full bg-cafe-950 border border-cafe-700 text-cafe-100 rounded-xl pl-5 pr-14 py-4 focus:ring-2 focus:ring-brand focus:border-transparent outline-none font-mono shadow-inner transition-all"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!inputBuffer.trim()}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 bg-brand hover:bg-brand-hover text-white rounded-lg disabled:opacity-50 disabled:bg-cafe-800 transition-colors"
-                    >
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </form>
-                </div>
-              </div>
-            ) : (
-              <div className="h-2 bg-cafe-900 border-t border-cafe-800"></div>
             )}
           </>
         )}
