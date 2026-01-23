@@ -8,3 +8,5 @@ export { CollapsibleContent } from './CollapsibleContent';
 export { FilePreview } from './FilePreview';
 export { JSONViewer } from './JSONViewer';
 export { TerminalLogEntry } from './TerminalLogEntry';
+export { ThinkingBlock } from './ThinkingBlock';
+export { MessageBlock } from './MessageBlock';

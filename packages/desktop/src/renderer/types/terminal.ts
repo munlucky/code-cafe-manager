@@ -4,6 +4,30 @@
  */
 
 /**
+ * Log 타입 별칭
+ * ParsedLogEntry와 동일한 타입
+ */
+export type Log = ParsedLogEntry;
+
+/**
+ * Interaction Group 타입
+ * 대화형 블록 구조를 위한 그룹 타입
+ */
+export interface InteractionGroup {
+  /** 고유 식별자 */
+  id: string;
+  /** 그룹 유형 */
+  type: 'user' | 'thinking' | 'assistant';
+  /** 그룹에 포함된 로그 엔트리들 */
+  entries: ParsedLogEntry[];
+  /** 타임스탬프 범위 */
+  timestampRange?: {
+    start: string;
+    end: string;
+  };
+}
+
+/**
  * 파싱된 로그 엔트리
  * raw JSON 또는 텍스트 로그를 구조화된 형태로 변환한 결과
  */

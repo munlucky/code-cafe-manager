@@ -8,6 +8,7 @@ import type {
   ContentType,
   FileSummary,
   JSONSummary,
+  InteractionGroup,
 } from '../types/terminal';
 
 /** 콘텐츠가 collapsible로 간주되는 최소 길이 */
@@ -344,6 +345,114 @@ export function parseTerminalOutput(raw: string): ParsedLogEntry {
   }
 
   return entry;
+}
+
+/**
+ * ParsedLogEntry 타입에서 InteractionGroup 타입으로 변환
+ */
+function getGroupType(entryType: ParsedLogEntry['type']): InteractionGroup['type'] {
+  switch (entryType) {
+    case 'user':
+      return 'user';
+    case 'assistant':
+      return 'assistant';
+    case 'thinking':
+    case 'tool_use':
+    case 'tool_result':
+    case 'system':
+    case 'raw':
+    default:
+      return 'thinking';
+  }
+}
+
+/**
+ * Log[] 배열을 InteractionGroup[]으로 변환하는 함수
+ * 혼합 방식 그룹핑: 연속성, 페어링, 세션 기반
+ */
+export function groupLogs(entries: ParsedLogEntry[]): InteractionGroup[] {
+  if (entries.length === 0) {
+    return [];
+  }
+
+  const groups: InteractionGroup[] = [];
+  let currentGroup: InteractionGroup | null = null;
+  const toolResultMap = new Map<string, ParsedLogEntry>(); // toolUseId -> tool_result
+
+  for (const entry of entries) {
+    const groupType = getGroupType(entry.type);
+
+    // tool_use와 tool_result 페어링 처리
+    if (entry.type === 'tool_use' && entry.toolUseId) {
+      // tool_use는 thinking 그룹에 추가
+      if (!currentGroup || currentGroup.type !== 'thinking') {
+        if (currentGroup) {
+          groups.push(currentGroup);
+        }
+        currentGroup = {
+          id: generateId(),
+          type: 'thinking',
+          entries: [],
+          timestampRange: { start: entry.timestamp, end: entry.timestamp },
+        };
+      }
+      currentGroup.entries.push(entry);
+      currentGroup.timestampRange!.end = entry.timestamp;
+      continue;
+    }
+
+    if (entry.type === 'tool_result' && entry.toolUseId) {
+      // 연관된 tool_use를 찾아 같은 그룹에 추가
+      toolResultMap.set(entry.toolUseId, entry);
+
+      // thinking 그룹에 추가
+      if (!currentGroup || currentGroup.type !== 'thinking') {
+        if (currentGroup) {
+          groups.push(currentGroup);
+        }
+        currentGroup = {
+          id: generateId(),
+          type: 'thinking',
+          entries: [],
+          timestampRange: { start: entry.timestamp, end: entry.timestamp },
+        };
+      }
+      currentGroup.entries.push(entry);
+      currentGroup.timestampRange!.end = entry.timestamp;
+      continue;
+    }
+
+    // user, assistant, thinking 타입 처리
+    if (!currentGroup) {
+      // 첫 그룹 생성
+      currentGroup = {
+        id: generateId(),
+        type: groupType,
+        entries: [entry],
+        timestampRange: { start: entry.timestamp, end: entry.timestamp },
+      };
+    } else if (currentGroup.type === groupType) {
+      // 같은 타입이면 현재 그룹에 추가 (연속성)
+      currentGroup.entries.push(entry);
+      currentGroup.timestampRange!.end = entry.timestamp;
+    } else {
+      // 다른 타입이면 그룹 교체
+      groups.push(currentGroup);
+      currentGroup = {
+        id: generateId(),
+        type: groupType,
+        entries: [entry],
+        timestampRange: { start: entry.timestamp, end: entry.timestamp },
+      };
+    }
+  }
+
+  // 마지막 그룹 추가
+  if (currentGroup) {
+    groups.push(currentGroup);
+  }
+
+  return groups;
 }
 
 /**

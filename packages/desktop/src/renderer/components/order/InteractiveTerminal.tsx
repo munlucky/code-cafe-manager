@@ -5,12 +5,12 @@
  * Design: cafe 테마 기반의 터미널 UI
  */
 
-import { useEffect, useState, useRef, useCallback, type KeyboardEvent } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo, type KeyboardEvent } from 'react';
 import { Terminal as TerminalIcon, ArrowRight, Sparkles, MessageSquare, ArrowUp, ArrowDown, ChevronsDown } from 'lucide-react';
 import { cn } from '../../utils/cn';
-import type { ParsedLogEntry } from '../../types/terminal';
-import { parseTerminalOutput, generateId } from '../../utils/terminal-log-parser';
-import { TerminalLogEntry } from '../terminal';
+import type { ParsedLogEntry, InteractionGroup } from '../../types/terminal';
+import { parseTerminalOutput, generateId, groupLogs } from '../../utils/terminal-log-parser';
+import { ThinkingBlock, MessageBlock } from '../terminal';
 import { useSmartScroll } from '../../hooks/useSmartScroll';
 
 interface OrderOutputEvent {
@@ -56,6 +56,9 @@ export function InteractiveTerminal({
   const inputRef = useRef<HTMLInputElement>(null);
   // 중복 검사를 위한 Set (타임스탬프+내용 기반)
   const seenKeysRef = useRef<Set<string>>(new Set());
+
+  // Log 그룹핑 (InteractionGroup[]으로 변환)
+  const interactionGroups = useMemo(() => groupLogs(entries), [entries]);
 
   // Smart scroll hook
   const { containerRef, endRef, isAtBottom, scrollToBottom } = useSmartScroll({
@@ -259,12 +262,15 @@ export function InteractiveTerminal({
           <div className="text-cafe-600">Waiting for output...</div>
         )}
 
-        <div className="space-y-0.5">
-          {entries.map((entry) => (
-            <TerminalLogEntry key={entry.id} entry={entry} />
-          ))}
+        <div className="space-y-1">
+          {interactionGroups.map((group) => {
+            if (group.type === 'thinking') {
+              return <ThinkingBlock key={group.id} group={group} />;
+            }
+            return <MessageBlock key={group.id} group={group} />;
+          })}
           {/* Thinking Indicator */}
-          {isRunning && entries.length > 0 && (
+          {isRunning && interactionGroups.length > 0 && (
             <div className="flex items-center text-cafe-600 mt-2 pl-16 animate-pulse">
               <span className="w-1.5 h-3 bg-brand block mr-2"></span>
               <span className="text-xs">Processing...</span>
@@ -333,7 +339,7 @@ export function InteractiveTerminal({
 
       {/* Footer */}
       <div className="px-4 py-1.5 border-t border-cafe-800 bg-cafe-900/50 text-[10px] text-cafe-600 flex justify-between">
-        <span>{entries.length} entries</span>
+        <span>{interactionGroups.length} groups ({entries.length} entries)</span>
         {inputHistory.length > 0 && (
           <span>{inputHistory.length} in history</span>
         )}
