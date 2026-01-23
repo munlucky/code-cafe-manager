@@ -28,6 +28,8 @@ interface InteractiveTerminalProps {
   isAwaitingInput?: boolean;
   worktreePath?: string;
   startedAt?: string | Date | null;
+  /** 초기 프롬프트 (order 생성 시 사용자가 입력한 요청) */
+  initialPrompt?: string;
 }
 
 /**
@@ -45,6 +47,7 @@ export function InteractiveTerminal({
   isAwaitingInput = false,
   worktreePath,
   startedAt,
+  initialPrompt,
 }: InteractiveTerminalProps): JSX.Element {
   const [entries, setEntries] = useState<ParsedLogEntry[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -56,6 +59,21 @@ export function InteractiveTerminal({
   const inputRef = useRef<HTMLInputElement>(null);
   // 중복 검사를 위한 Set (타임스탬프+내용 기반)
   const seenKeysRef = useRef<Set<string>>(new Set());
+  // 펼침 상태 관리 (그룹 ID -> 펼침 여부)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // 그룹 펼침/접기 토글 핸들러
+  const toggleGroup = useCallback((groupId: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  }, []);
 
   // Log 그룹핑 (InteractionGroup[]으로 변환)
   const interactionGroups = useMemo(() => groupLogs(entries), [entries]);
@@ -94,10 +112,30 @@ export function InteractiveTerminal({
     setEntries((prev) => [...prev, parsedEntry]);
   }, []);
 
+  // 초기 프롬프트를 첫 번째 user entry로 추가
+  useEffect(() => {
+    if (initialPrompt && initialPrompt.trim()) {
+      const promptEntry: ParsedLogEntry = {
+        id: `initial-prompt-${orderId}`,
+        timestamp: new Date().toISOString(),
+        type: 'user',
+        content: initialPrompt.trim(),
+        isCollapsible: false,
+      };
+      setEntries((prev) => {
+        // 이미 초기 프롬프트가 있으면 추가하지 않음
+        if (prev.some((e) => e.id === promptEntry.id)) {
+          return prev;
+        }
+        return [promptEntry, ...prev];
+      });
+    }
+  }, [initialPrompt, orderId]);
+
   useEffect(() => {
     let isActive = true;
     setLoading(true);
-    setEntries([]);
+    setEntries((prev) => prev.filter((e) => e.id.startsWith('initial-prompt-'))); // 초기 프롬프트만 유지
     seenKeysRef.current.clear();
 
     // 출력 이벤트 리스너
@@ -263,9 +301,18 @@ export function InteractiveTerminal({
         )}
 
         <div className="space-y-1">
-          {interactionGroups.map((group) => {
+          {interactionGroups.map((group, index) => {
+            const isLastGroup = index === interactionGroups.length - 1;
             if (group.type === 'thinking') {
-              return <ThinkingBlock key={group.id} group={group} />;
+              return (
+                <ThinkingBlock
+                  key={group.id}
+                  group={group}
+                  isRunning={isRunning && isLastGroup}
+                  expanded={expandedGroups.has(group.id)}
+                  onToggle={() => toggleGroup(group.id)}
+                />
+              );
             }
             return <MessageBlock key={group.id} group={group} />;
           })}

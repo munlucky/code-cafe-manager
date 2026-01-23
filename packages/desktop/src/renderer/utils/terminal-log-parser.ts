@@ -118,6 +118,50 @@ export function summarizeJSONContent(content: string): JSONSummary {
 }
 
 /**
+ * raw 텍스트에서 더 구체적인 타입 추론
+ * 패턴 기반으로 assistant, thinking 등을 감지
+ */
+function inferTypeFromContent(content: string): ParsedLogEntry['type'] {
+  const trimmed = content.trim();
+
+  // Stage/Phase 시작 패턴 - thinking으로 분류
+  if (/^(Stage|Phase|Step)\s*\d+/i.test(trimmed)) {
+    return 'thinking';
+  }
+
+  // 마크다운 헤더 패턴 - assistant 응답
+  if (/^#{1,3}\s+/.test(trimmed)) {
+    return 'assistant';
+  }
+
+  // 코드 블록 시작 - assistant 응답
+  if (/^```/.test(trimmed)) {
+    return 'assistant';
+  }
+
+  // 도구 관련 패턴
+  if (/^\[?(Tool|TOOL)\]?[:\s]/i.test(trimmed)) {
+    return 'tool_use';
+  }
+  if (/^(Result|Output)[:\s]/i.test(trimmed)) {
+    return 'tool_result';
+  }
+
+  // 일반 텍스트 응답 패턴 (마침표로 끝나는 문장들) - assistant
+  if (/^[A-Z].*[.!?]$/.test(trimmed) && trimmed.length > 20) {
+    return 'assistant';
+  }
+
+  // 에러 패턴
+  if (/^(error|failed|exception)/i.test(trimmed)) {
+    return 'system';
+  }
+
+  // 기본값은 thinking (system보다 나음)
+  return 'thinking';
+}
+
+/**
  * ParsedLogEntry에 대한 요약 문자열 생성
  */
 export function generateSummary(entry: ParsedLogEntry): string {
@@ -318,16 +362,19 @@ export function parseTerminalOutput(raw: string): ParsedLogEntry {
     }
   }
 
-  // raw 텍스트 처리
+  // raw 텍스트 처리 - 패턴 기반 타입 추론
   const contentType = detectContentType(trimmed);
   const isCollapsible = trimmed.length > COLLAPSIBLE_THRESHOLD ||
     contentType === 'file' ||
     contentType === 'json';
 
+  // raw 대신 더 구체적인 타입 추론
+  const inferredType = inferTypeFromContent(trimmed);
+
   const entry: ParsedLogEntry = {
     id: generateId(),
     timestamp,
-    type: 'raw',
+    type: inferredType,
     content: trimmed,
     isCollapsible,
   };
@@ -367,8 +414,20 @@ function getGroupType(entryType: ParsedLogEntry['type']): InteractionGroup['type
 }
 
 /**
+ * 그룹에 새 entry 추가 시 그룹 ID를 안정적으로 유지하기 위해
+ * 첫 번째 entry의 ID를 그룹 ID로 사용
+ */
+function createGroupId(firstEntry: ParsedLogEntry): string {
+  return `group-${firstEntry.id}`;
+}
+
+/**
  * Log[] 배열을 InteractionGroup[]으로 변환하는 함수
  * 혼합 방식 그룹핑: 연속성, 페어링, 세션 기반
+ *
+ * 개선사항:
+ * - 그룹 ID를 첫 entry ID 기반으로 생성하여 펼침 상태 유지
+ * - stage 시작 감지 시 새 그룹 시작
  */
 export function groupLogs(entries: ParsedLogEntry[]): InteractionGroup[] {
   if (entries.length === 0) {
@@ -377,10 +436,37 @@ export function groupLogs(entries: ParsedLogEntry[]): InteractionGroup[] {
 
   const groups: InteractionGroup[] = [];
   let currentGroup: InteractionGroup | null = null;
-  const toolResultMap = new Map<string, ParsedLogEntry>(); // toolUseId -> tool_result
+
+  // stage 시작 패턴 감지 (예: "Stage 1:", "[Stage]", "Phase 1:" 등)
+  const isStageStart = (content: string): boolean => {
+    const patterns = [
+      /^(Stage|Phase|Step)\s*\d+/i,
+      /^\[?(Stage|Phase|Step)\]?:/i,
+      /^#{1,3}\s*(Stage|Phase|Step)/i,
+    ];
+    return patterns.some((p) => p.test(content.trim()));
+  };
 
   for (const entry of entries) {
     const groupType = getGroupType(entry.type);
+
+    // stage 시작 감지 시 새 그룹 시작 (thinking 타입 내에서도 분리)
+    const shouldStartNewGroup =
+      currentGroup &&
+      currentGroup.type === 'thinking' &&
+      groupType === 'thinking' &&
+      isStageStart(entry.content);
+
+    if (shouldStartNewGroup && currentGroup) {
+      groups.push(currentGroup);
+      currentGroup = {
+        id: createGroupId(entry),
+        type: 'thinking',
+        entries: [entry],
+        timestampRange: { start: entry.timestamp, end: entry.timestamp },
+      };
+      continue;
+    }
 
     // tool_use와 tool_result 페어링 처리
     if (entry.type === 'tool_use' && entry.toolUseId) {
@@ -390,7 +476,7 @@ export function groupLogs(entries: ParsedLogEntry[]): InteractionGroup[] {
           groups.push(currentGroup);
         }
         currentGroup = {
-          id: generateId(),
+          id: createGroupId(entry),
           type: 'thinking',
           entries: [],
           timestampRange: { start: entry.timestamp, end: entry.timestamp },
@@ -402,16 +488,13 @@ export function groupLogs(entries: ParsedLogEntry[]): InteractionGroup[] {
     }
 
     if (entry.type === 'tool_result' && entry.toolUseId) {
-      // 연관된 tool_use를 찾아 같은 그룹에 추가
-      toolResultMap.set(entry.toolUseId, entry);
-
       // thinking 그룹에 추가
       if (!currentGroup || currentGroup.type !== 'thinking') {
         if (currentGroup) {
           groups.push(currentGroup);
         }
         currentGroup = {
-          id: generateId(),
+          id: createGroupId(entry),
           type: 'thinking',
           entries: [],
           timestampRange: { start: entry.timestamp, end: entry.timestamp },
@@ -426,7 +509,7 @@ export function groupLogs(entries: ParsedLogEntry[]): InteractionGroup[] {
     if (!currentGroup) {
       // 첫 그룹 생성
       currentGroup = {
-        id: generateId(),
+        id: createGroupId(entry),
         type: groupType,
         entries: [entry],
         timestampRange: { start: entry.timestamp, end: entry.timestamp },
@@ -439,7 +522,7 @@ export function groupLogs(entries: ParsedLogEntry[]): InteractionGroup[] {
       // 다른 타입이면 그룹 교체
       groups.push(currentGroup);
       currentGroup = {
-        id: generateId(),
+        id: createGroupId(entry),
         type: groupType,
         entries: [entry],
         timestampRange: { start: entry.timestamp, end: entry.timestamp },
@@ -474,6 +557,7 @@ export function getBadgeType(entryType: ParsedLogEntry['type']): import('../type
       return 'thinking';
     case 'raw':
     default:
-      return 'system';
+      // raw는 이제 거의 사용되지 않지만, 만약 있다면 thinking으로 표시
+      return 'thinking';
   }
 }
