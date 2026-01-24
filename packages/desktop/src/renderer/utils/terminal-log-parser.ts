@@ -10,7 +10,7 @@ import type {
   JSONSummary,
   InteractionGroup,
 } from '../types/terminal';
-import { decodeHtmlEntities } from '../../../common/output-markers';
+import { decodeHtmlEntities } from '../../common/output-markers';
 
 /** 콘텐츠가 collapsible로 간주되는 최소 길이 */
 const COLLAPSIBLE_THRESHOLD = 500;
