@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Play,
   Plus,
@@ -14,7 +14,10 @@ import {
   Box,
   Coffee,
   XCircle,
-  List
+  List,
+  GitMerge,
+  MessageSquarePlus,
+  RefreshCw
 } from 'lucide-react';
 import type { Cafe, DesignOrder, Recipe, OrderStatus } from '../../types/design';
 import { OrderStageProgressBar, type StageInfo } from '../order/OrderStageProgress';
@@ -73,6 +76,21 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
 
   const activeOrder = orders.find(o => o.id === activeOrderId);
 
+  // Worktree Management State
+  const [isMerging, setIsMerging] = useState(false);
+  const [mergeResult, setMergeResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Followup State
+  const [isFollowupMode, setIsFollowupMode] = useState(false);
+  const [isFollowupExecuting, setIsFollowupExecuting] = useState(false);
+
+  const isCompleted = activeOrder?.status === 'COMPLETED';
+  const isRunning = activeOrder?.status === 'RUNNING';
+  const isWaitingInput = activeOrder?.status === 'WAITING_INPUT';
+
+  // 입력 가능 조건: 실행 중, 입력 대기, followup 모드, 또는 완료 상태 (후속 명령 가능)
+  const canSendInput = isRunning || isWaitingInput || isFollowupMode || isCompleted;
+
   // Set first order as active when none selected
   useEffect(() => {
     if (!activeOrderId && orders.length > 0) {
@@ -87,10 +105,140 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
     setDescription('');
   };
 
-  const handleSendInput = async (message: string) => {
+  const handleSendInput = useCallback(async (message: string) => {
     if (!activeOrder) return;
-    onSendInput(activeOrder.id, message);
-  };
+
+    // Followup 모드 또는 완료 상태에서는 executeFollowup 사용
+    if (isFollowupMode || isCompleted) {
+      setIsFollowupExecuting(true);
+      try {
+        // 완료 상태에서 처음 입력 시 백엔드 상태 동기화를 위해 enterFollowup 먼저 호출
+        if (isCompleted && !isFollowupMode) {
+          const enterResponse = await window.codecafe.order.enterFollowup(activeOrder.id);
+          if (!enterResponse.success) {
+            throw new Error(enterResponse.error?.message || 'Failed to enter followup mode');
+          }
+          setIsFollowupMode(true);
+        }
+
+        const response = await window.codecafe.order.executeFollowup(activeOrder.id, message);
+        if (!response.success) {
+          throw new Error(response.error?.message || 'Failed to execute followup');
+        }
+      } finally {
+        setIsFollowupExecuting(false);
+      }
+    } else {
+      // Running 상태에서는 sendInput 사용
+      onSendInput(activeOrder.id, message);
+    }
+  }, [activeOrder, isFollowupMode, isCompleted, onSendInput]);
+
+  // Followup 모드 진입
+  const handleEnterFollowup = useCallback(async () => {
+    if (!activeOrder) return;
+    try {
+      const response = await window.codecafe.order.enterFollowup(activeOrder.id);
+      if (response.success) {
+        setIsFollowupMode(true);
+      } else {
+        console.error('Failed to enter followup mode:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to enter followup mode:', error);
+    }
+  }, [activeOrder]);
+
+  // Followup 모드 종료
+  const handleFinishFollowup = useCallback(async () => {
+    if (!activeOrder) return;
+    try {
+      const response = await window.codecafe.order.finishFollowup(activeOrder.id);
+      if (response.success) {
+        setIsFollowupMode(false);
+      } else {
+        console.error('Failed to finish followup:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to finish followup:', error);
+    }
+  }, [activeOrder]);
+
+  // Worktree 병합 처리
+  const handleMergeWorktree = useCallback(async (deleteAfterMerge: boolean = false) => {
+    if (!activeOrder?.worktreeInfo?.path || !activeOrder?.worktreeInfo?.repoPath) {
+      console.error('No worktree info available');
+      return;
+    }
+
+    setIsMerging(true);
+    setMergeResult(null);
+
+    try {
+      const response = await window.codecafe.worktree.mergeToTarget({
+        worktreePath: activeOrder.worktreeInfo.path,
+        repoPath: activeOrder.worktreeInfo.repoPath,
+        targetBranch: activeOrder.worktreeInfo.baseBranch || 'main',
+        deleteAfterMerge,
+        squash: false,
+      });
+
+      if (response.success && response.data) {
+        setMergeResult({
+          success: true,
+          message: `Merged to ${response.data.targetBranch}${deleteAfterMerge ? ' (worktree removed)' : ''}`,
+        });
+      } else {
+        setMergeResult({
+          success: false,
+          message: response.error?.message || 'Merge failed',
+        });
+      }
+    } catch (error) {
+      setMergeResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Merge failed',
+      });
+    } finally {
+      setIsMerging(false);
+    }
+  }, [activeOrder]);
+
+  // Worktree만 삭제 (브랜치 유지)
+  const handleRemoveWorktreeOnly = useCallback(async () => {
+    if (!activeOrder?.worktreeInfo?.path || !activeOrder?.worktreeInfo?.repoPath) {
+      console.error('No worktree info available');
+      return;
+    }
+
+    setIsMerging(true);
+    setMergeResult(null);
+    try {
+      const response = await window.codecafe.worktree.removeOnly(
+        activeOrder.worktreeInfo.path,
+        activeOrder.worktreeInfo.repoPath
+      );
+
+      if (response.success && response.data) {
+        setMergeResult({
+          success: true,
+          message: `Worktree removed, branch '${response.data.branch}' preserved`,
+        });
+      } else {
+        setMergeResult({
+          success: false,
+          message: response.error?.message || 'Failed to remove worktree',
+        });
+      }
+    } catch (error) {
+      setMergeResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to remove worktree',
+      });
+    } finally {
+      setIsMerging(false);
+    }
+  }, [activeOrder]);
 
   return (
     <div className="flex h-screen bg-cafe-950 overflow-hidden">
@@ -215,6 +363,27 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
                   </button>
                 </div>
                 <div className="h-6 w-px bg-cafe-800 mx-2"></div>
+                {/* Followup Buttons - 완료 상태에서 추가 명령 가능 */}
+                {isCompleted && !isFollowupMode && (
+                  <button
+                    onClick={handleEnterFollowup}
+                    className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors flex items-center gap-1.5"
+                    title="Continue with followup commands"
+                  >
+                    <MessageSquarePlus className="w-3.5 h-3.5" />
+                    Continue
+                  </button>
+                )}
+                {isFollowupMode && (
+                  <button
+                    onClick={handleFinishFollowup}
+                    className="px-3 py-1.5 text-xs font-medium bg-cafe-700 hover:bg-cafe-600 text-white rounded-lg transition-colors flex items-center gap-1.5"
+                    title="Finish followup mode"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    Finish
+                  </button>
+                )}
                 {/* Cancel Button - only for running orders */}
                 {(activeOrder.status === 'RUNNING' || activeOrder.status === 'WAITING_INPUT') && (
                   <button
@@ -237,15 +406,80 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
 
             {/* Content View - Logs or Timeline */}
             {viewMode === 'logs' ? (
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 overflow-hidden flex flex-col">
+                {/* Worktree Management Panel - 완료 상태에서 worktree가 있을 때 */}
+                {isCompleted && activeOrder.worktreeInfo && (
+                  <div className="mx-4 mt-4 p-4 bg-cafe-900 border border-green-500/30 rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <GitMerge className="w-4 h-4 text-green-400" />
+                        <h3 className="text-sm font-medium text-green-400">Worktree Management</h3>
+                      </div>
+                      <button
+                        onClick={() => setViewMode('timeline')}
+                        className="text-xs text-cafe-500 hover:text-cafe-300"
+                      >
+                        Close
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="flex-1 px-3 py-2 bg-cafe-950 rounded border border-cafe-800">
+                        <div className="flex items-center gap-2 text-xs">
+                          <GitCommit className="w-3 h-3 text-brand" />
+                          <span className="font-mono text-cafe-300">{activeOrder.worktreeInfo.branch}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {mergeResult && (
+                      <div className={`text-xs p-2 rounded mb-3 ${
+                        mergeResult.success ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                      }`}>
+                        {mergeResult.message}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleMergeWorktree(false)}
+                        disabled={isMerging}
+                        className="flex-1 px-3 py-2 bg-brand hover:bg-brand-hover text-white text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        <GitMerge className={`w-3 h-3 ${isMerging ? 'animate-spin' : ''}`} />
+                        {isMerging ? 'Merging...' : 'Merge to Main'}
+                      </button>
+                      <button
+                        onClick={() => handleMergeWorktree(true)}
+                        disabled={isMerging}
+                        className="px-3 py-2 bg-cafe-800 hover:bg-cafe-700 text-yellow-400 text-xs font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <GitMerge className="w-3 h-3" />
+                        Merge & Delete
+                      </button>
+                      <button
+                        onClick={handleRemoveWorktreeOnly}
+                        disabled={isMerging}
+                        className="px-3 py-2 bg-cafe-800 hover:bg-cafe-700 text-red-400 text-xs font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Remove Only
+                      </button>
+                    </div>
+                    <div className="text-[10px] text-cafe-600 mt-2">
+                      * "Remove Only" preserves the branch for later use
+                    </div>
+                  </div>
+                )}
                 <InteractiveTerminal
                   orderId={activeOrder.id}
-                  onSendInput={activeOrder.status === 'RUNNING' || activeOrder.status === 'WAITING_INPUT' ? handleSendInput : undefined}
-                  isRunning={activeOrder.status === 'RUNNING'}
-                  isAwaitingInput={activeOrder.status === 'WAITING_INPUT'}
+                  onSendInput={canSendInput ? handleSendInput : undefined}
+                  isRunning={isRunning || isFollowupExecuting}
+                  isAwaitingInput={isWaitingInput}
                   worktreePath={activeOrder.worktreeInfo?.path}
                   startedAt={activeOrder.startedAt}
-                  className="h-full"
+                  className={isCompleted && activeOrder.worktreeInfo ? 'flex-1' : 'h-full'}
+                  placeholder={isFollowupMode || isCompleted ? 'Enter followup command...' : undefined}
                 />
               </div>
             ) : (
