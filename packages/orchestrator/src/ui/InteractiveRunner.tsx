@@ -22,10 +22,10 @@ export const InteractiveRunner: React.FC<InteractiveRunnerProps> = ({
   const [currentStage, setCurrentStage] = useState<string>('plan');
   const [currentIter, setCurrentIter] = useState<number>(0);
   const [stages, setStages] = useState([
-    { name: 'Plan', status: 'pending' as const },
-    { name: 'Code', status: 'pending' as const },
-    { name: 'Test', status: 'pending' as const },
-    { name: 'Check', status: 'pending' as const },
+    { stageId: 'plan', category: 'PLANNING', status: 'pending' as const },
+    { stageId: 'code', category: 'IMPLEMENTATION', status: 'pending' as const },
+    { stageId: 'test', category: 'VERIFICATION', status: 'pending' as const },
+    { stageId: 'check', category: 'VERIFICATION', status: 'pending' as const },
   ]);
   const [nodes, setNodes] = useState<
     Array<{
@@ -37,17 +37,30 @@ export const InteractiveRunner: React.FC<InteractiveRunnerProps> = ({
   >([]);
   const [lastEvent, setLastEvent] = useState<string>('');
 
+  // Stage 카테고리 매핑
+  const getStageCategory = (stageId: string): string => {
+    const categoryMap: Record<string, string> = {
+      'plan': 'PLANNING',
+      'code': 'IMPLEMENTATION',
+      'test': 'VERIFICATION',
+      'check': 'VERIFICATION',
+      'analyze': 'ANALYSIS',
+      'review': 'VERIFICATION',
+    };
+    return categoryMap[stageId] || stageId.toUpperCase();
+  };
+
   useEffect(() => {
     onStateUpdate((state: RunState) => {
       setCurrentStage(state.currentStage);
       setCurrentIter(state.stageIter);
 
       // Update stage status
-      const newStages = stages.map((stage: { name: string; status: any }) => {
-        const stageName = stage.name.toLowerCase();
-        if (stageName === state.currentStage) {
+      const newStages = stages.map((stage: { stageId: string; category: string; status: any }) => {
+        const stageId = stage.stageId;
+        if (stageId === state.currentStage) {
           return { ...stage, status: 'running' as const };
-        } else if (stages.findIndex((s: {name: string}) => s.name.toLowerCase() === stageName) < stages.findIndex((s: {name: string}) => s.name.toLowerCase() === state.currentStage)) {
+        } else if (stages.findIndex((s: {stageId: string}) => s.stageId === stageId) < stages.findIndex((s: {stageId: string}) => s.stageId === state.currentStage)) {
            // Simple logic: if stage is before current, it's completed
            return { ...stage, status: 'completed' as const };
         } else if (state.status === 'completed') {
@@ -59,7 +72,7 @@ export const InteractiveRunner: React.FC<InteractiveRunnerProps> = ({
 
       // Update node status
       // completedNodes is string[] in RunState, not a map
-      const stageNodes = state.completedNodes || []; 
+      const stageNodes = state.completedNodes || [];
       const newNodes = stageNodes.map((nodeId: string) => ({
         id: nodeId,
         type: 'run',
