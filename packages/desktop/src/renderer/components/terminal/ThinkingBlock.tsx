@@ -96,9 +96,26 @@ function extractStageEndInfo(entries: ParsedLogEntry[]): StageEndInfo | null {
       if (match) {
         const isCompleted = match[2].toLowerCase() === 'completed';
         const stageId = match[3];
-        const category = match[4] || getStageCategory(stageId);
-        const duration = match[5];
-        return { stageId, category, isCompleted, duration };
+        const group1 = match[4];
+        const group2 = match[5];
+
+        let category: string | null | undefined;
+        let duration: string | undefined;
+
+        if (group2) {
+          // Both groups are present, assume (category) (duration)
+          category = group1;
+          duration = group2;
+        } else if (group1) {
+          // Only one group is present. Check if it's a duration.
+          if (/^\d[\d.]*(s|ms)?$/i.test(group1)) {
+            duration = group1;
+          } else {
+            category = group1;
+          }
+        }
+
+        return { stageId, category: category || getStageCategory(stageId), isCompleted, duration };
       }
     }
   }
