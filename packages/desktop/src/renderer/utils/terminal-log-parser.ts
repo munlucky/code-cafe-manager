@@ -397,12 +397,18 @@ export function parseTerminalOutput(raw: string): ParsedLogEntry {
   const trimmed = raw.trim();
 
   // JSON 파싱 시도 (Claude Code 형식)
-  // HTML 엔티티가 포함된 경우 (convertAnsiToHtml에서 이스케이프됨) 디코드 후 파싱
+  // 먼저 원본으로 파싱 시도, 실패 시 HTML 엔티티 디코드 후 재시도
   if (trimmed.startsWith('{')) {
-    // HTML 엔티티 포함 여부 확인 후 디코드
-    const jsonCandidate = trimmed.includes('&quot;') || trimmed.includes('&amp;')
-      ? decodeHtmlEntities(trimmed)
-      : trimmed;
+    let jsonCandidate = trimmed;
+    try {
+      // 원본 문자열로 먼저 파싱 시도
+      JSON.parse(trimmed);
+    } catch {
+      // 파싱 실패 시 HTML 엔티티가 있으면 디코드
+      if (trimmed.includes('&quot;') || trimmed.includes('&amp;')) {
+        jsonCandidate = decodeHtmlEntities(trimmed);
+      }
+    }
     try {
       const parsed = JSON.parse(jsonCandidate) as ClaudeMessage;
 
