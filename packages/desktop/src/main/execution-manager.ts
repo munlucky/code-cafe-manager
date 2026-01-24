@@ -298,11 +298,14 @@ export class ExecutionManager {
 
     // Stage 이벤트들 (로깅 강화)
     this.baristaEngine.on('stage:started', (data: StageStartedEvent) => {
-      console.log(`[ExecutionManager] Stage STARTED: ${data.stageId} (Order: ${data.orderId}, Provider: ${data.provider})`);
+      console.log(`[ExecutionManager] Stage STARTED: ${data.stageId} (${data.stageName || data.stageId}) (Order: ${data.orderId}, Provider: ${data.provider})`);
+      console.log(`[ExecutionManager] Stage skills:`, data.skills);
       this.sendToRenderer('order:stage-started', {
         orderId: data.orderId,
         stageId: data.stageId,
+        stageName: data.stageName,
         provider: data.provider,
+        skills: data.skills,  // 스킬 정보 추가
       });
     });
 

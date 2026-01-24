@@ -243,12 +243,16 @@ function parseWorkflowInfo(filePath: string, id: string): WorkflowInfo | null {
     const description =
       (typeof workflow?.description === 'string' && workflow.description) || `Workflow: ${id}`;
 
+    console.log('[parseWorkflowInfo] Parsing workflow:', { filePath, id, stages });
+
     // Stage별 provider/role/profile 설정 파싱 (new fields 포함)
     // 주의: stage 설정은 workflow 객체 바깥(root level)에 있음
     const stageConfigs: Record<string, StageAssignment> = {};
     for (const stage of stages) {
       const stageConfig = parsed?.[stage];
       if (stageConfig && typeof stageConfig === 'object') {
+        const skills = (stageConfig as any).skills;
+        console.log('[parseWorkflowInfo] Stage config:', { stage, skills, stageConfig });
         stageConfigs[stage] = {
           provider: (stageConfig as any).provider || 'claude-code',
           role: (stageConfig as any).role,
@@ -257,7 +261,7 @@ function parseWorkflowInfo(filePath: string, id: string): WorkflowInfo | null {
           on_failure: (stageConfig as any).on_failure,
           retries: (stageConfig as any).retries,
           retry_backoff: (stageConfig as any).retry_backoff,
-          skills: (stageConfig as any).skills,
+          skills: skills,
           prompt: (stageConfig as any).prompt,
         };
       } else if (typeof stageConfig === 'string') {
@@ -269,6 +273,8 @@ function parseWorkflowInfo(filePath: string, id: string): WorkflowInfo | null {
       }
     }
 
+    console.log('[parseWorkflowInfo] Parsed stageConfigs:', Object.keys(stageConfigs));
+
     return {
       id,
       name,
@@ -279,6 +285,7 @@ function parseWorkflowInfo(filePath: string, id: string): WorkflowInfo | null {
       protected: workflow?.protected === true,
     };
   } catch (error) {
+    console.error('[parseWorkflowInfo] Error parsing workflow:', error);
     return null;
   }
 }
