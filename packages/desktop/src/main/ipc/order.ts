@@ -512,14 +512,17 @@ class OrderManager {
 
             for (const chunk of chunks) {
               // Parse output type from markers (uses parseOutputType helper)
-              const { type, content } = parseOutputType(chunk.message);
+              const parsed = parseOutputType(chunk.message);
+
+              // Map user_prompt to user-input for frontend display
+              const outputType = parsed.type === 'user_prompt' ? 'user-input' : parsed.type;
 
               // SECURITY: convertAnsiToHtml properly escapes HTML to prevent XSS
               history.push({
                 orderId,
                 timestamp: chunk.timestamp,
-                type,
-                content: convertAnsiToHtml(content),
+                type: outputType,
+                content: convertAnsiToHtml(parsed.content),
               });
             }
 

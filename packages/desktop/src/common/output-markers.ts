@@ -40,9 +40,27 @@ export const TODO_PROGRESS_MARKER = '[TODO_PROGRESS] ' as const;
 export const RESULT_MARKER = '[RESULT] ' as const;
 
 /**
+ * Marker for stage started
+ * Format: [STAGE_START] {"stageId": "...", "provider": "...", "stageName": "..."}
+ */
+export const STAGE_START_MARKER = '[STAGE_START] ' as const;
+
+/**
+ * Marker for stage completed
+ * Format: [STAGE_END] {"stageId": "...", "status": "completed|failed", "duration": 1234}
+ */
+export const STAGE_END_MARKER = '[STAGE_END] ' as const;
+
+/**
+ * Marker for user prompt (order execution request)
+ * Used to identify the original user request
+ */
+export const USER_PROMPT_MARKER = '[USER_PROMPT] ' as const;
+
+/**
  * Output type discriminator
  */
-export type OutputType = 'stdout' | 'stderr' | 'system' | 'user-input' | 'tool' | 'tool_result' | 'todo_progress' | 'result';
+export type OutputType = 'stdout' | 'stderr' | 'system' | 'user-input' | 'tool' | 'tool_result' | 'todo_progress' | 'result' | 'stage_start' | 'stage_end' | 'user_prompt';
 
 /**
  * Todo progress data structure
@@ -59,10 +77,30 @@ export interface TodoProgress {
 }
 
 /**
+ * Stage info data structure
+ */
+export interface StageInfo {
+  stageId: string;
+  provider?: string;
+  stageName?: string;
+  status?: 'started' | 'completed' | 'failed';
+  duration?: number;
+  skills?: string[];
+}
+
+/**
+ * Validate StageInfo structure from parsed JSON
+ * Returns true if the object has the required stageId field
+ */
+function isValidStageInfo(obj: unknown): obj is StageInfo {
+  return typeof obj === 'object' && obj !== null && typeof (obj as StageInfo).stageId === 'string';
+}
+
+/**
  * Parse output type from content with markers
  * Detects special markers and returns the type and cleaned content
  */
-export function parseOutputType(content: string): { type: OutputType; content: string; todoProgress?: TodoProgress } {
+export function parseOutputType(content: string): { type: OutputType; content: string; todoProgress?: TodoProgress; stageInfo?: StageInfo } {
   if (content.startsWith(STDERR_MARKER)) {
     return {
       type: 'stderr',
@@ -106,6 +144,61 @@ export function parseOutputType(content: string): { type: OutputType; content: s
     return {
       type: 'result',
       content: content.substring(RESULT_MARKER.length),
+    };
+  }
+
+  if (content.startsWith(STAGE_START_MARKER)) {
+    const jsonStr = content.substring(STAGE_START_MARKER.length);
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (!isValidStageInfo(parsed)) {
+        throw new Error('Invalid STAGE_START JSON structure: missing stageId');
+      }
+      const stageInfo: StageInfo = { ...parsed, status: 'started' };
+      const providerLabel = stageInfo.provider ? ` (${stageInfo.provider})` : '';
+      const skillsLabel = stageInfo.skills?.length ? `\n   Skills: ${stageInfo.skills.join(', ')}` : '';
+      return {
+        type: 'stage_start',
+        content: `▶ Stage Started: ${stageInfo.stageName || stageInfo.stageId}${providerLabel}${skillsLabel}`,
+        stageInfo,
+      };
+    } catch (error) {
+      console.error(`[parseOutputType] Failed to parse STAGE_START JSON:`, error, jsonStr);
+      return {
+        type: 'stage_start',
+        content: jsonStr,
+      };
+    }
+  }
+
+  if (content.startsWith(STAGE_END_MARKER)) {
+    const jsonStr = content.substring(STAGE_END_MARKER.length);
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (!isValidStageInfo(parsed)) {
+        throw new Error('Invalid STAGE_END JSON structure: missing stageId');
+      }
+      const stageInfo = parsed as StageInfo;
+      const durationLabel = stageInfo.duration ? ` (${(stageInfo.duration / 1000).toFixed(1)}s)` : '';
+      const statusIcon = stageInfo.status === 'completed' ? '✓' : '✗';
+      return {
+        type: 'stage_end',
+        content: `${statusIcon} Stage ${stageInfo.status === 'completed' ? 'Completed' : 'Failed'}: ${stageInfo.stageName || stageInfo.stageId}${durationLabel}`,
+        stageInfo,
+      };
+    } catch (error) {
+      console.error(`[parseOutputType] Failed to parse STAGE_END JSON:`, error, jsonStr);
+      return {
+        type: 'stage_end',
+        content: jsonStr,
+      };
+    }
+  }
+
+  if (content.startsWith(USER_PROMPT_MARKER)) {
+    return {
+      type: 'user_prompt',
+      content: content.substring(USER_PROMPT_MARKER.length),
     };
   }
 

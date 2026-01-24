@@ -258,7 +258,8 @@ export class Orchestrator extends EventEmitter {
 
     // 프롬프트와 vars 저장
     this.orderManager.updateOrderPrompt(orderId, prompt, vars);
-    await this.logManager.appendLog(orderId, `Execution requested with prompt: ${prompt.substring(0, 100)}...`);
+    // Use USER_PROMPT marker so the frontend can display this as a user message
+    await this.logManager.appendLog(orderId, `[USER_PROMPT] ${prompt}`);
 
     // 바리스타 찾기 또는 생성
     let barista = this.baristaManager.findIdleBarista(order.provider);

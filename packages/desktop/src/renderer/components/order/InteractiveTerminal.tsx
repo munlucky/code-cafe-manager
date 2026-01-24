@@ -16,7 +16,7 @@ import { useSmartScroll } from '../../hooks/useSmartScroll';
 interface OrderOutputEvent {
   orderId: string;
   timestamp: string;
-  type: 'stdout' | 'stderr' | 'system' | 'user-input';
+  type: 'stdout' | 'stderr' | 'system' | 'user-input' | 'stage_start' | 'stage_end' | 'tool' | 'tool_result' | 'todo_progress' | 'result';
   content: string;
 }
 
@@ -104,6 +104,10 @@ export function InteractiveTerminal({
       parsedEntry.type = 'system';
     } else if (event.type === 'user-input') {
       parsedEntry.type = 'user';
+    } else if (event.type === 'stage_start' || event.type === 'stage_end') {
+      parsedEntry.type = 'thinking';
+    } else if (event.type === 'tool' || event.type === 'tool_result') {
+      parsedEntry.type = event.type === 'tool' ? 'tool_use' : 'tool_result';
     }
 
     // Use event timestamp for consistency
