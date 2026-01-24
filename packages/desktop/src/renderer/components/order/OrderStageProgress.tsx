@@ -1,18 +1,22 @@
 import { type ReactElement } from 'react';
-import { CheckCircle2, Circle, Loader2, XCircle } from 'lucide-react';
+import { CheckCircle2, Circle, Loader2, XCircle, ChevronDown } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { useState } from 'react';
 
 export type StageStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
 export interface StageInfo {
-  name: string;
+  stageId: string;     // 원래 Stage ID (예: analyze, plan, code)
+  category: string;    // 카테고리 (예: ANALYSIS, PLANNING, IMPLEMENTATION, VERIFICATION)
   status: StageStatus;
+  skills?: string[];   // 이 Stage에서 사용하는 스킬 목록
 }
 
 interface OrderStageProgressProps {
   stages: StageInfo[];
   currentStage?: string;
   className?: string;
+  showSkills?: boolean; // 스킬 목록 표시 여부 (기본: false)
 }
 
 function getStageIcon(status: StageStatus): ReactElement {
@@ -51,7 +55,22 @@ export function OrderStageProgress({
   stages,
   currentStage,
   className,
+  showSkills = false,
 }: OrderStageProgressProps): ReactElement {
+  const [expandedSkills, setExpandedSkills] = useState<Set<string>>(new Set());
+
+  const toggleSkills = (stageName: string) => {
+    setExpandedSkills(prev => {
+      const next = new Set(prev);
+      if (next.has(stageName)) {
+        next.delete(stageName);
+      } else {
+        next.add(stageName);
+      }
+      return next;
+    });
+  };
+
   if (stages.length === 0) {
     return (
       <div className={cn('text-sm text-cafe-500', className)}>
@@ -88,16 +107,18 @@ export function OrderStageProgress({
       </div>
 
       {/* Stage Badges - circular style */}
-      <div className="flex justify-between relative">
+      <div className="flex justify-between relative mb-4">
         {/* Connecting Line (Behind badges) */}
         <div className="absolute top-1/2 left-0 w-full h-0.5 bg-cafe-800 -z-0 transform -translate-y-1/2" />
 
         {stages.map((stage) => {
           const colors = getStageColors(stage.status);
-          const isActive = stage.name === currentStage && stage.status === 'running';
+          const isActive = stage.stageId === currentStage && stage.status === 'running';
+          const hasSkills = showSkills && stage.skills && stage.skills.length > 0;
+          const isExpanded = expandedSkills.has(stage.stageId);
 
           return (
-            <div key={stage.name} className="relative z-10 flex flex-col items-center group">
+            <div key={stage.stageId} className="relative z-10 flex flex-col items-center group">
               <div
                 className={cn(
                   'w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-300 bg-cafe-900',
@@ -109,14 +130,49 @@ export function OrderStageProgress({
                 {getStageIcon(stage.status)}
               </div>
 
-              <span
-                className={cn(
-                  'absolute top-10 text-[10px] font-bold whitespace-nowrap transition-colors duration-200',
-                  isActive ? 'text-brand' : colors.text
-                )}
-              >
-                {stage.name}
-              </span>
+              {/* StageID + Category 표시 */}
+              <div className="absolute top-10 flex flex-col items-center gap-0.5">
+                <span
+                  className={cn(
+                    'text-[10px] font-bold whitespace-nowrap transition-colors duration-200',
+                    isActive ? 'text-brand' : colors.text
+                  )}
+                >
+                  {stage.stageId}
+                </span>
+                <span
+                  className={cn(
+                    'text-[8px] font-medium whitespace-nowrap transition-colors duration-200 text-cafe-500',
+                  )}
+                >
+                  {stage.category}
+                </span>
+              </div>
+
+              {/* Skills expandable section */}
+              {hasSkills && (
+                <button
+                  onClick={() => toggleSkills(stage.stageId)}
+                  className="absolute top-20 mt-1 text-[9px] text-cafe-500 hover:text-brand transition-colors flex items-center gap-0.5"
+                >
+                  <ChevronDown className={cn('w-3 h-3 transition-transform', isExpanded && 'rotate-180')} />
+                  {stage.skills?.length} skills
+                </button>
+              )}
+
+              {/* Skills popup */}
+              {isExpanded && hasSkills && (
+                <div className="absolute top-28 z-20 bg-cafe-900 border border-cafe-700 rounded-lg p-2 shadow-xl min-w-[120px]">
+                  <div className="text-[9px] text-cafe-400 mb-1 font-semibold">Skills:</div>
+                  <div className="flex flex-col gap-1">
+                    {stage.skills?.map(skill => (
+                      <div key={skill} className="text-[10px] text-cafe-300 bg-cafe-800 px-2 py-1 rounded">
+                        {skill}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -152,10 +208,10 @@ export function OrderStageProgressBar({
   // 직관적인 진행 상태 메시지 생성
   const getStatusMessage = (): string => {
     if (failed > 0 && failedStage) {
-      return `Stage ${failedStageIndex + 1}/${total} failed: ${failedStage.name}`;
+      return `Stage ${failedStageIndex + 1}/${total} failed: ${failedStage.stageId}`;
     }
     if (running > 0 && runningStage) {
-      return `Stage ${runningStageIndex + 1}/${total}: ${runningStage.name}`;
+      return `Stage ${runningStageIndex + 1}/${total}: ${runningStage.stageId}`;
     }
     if (completed === total) {
       return `All ${total} stages completed`;

@@ -33,6 +33,7 @@ export function OrderDetailView({
   const [workflow, setWorkflow] = useState<ExtendedWorkflowInfo | null>(null);
   const [currentStageIndex, setCurrentStageIndex] = useState(0);
   const [completedStages, setCompletedStages] = useState<Set<string>>(new Set());
+  const [stageSkills, setStageSkills] = useState<Record<string, string[]>>({});  // stage별 스킬 정보
   const [retryOptions, setRetryOptions] = useState<RetryOption[] | null>(null);
   const [selectedRetryStage, setSelectedRetryStage] = useState<string>('');
   const [retryType, setRetryType] = useState<'stage' | 'beginning'>('stage');
@@ -46,9 +47,14 @@ export function OrderDetailView({
   useEffect(() => {
     async function fetchWorkflow() {
       try {
+        console.log('[OrderDetailView] Fetching workflow:', order.workflowId);
         const response = await window.codecafe.workflow.get(order.workflowId);
+        console.log('[OrderDetailView] Workflow response:', response);
         if (response.success && response.data) {
+          console.log('[OrderDetailView] Workflow data:', response.data);
           setWorkflow(response.data);
+        } else {
+          console.warn('[OrderDetailView] Workflow fetch failed:', response);
         }
       } catch (error) {
         console.error('Failed to fetch workflow:', error);
@@ -76,11 +82,21 @@ export function OrderDetailView({
   // Stage 이벤트 리스너 - 실시간 stage 진행 상황 추적
   useEffect(() => {
     // order:stage-started 이벤트 리스너
-    const cleanupStageStarted = window.codecafe.order.onStageStarted((data: { orderId: string; stageId: string; provider?: string }) => {
+    const cleanupStageStarted = window.codecafe.order.onStageStarted((data: {
+      orderId: string;
+      stageId: string;
+      stageName?: string;
+      provider?: string;
+      skills?: string[];
+    }) => {
       if (data.orderId === order.id && workflow) {
         const stageIndex = workflow.stages.indexOf(data.stageId);
         if (stageIndex >= 0) {
           setCurrentStageIndex(stageIndex);
+          // 스킬 정보 저장
+          if (data.skills) {
+            setStageSkills(prev => ({ ...prev, [data.stageId]: data.skills! }));
+          }
         }
       }
     });
@@ -169,13 +185,26 @@ export function OrderDetailView({
     }
   }, [order.id]);
 
+  // Stage별 카테고리 매핑
+  const getStageCategory = (stageId: string): string => {
+    const categoryMap: Record<string, string> = {
+      'analyze': 'ANALYSIS',
+      'plan': 'PLANNING',
+      'code': 'IMPLEMENTATION',
+      'review': 'VERIFICATION',
+      'test': 'VERIFICATION',
+      'check': 'VERIFICATION',
+    };
+    return categoryMap[stageId] || stageId.toUpperCase();
+  };
+
   // Stage 정보 계산
   const stages: StageInfo[] = (workflow?.stages || ['Plan', 'Code', 'Test']).map(
-    (stageName, index): StageInfo => {
+    (stageId, index): StageInfo => {
       let status: StageStatus = 'pending';
 
       // 명시적으로 완료된 stage 확인
-      if (completedStages.has(stageName)) {
+      if (completedStages.has(stageId)) {
         status = 'completed';
       } else if (isCompleted) {
         // 전체 order가 완료된 경우
@@ -194,12 +223,30 @@ export function OrderDetailView({
         }
       }
 
-      return {
-        name: stageName.charAt(0).toUpperCase() + stageName.slice(1),
+      // 스킬 정보: 실시간 이벤트에서 받은 stageSkills 우선, 없으면 stageConfigs 사용
+      const skills = stageSkills[stageId] || workflow?.stageConfigs?.[stageId]?.skills;
+
+      console.log('[OrderDetailView] Stage computed:', {
+        stageId,
+        index,
         status,
+        skills,
+        stageSkillsForStage: stageSkills[stageId],
+        workflowStageConfigs: workflow?.stageConfigs?.[stageId],
+      });
+
+      // StageID, Category, Skills 모두 포함
+      return {
+        stageId,
+        category: getStageCategory(stageId),
+        status,
+        skills,
       };
     }
   );
+
+  // 디버깅: workflow 상태 로그
+  console.log('[OrderDetailView] Rendering stages:', stages.map(s => ({ stageId: s.stageId, category: s.category, skills: s.skills })));
 
   return (
     <div className="flex flex-col h-full">
@@ -309,7 +356,7 @@ export function OrderDetailView({
               Stage Progress
             </h3>
             <OrderStageProgressBar stages={stages} className="mb-3" />
-            <OrderStageProgress stages={stages} />
+            <OrderStageProgress stages={stages} showSkills={true} />
           </Card>
 
           {/* Error Card */}
