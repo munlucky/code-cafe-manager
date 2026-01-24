@@ -47,6 +47,7 @@ export interface WorktreeMergeOptions {
   targetBranch: string; // 병합 대상 브랜치 (예: main, master)
   deleteAfterMerge?: boolean; // 병합 후 worktree 삭제 여부
   squash?: boolean; // squash merge 사용 여부
+  autoCommit?: boolean; // 미커밋 변경사항 자동 커밋 여부
 }
 
 /**

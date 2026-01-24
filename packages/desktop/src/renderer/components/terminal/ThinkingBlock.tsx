@@ -4,7 +4,7 @@
  */
 
 import { useState, useMemo } from 'react';
-import { ChevronDown, ChevronRight, BrainCircuit, AlertCircle, Layers, Terminal, Cpu, Bot } from 'lucide-react';
+import { ChevronDown, ChevronRight, BrainCircuit, AlertCircle, Layers, Terminal, Cpu, Bot, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import type { InteractionGroup, ParsedLogEntry } from '../../types/terminal';
 import { TerminalLogEntry } from './TerminalLogEntry';
@@ -74,6 +74,35 @@ function isValidAgentName(name: string | undefined): boolean {
   if (!name) return false;
   // claude-code, claude-opus-4.5, claude-sonnet-4 등의 패턴만 유효한 agent 이름으로 간주
   return /^claude-[a-z0-9.-]+$/i.test(name.trim());
+}
+
+/** Stage 완료 정보 */
+interface StageEndInfo {
+  stageId: string;
+  category: string | null;
+  isCompleted: boolean; // true: completed, false: failed
+  duration?: string;
+}
+
+/** Stage 완료 메시지 추출 */
+function extractStageEndInfo(entries: ParsedLogEntry[]): StageEndInfo | null {
+  // "✓ Stage Completed: stageId (category) (duration)" 또는 "✗ Stage Failed: stageId (category)"
+  const stageEndPattern = /^([✓✗])\s*Stage\s+(Completed|Failed):\s*([^\s(]+)\s*(?:\(([^)]+)\))?(?:\s*\(([^)]+)\))?/i;
+
+  for (const entry of entries) {
+    const lines = entry.content.trim().split('\n');
+    for (const line of lines) {
+      const match = line.trim().match(stageEndPattern);
+      if (match) {
+        const isCompleted = match[2].toLowerCase() === 'completed';
+        const stageId = match[3];
+        const category = match[4] || getStageCategory(stageId);
+        const duration = match[5];
+        return { stageId, category, isCompleted, duration };
+      }
+    }
+  }
+  return null;
 }
 
 function extractStageInfo(entries: ParsedLogEntry[]): StageInfo | null {
@@ -266,6 +295,7 @@ export function ThinkingBlock({
 
   const summary = formatSummary(group.entries);
   const stageInfo = useMemo(() => extractStageInfo(group.entries), [group.entries]);
+  const stageEndInfo = useMemo(() => extractStageEndInfo(group.entries), [group.entries]);
   const hasError = group.entries.some((e) => e.type === 'system' && e.content.toLowerCase().includes('error'));
 
   return (
@@ -404,6 +434,83 @@ export function ThinkingBlock({
           {group.entries.map((entry) => (
             <TerminalLogEntry key={entry.id} entry={entry} />
           ))}
+        </div>
+      )}
+
+      {/* Stage 완료 섹션 - Stage 시작과 대칭되는 디자인 */}
+      {stageEndInfo && !isRunning && (
+        <div className={cn(
+          'mt-4 p-4 rounded-r-lg shadow-sm backdrop-blur-sm border-l-4',
+          stageEndInfo.isCompleted
+            ? 'bg-gradient-to-r from-emerald-500/10 via-cafe-900/60 to-cafe-900/40 border-emerald-500'
+            : 'bg-gradient-to-r from-red-500/10 via-cafe-900/60 to-cafe-900/40 border-red-500'
+        )}>
+          <div className="flex items-start gap-4">
+            {/* Status Icon */}
+            <div className={cn(
+              'p-2.5 rounded-xl border shadow-inner shrink-0 mt-0.5',
+              stageEndInfo.isCompleted
+                ? 'bg-emerald-500/15 border-emerald-500/10'
+                : 'bg-red-500/15 border-red-500/10'
+            )}>
+              {stageEndInfo.isCompleted ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 drop-shadow-sm" />
+              ) : (
+                <XCircle className="w-5 h-5 text-red-400 drop-shadow-sm" />
+              )}
+            </div>
+
+            <div className="flex-1 min-w-0 pt-1">
+              {/* Title - Stage Completed/Failed + StageID */}
+              <div className={cn(
+                'text-sm font-bold uppercase tracking-widest leading-none',
+                stageEndInfo.isCompleted ? 'text-emerald-400' : 'text-red-400'
+              )}>
+                {stageEndInfo.isCompleted ? 'Stage Completed' : 'Stage Failed'}
+              </div>
+
+              {/* Meta Section: StageID & Duration */}
+              <div className="mt-3 flex flex-wrap items-center gap-y-3 gap-x-4">
+                {/* Stage ID */}
+                <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-1 opacity-70">
+                    <Layers className="w-3 h-3 text-cafe-500" />
+                    <span className="text-[9px] font-bold text-cafe-500 uppercase tracking-widest select-none">
+                      Stage
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-cafe-950/80 rounded-md border border-cafe-700/30 shadow-sm">
+                    <span className="text-[11px] font-mono text-cafe-200 font-medium tracking-tight">
+                      {isFollowupStage(stageEndInfo.stageId) ? 'Follow-up' : stageEndInfo.stageId}
+                      {stageEndInfo.category && !isFollowupStage(stageEndInfo.stageId) && (
+                        <span className="text-cafe-500 ml-1">({stageEndInfo.category})</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Duration */}
+                {stageEndInfo.duration && (
+                  <>
+                    <div className="hidden sm:block w-px h-5 bg-gradient-to-b from-transparent via-cafe-700/50 to-transparent"></div>
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-1 opacity-70">
+                        <Clock className="w-3 h-3 text-cafe-500" />
+                        <span className="text-[9px] font-bold text-cafe-500 uppercase tracking-widest select-none">
+                          Duration
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-cafe-950/80 rounded-md border border-cafe-700/30 shadow-sm">
+                        <span className="text-[11px] font-mono text-cafe-200 font-medium">
+                          {stageEndInfo.duration}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
