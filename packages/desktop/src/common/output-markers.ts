@@ -4,6 +4,21 @@
  */
 
 /**
+ * Stage별 카테고리 매핑
+ */
+function getStageCategory(stageId: string): string {
+  const categoryMap: Record<string, string> = {
+    'analyze': 'ANALYSIS',
+    'plan': 'PLANNING',
+    'code': 'IMPLEMENTATION',
+    'review': 'VERIFICATION',
+    'test': 'VERIFICATION',
+    'check': 'VERIFICATION',
+  };
+  return categoryMap[stageId] || stageId.toUpperCase();
+}
+
+/**
  * Marker for stderr output
  * Used by adapter to tag stderr chunks before sending to execution-manager
  */
@@ -155,11 +170,12 @@ export function parseOutputType(content: string): { type: OutputType; content: s
         throw new Error('Invalid STAGE_START JSON structure: missing stageId');
       }
       const stageInfo: StageInfo = { ...parsed, status: 'started' };
+      const category = getStageCategory(stageInfo.stageId);
       const providerLabel = stageInfo.provider ? ` (${stageInfo.provider})` : '';
       const skillsLabel = stageInfo.skills?.length ? `\n   Skills: ${stageInfo.skills.join(', ')}` : '';
       return {
         type: 'stage_start',
-        content: `▶ Stage Started: ${stageInfo.stageName || stageInfo.stageId}${providerLabel}${skillsLabel}`,
+        content: `▶ Stage Started: ${stageInfo.stageId} (${category})${providerLabel}${skillsLabel}`,
         stageInfo,
       };
     } catch (error) {
@@ -179,11 +195,12 @@ export function parseOutputType(content: string): { type: OutputType; content: s
         throw new Error('Invalid STAGE_END JSON structure: missing stageId');
       }
       const stageInfo = parsed as StageInfo;
+      const category = getStageCategory(stageInfo.stageId);
       const durationLabel = stageInfo.duration ? ` (${(stageInfo.duration / 1000).toFixed(1)}s)` : '';
       const statusIcon = stageInfo.status === 'completed' ? '✓' : '✗';
       return {
         type: 'stage_end',
-        content: `${statusIcon} Stage ${stageInfo.status === 'completed' ? 'Completed' : 'Failed'}: ${stageInfo.stageName || stageInfo.stageId}${durationLabel}`,
+        content: `${statusIcon} Stage ${stageInfo.status === 'completed' ? 'Completed' : 'Failed'}: ${stageInfo.stageId} (${category})${durationLabel}`,
         stageInfo,
       };
     } catch (error) {
