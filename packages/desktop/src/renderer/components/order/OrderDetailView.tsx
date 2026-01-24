@@ -53,7 +53,8 @@ export function OrderDetailView({
   const isPending = currentOrder.status === OrderStatus.PENDING;
   const isCompleted = currentOrder.status === OrderStatus.COMPLETED;
   const isFailed = currentOrder.status === OrderStatus.FAILED;
-  const canSendInput = isRunning || isFollowupMode || isAwaitingInput;
+  // 입력 가능 조건: 실행 중, followup 모드, AI 입력 대기 중, 또는 완료 상태 (후속 명령 가능)
+  const canSendInput = isRunning || isFollowupMode || isAwaitingInput || isCompleted;
 
   // Workflow 정보 가져오기
   useEffect(() => {
@@ -150,15 +151,19 @@ export function OrderDetailView({
     fetchRetryOptions();
   }, [order.id, isFailed]);
 
-  // 사용자 입력 전송 (running 또는 followup 모드)
+  // 사용자 입력 전송 (running, followup 모드, 또는 완료 상태)
   const handleSendInput = useCallback(async (message: string) => {
-    if (isFollowupMode) {
-      // Followup 모드에서는 executeFollowup 사용
+    if (isFollowupMode || isCompleted) {
+      // Followup 모드이거나 완료 상태에서는 executeFollowup 사용
       setIsFollowupExecuting(true);
       try {
         const response = await window.codecafe.order.executeFollowup(order.id, message);
         if (!response.success) {
           throw new Error(response.error?.message || 'Failed to execute followup');
+        }
+        // 완료 상태에서 처음 입력 시 followup 모드로 전환
+        if (isCompleted && !isFollowupMode) {
+          setIsFollowupMode(true);
         }
       } finally {
         setIsFollowupExecuting(false);
@@ -170,7 +175,7 @@ export function OrderDetailView({
         throw new Error(response.error?.message || 'Failed to send input');
       }
     }
-  }, [order.id, isFollowupMode]);
+  }, [order.id, isFollowupMode, isCompleted]);
 
   // Followup 모드 진입
   const handleEnterFollowup = useCallback(async () => {
@@ -733,7 +738,7 @@ export function OrderDetailView({
             startedAt={currentOrder.startedAt}
             initialPrompt={currentOrder.prompt}
             className="h-full"
-            placeholder={isFollowupMode ? 'Enter followup command...' : undefined}
+            placeholder={isFollowupMode || isCompleted ? 'Enter followup command...' : undefined}
           />
         </div>
       </div>
