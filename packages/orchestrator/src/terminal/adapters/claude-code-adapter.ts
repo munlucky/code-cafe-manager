@@ -160,11 +160,7 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
 
     switch (toolName) {
       case 'Edit':
-        if (input.file_path) lines.push(`${indent}file: ${input.file_path}`);
-        break;
       case 'Write':
-        if (input.file_path) lines.push(`${indent}file: ${input.file_path}`);
-        break;
       case 'Read':
         if (input.file_path) lines.push(`${indent}file: ${input.file_path}`);
         break;

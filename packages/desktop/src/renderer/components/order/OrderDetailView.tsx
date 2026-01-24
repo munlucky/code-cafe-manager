@@ -186,6 +186,8 @@ export function OrderDetailView({
       const response = await window.codecafe.order.finishFollowup(order.id);
       if (response.success) {
         setIsFollowupMode(false);
+      } else {
+        console.error('Failed to finish followup:', response.error);
       }
     } catch (error) {
       console.error('Failed to finish followup:', error);
@@ -245,6 +247,7 @@ export function OrderDetailView({
     }
 
     setIsMerging(true);
+    setMergeResult(null);
     try {
       const response = await window.codecafe.worktree.removeOnly(
         currentOrder.worktreeInfo.path,

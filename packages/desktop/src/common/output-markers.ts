@@ -146,14 +146,24 @@ export function parseOutputType(content: string): { type: OutputType; content: s
   if (content.startsWith(FILE_EDIT_MARKER)) {
     const jsonStr = content.substring(FILE_EDIT_MARKER.length);
     try {
-      const parsed = JSON.parse(jsonStr) as { type: string; path: string; success: boolean };
-      const icon = parsed.success ? '+' : 'x';
-      const action = parsed.type === 'write' ? 'Created' : 'Modified';
-      return {
-        type: 'file_edit',
-        content: `[${icon}] ${action}: ${parsed.path}`,
-      };
-    } catch {
+      const parsed = JSON.parse(jsonStr);
+      if (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        typeof parsed.type === 'string' &&
+        typeof parsed.path === 'string' &&
+        typeof parsed.success === 'boolean'
+      ) {
+        const icon = parsed.success ? '+' : 'x';
+        const action = parsed.type === 'write' ? 'Created' : 'Modified';
+        return {
+          type: 'file_edit',
+          content: `[${icon}] ${action}: ${parsed.path}`,
+        };
+      }
+      throw new Error('Invalid FILE_EDIT JSON structure');
+    } catch (error) {
+      console.error(`[parseOutputType] Failed to parse FILE_EDIT JSON:`, error, jsonStr);
       return {
         type: 'file_edit',
         content: jsonStr,
