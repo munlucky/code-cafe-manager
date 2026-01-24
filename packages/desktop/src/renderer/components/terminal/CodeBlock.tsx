@@ -26,7 +26,6 @@ const languageExtensions: Record<string, string> = {
   js: '.jsx',
   jsx: '.jsx',
   python: '.py',
-  py: '.py',
   rust: '.rs',
   go: '.go',
   java: '.java',
@@ -37,13 +36,13 @@ const languageExtensions: Record<string, string> = {
   html: '.html',
   json: '.json',
   yaml: '.yml',
-  yml: '.yml',
   bash: '.sh',
-  sh: '.sh',
   sql: '.sql',
   markdown: '.md',
-  md: '.md',
 };
+
+/** # 주석을 사용하는 언어 */
+const hashCommentLanguages = ['python', 'bash', 'sh', 'yaml', 'yml'];
 
 /** 기본 신택스 하이라이팅 토큰 타입 */
 type TokenType = 'keyword' | 'string' | 'comment' | 'number' | 'operator' | 'function' | 'variable' | 'type' | 'plain';
@@ -66,18 +65,17 @@ const keywords: Record<string, string[]> = {
 function tokenize(code: string, language?: string): Token[][] {
   const lines = code.split('\n');
   const lang = language?.toLowerCase() || '';
-  const langKeywords = keywords[lang] || keywords['typescript'] || [];
+  const langKeywords = keywords[lang] || [];
 
   return lines.map(line => {
     const tokens: Token[] = [];
     let remaining = line;
-    let pos = 0;
 
     while (remaining.length > 0) {
       let matched = false;
 
-      // 주석 (// 또는 #)
-      if (remaining.startsWith('//') || (lang === 'python' && remaining.startsWith('#'))) {
+      // 주석 (// 또는 # - 언어에 따라)
+      if (remaining.startsWith('//') || (hashCommentLanguages.includes(lang) && remaining.startsWith('#'))) {
         tokens.push({ type: 'comment', value: remaining });
         break;
       }
@@ -193,7 +191,7 @@ export function CodeBlock({ code, language, className, showLineNumbers = true }:
           </div>
           <div className="flex items-center gap-1.5 text-[10px] text-cafe-500 ml-2">
             <FileCode className="w-3 h-3" />
-            <span className="font-mono">{language || 'code'}{ext}</span>
+            <span className="font-mono">{language ? `file${ext}` : 'code'}</span>
           </div>
         </div>
         <button
@@ -219,39 +217,43 @@ export function CodeBlock({ code, language, className, showLineNumbers = true }:
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
           <tbody>
-            {tokenizedLines.map((lineTokens, lineIndex) => (
-              <tr
-                key={lineIndex}
-                className="hover:bg-cafe-900/30 transition-colors duration-75"
-              >
-                {/* Line number */}
-                {showLineNumbers && (
-                  <td
-                    className="select-none text-right pr-3 pl-3 py-0 font-mono text-[11px] text-cafe-600 border-r border-cafe-800/30 bg-cafe-900/20 align-top"
-                    style={{ width: `${lineNumberWidth + 2}ch`, minWidth: '2.5rem' }}
-                  >
-                    <span style={{ lineHeight: '1.5rem' }}>{lineIndex + 1}</span>
+            {tokenizedLines.map((lineTokens, lineIndex) => {
+              const lineContent = lineTokens.map(t => t.value).join('');
+              const lineKey = `${lineIndex}-${lineContent.slice(0, 32)}`;
+              return (
+                <tr
+                  key={lineKey}
+                  className="hover:bg-cafe-900/30 transition-colors duration-75"
+                >
+                  {/* Line number */}
+                  {showLineNumbers && (
+                    <td
+                      className="select-none text-right pr-3 pl-3 py-0 font-mono text-[11px] text-cafe-600 border-r border-cafe-800/30 bg-cafe-900/20 align-top"
+                      style={{ width: `${lineNumberWidth + 2}ch`, minWidth: '2.5rem' }}
+                    >
+                      <span style={{ lineHeight: '1.5rem' }}>{lineIndex + 1}</span>
+                    </td>
+                  )}
+                  {/* Code line */}
+                  <td className="pl-3 pr-3 py-0 align-top">
+                    <code
+                      className="font-mono text-[11px] whitespace-pre"
+                      style={{ lineHeight: '1.5rem' }}
+                    >
+                      {lineTokens.length > 0 ? (
+                        lineTokens.map((token, tokenIndex) => (
+                          <span key={`${tokenIndex}-${token.value.slice(0, 16)}`} className={tokenStyles[token.type]}>
+                            {token.value}
+                          </span>
+                        ))
+                      ) : (
+                        <span>&nbsp;</span>
+                      )}
+                    </code>
                   </td>
-                )}
-                {/* Code line */}
-                <td className="pl-3 pr-3 py-0 align-top">
-                  <code
-                    className="font-mono text-[11px] whitespace-pre"
-                    style={{ lineHeight: '1.5rem' }}
-                  >
-                    {lineTokens.length > 0 ? (
-                      lineTokens.map((token, tokenIndex) => (
-                        <span key={tokenIndex} className={tokenStyles[token.type]}>
-                          {token.value}
-                        </span>
-                      ))
-                    ) : (
-                      <span>&nbsp;</span>
-                    )}
-                  </code>
-                </td>
-              </tr>
-            ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
