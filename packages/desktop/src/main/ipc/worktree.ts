@@ -1,5 +1,5 @@
 import { ipcMain, shell } from 'electron';
-import { WorktreeManager } from '@codecafe/git-worktree';
+import { WorktreeManager, WorktreeMergeOptions } from '@codecafe/git-worktree';
 
 /**
  * Standardized IPC handler wrapper
@@ -52,6 +52,31 @@ export function registerWorktreeHandlers(): void {
       await shell.openPath(worktreePath);
       return { success: true };
     }, 'openWorktreeFolder')
+  );
+
+  /**
+   * Worktree 브랜치를 대상 브랜치에 병합
+   */
+  ipcMain.handle(
+    'worktree:mergeToTarget',
+    async (_, options: WorktreeMergeOptions) =>
+      handleIpc(async () => {
+        const result = await WorktreeManager.mergeToTarget(options);
+        return { success: result.success, data: result };
+      }, 'worktree:mergeToTarget')
+  );
+
+  /**
+   * Worktree만 삭제하고 브랜치/커밋 내역은 유지
+   * Order 작업 내역을 보존하면서 worktree 디렉터리만 정리
+   */
+  ipcMain.handle(
+    'worktree:removeOnly',
+    async (_, worktreePath: string, repoPath: string) =>
+      handleIpc(async () => {
+        const result = await WorktreeManager.removeWorktreeOnly(worktreePath, repoPath);
+        return { success: result.success, data: result };
+      }, 'worktree:removeOnly')
   );
 
   console.log('[IPC] Worktree handlers registered');

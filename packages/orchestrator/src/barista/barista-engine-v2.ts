@@ -530,4 +530,78 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
   getSessionStatus(): SessionStatusSummary {
     return this.sessionManager.getStatusSummary();
   }
+
+  /**
+   * Enter followup mode for a completed order
+   * Allows user to send additional commands to the AI
+   */
+  public async enterFollowup(orderId: string): Promise<void> {
+    const execution = this.activeExecutions.get(orderId);
+    if (!execution?.session) {
+      throw new Error(`No session found for order: ${orderId}`);
+    }
+
+    await execution.session.enterFollowup();
+    this.emit('order:followup', { orderId });
+  }
+
+  /**
+   * Execute a followup prompt on a completed/followup order
+   */
+  public async executeFollowup(orderId: string, prompt: string): Promise<void> {
+    const execution = this.activeExecutions.get(orderId);
+    if (!execution?.session) {
+      throw new Error(`No session found for order: ${orderId}`);
+    }
+
+    console.log(`[BaristaEngineV2] Executing followup for order ${orderId}`);
+
+    // Forward session events
+    execution.session.once('session:followup-completed', (data) => {
+      this.emit('order:followup-completed', data);
+    });
+    execution.session.once('session:followup-failed', (data) => {
+      this.emit('order:followup-failed', data);
+    });
+
+    await execution.session.executeFollowup(prompt);
+  }
+
+  /**
+   * Finish followup mode and fully complete the session
+   */
+  public async finishFollowup(orderId: string): Promise<void> {
+    const execution = this.activeExecutions.get(orderId);
+    if (!execution?.session) {
+      throw new Error(`No session found for order: ${orderId}`);
+    }
+
+    await execution.session.finishFollowup();
+    this.emit('order:followup-finished', { orderId });
+  }
+
+  /**
+   * Check if an order is in followup or completed state (can receive followup commands)
+   */
+  public canFollowup(orderId: string): boolean {
+    const execution = this.activeExecutions.get(orderId);
+    if (!execution?.session) {
+      return false;
+    }
+
+    const status = execution.session.getStatus().status;
+    return status === 'completed' || status === 'followup';
+  }
+
+  /**
+   * Get order session status
+   */
+  public getOrderSessionStatus(orderId: string): string | null {
+    const execution = this.activeExecutions.get(orderId);
+    if (!execution?.session) {
+      return null;
+    }
+
+    return execution.session.getStatus().status;
+  }
 }

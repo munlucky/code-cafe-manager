@@ -37,3 +37,26 @@ export interface WorktreeRemoveOptions {
   repoPath?: string; // git 실행 경로 (기본: worktreePath의 부모 디렉터리)
   force?: boolean; // 미커밋 변경사항이 있어도 강제 삭제
 }
+
+/**
+ * Worktree 병합 옵션
+ */
+export interface WorktreeMergeOptions {
+  worktreePath: string;
+  repoPath: string;
+  targetBranch: string; // 병합 대상 브랜치 (예: main, master)
+  deleteAfterMerge?: boolean; // 병합 후 worktree 삭제 여부
+  squash?: boolean; // squash merge 사용 여부
+}
+
+/**
+ * 병합 결과
+ */
+export interface MergeResult {
+  success: boolean;
+  mergedBranch: string;
+  targetBranch: string;
+  commitHash?: string;
+  worktreeRemoved?: boolean;
+  error?: string;
+}

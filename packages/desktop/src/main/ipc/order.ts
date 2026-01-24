@@ -663,6 +663,147 @@ class OrderManager {
         }, 'order:retryFromBeginning')
     );
 
+    /**
+     * Followup 모드 진입
+     * completed 상태의 order에서 추가 명령을 받을 수 있도록 함
+     */
+    ipcMain.handle(
+      'order:enterFollowup',
+      async (_, orderId: string) =>
+        handleIpc(async () => {
+          console.log('[Order IPC] Entering followup mode for order:', orderId);
+
+          const baristaEngine = getBaristaEngine();
+          await baristaEngine.enterFollowup(orderId);
+          return { success: true };
+        }, 'order:enterFollowup')
+    );
+
+    /**
+     * Followup 프롬프트 실행
+     * completed/followup 상태에서 추가 명령 실행
+     */
+    ipcMain.handle(
+      'order:executeFollowup',
+      async (_, params: { orderId: string; prompt: string }) =>
+        handleIpc(async () => {
+          const { orderId, prompt } = params;
+          console.log('[Order IPC] Executing followup for order:', orderId);
+
+          const baristaEngine = getBaristaEngine();
+          await baristaEngine.executeFollowup(orderId, prompt);
+          return { started: true };
+        }, 'order:executeFollowup')
+    );
+
+    /**
+     * Followup 모드 종료
+     */
+    ipcMain.handle(
+      'order:finishFollowup',
+      async (_, orderId: string) =>
+        handleIpc(async () => {
+          console.log('[Order IPC] Finishing followup mode for order:', orderId);
+
+          const baristaEngine = getBaristaEngine();
+          await baristaEngine.finishFollowup(orderId);
+          return { success: true };
+        }, 'order:finishFollowup')
+    );
+
+    /**
+     * Followup 가능 여부 확인
+     */
+    ipcMain.handle(
+      'order:canFollowup',
+      async (_, orderId: string) =>
+        handleIpc(async () => {
+          const baristaEngine = getBaristaEngine();
+          return { canFollowup: baristaEngine.canFollowup(orderId) };
+        }, 'order:canFollowup')
+    );
+
+    /**
+     * Worktree만 삭제하고 order 작업 내역은 유지
+     */
+    ipcMain.handle(
+      'order:cleanupWorktreeOnly',
+      async (_, orderId: string) =>
+        handleIpc(async () => {
+          console.log('[Order IPC] Cleaning up worktree only for order:', orderId);
+
+          const order = orchestrator.getOrder(orderId);
+          if (!order?.worktreeInfo?.path) {
+            throw new Error(`No worktree info for order: ${orderId}`);
+          }
+
+          const repoPath = order.worktreeInfo.repoPath || order.counter;
+
+          // Worktree만 삭제 (브랜치/커밋 내역은 유지)
+          await WorktreeManager.removeWorktreeOnly(
+            order.worktreeInfo.path,
+            repoPath
+          );
+
+          // Order의 worktreeInfo는 유지하되 path만 삭제됨을 표시
+          const worktreeBranch = order.worktreeInfo.branch;
+          order.worktreeInfo = {
+            ...order.worktreeInfo,
+            path: '', // 경로 비우기 (삭제됨 표시)
+            removed: true,
+          };
+
+          console.log('[Order IPC] Worktree removed, order preserved. Branch:', worktreeBranch);
+
+          return {
+            success: true,
+            branch: worktreeBranch,
+            message: 'Worktree removed. Branch and commit history preserved.'
+          };
+        }, 'order:cleanupWorktreeOnly')
+    );
+
+    /**
+     * Worktree를 main 브랜치에 병합
+     */
+    ipcMain.handle(
+      'order:mergeWorktreeToMain',
+      async (_, params: { orderId: string; targetBranch?: string; deleteAfterMerge?: boolean; squash?: boolean }) =>
+        handleIpc(async () => {
+          const { orderId, targetBranch = 'main', deleteAfterMerge = true, squash = false } = params;
+          console.log('[Order IPC] Merging worktree to main for order:', orderId);
+
+          const order = orchestrator.getOrder(orderId);
+          if (!order?.worktreeInfo?.path) {
+            throw new Error(`No worktree info for order: ${orderId}`);
+          }
+
+          const repoPath = order.worktreeInfo.repoPath || order.counter;
+
+          const result = await WorktreeManager.mergeToTarget({
+            worktreePath: order.worktreeInfo.path,
+            repoPath,
+            targetBranch,
+            deleteAfterMerge,
+            squash,
+          });
+
+          if (result.success && deleteAfterMerge) {
+            // Worktree가 삭제되었으므로 order 업데이트
+            order.worktreeInfo = {
+              ...order.worktreeInfo,
+              path: '',
+              removed: true,
+              merged: true,
+              mergedTo: targetBranch,
+              mergeCommit: result.commitHash,
+            };
+          }
+
+          return result;
+        }, 'order:mergeWorktreeToMain')
+    );
+
     console.log('[IPC] Order handlers registered');
   }
 
