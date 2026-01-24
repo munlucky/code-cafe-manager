@@ -458,7 +458,8 @@ export function App(): JSX.Element {
       }
 
       return {
-        name: stageId.charAt(0).toUpperCase() + stageId.slice(1),
+        stageId,
+        category: null, // 카테고리는 OrderStageProgress 컴포넌트에서 자동 계산
         status,
       };
     });

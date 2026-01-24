@@ -7,7 +7,7 @@ export type StageStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skip
 
 export interface StageInfo {
   stageId: string;     // 원래 Stage ID (예: analyze, plan, code)
-  category: string;    // 카테고리 (예: ANALYSIS, PLANNING, IMPLEMENTATION, VERIFICATION)
+  category?: string | null;    // 카테고리 (예: ANALYSIS, PLANNING, IMPLEMENTATION, VERIFICATION)
   status: StageStatus;
   skills?: string[];   // 이 Stage에서 사용하는 스킬 목록
 }
@@ -208,10 +208,12 @@ export function OrderStageProgressBar({
   // 직관적인 진행 상태 메시지 생성
   const getStatusMessage = (): string => {
     if (failed > 0 && failedStage) {
-      return `Stage ${failedStageIndex + 1}/${total} failed: ${failedStage.stageId}`;
+      const stageName = failedStage.stageId || 'Unknown';
+      return `Stage ${failedStageIndex + 1}/${total} failed: ${stageName}`;
     }
     if (running > 0 && runningStage) {
-      return `Stage ${runningStageIndex + 1}/${total}: ${runningStage.stageId}`;
+      const stageName = runningStage.stageId || 'Unknown';
+      return `Stage ${runningStageIndex + 1}/${total}: ${stageName}`;
     }
     if (completed === total) {
       return `All ${total} stages completed`;

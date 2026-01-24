@@ -22,7 +22,7 @@ interface ThinkingBlockProps {
 /** Stage 정보 추출 */
 interface StageInfo {
   stageId: string;      // 원래 Stage ID (예: analyze, plan, code)
-  category?: string;    // 카테고리 (예: ANALYSIS, PLANNING, IMPLEMENTATION, VERIFICATION)
+  category?: string | null;    // 카테고리 (예: ANALYSIS, PLANNING, IMPLEMENTATION, VERIFICATION)
   number?: number;
   engine?: string;
   role?: string;        // role (예: claude-code, claude-opus-4.5)
@@ -32,16 +32,30 @@ interface StageInfo {
 }
 
 /** Stage별 카테고리 매핑 */
-function getStageCategory(stageId: string): string {
+function getStageCategory(stageId: string): string | null {
   const categoryMap: Record<string, string> = {
     'analyze': 'ANALYSIS',
     'plan': 'PLANNING',
     'code': 'IMPLEMENTATION',
+    'implement': 'IMPLEMENTATION',
     'review': 'VERIFICATION',
     'test': 'VERIFICATION',
     'check': 'VERIFICATION',
+    'verify': 'VERIFICATION',
   };
-  return categoryMap[stageId] || stageId.toUpperCase();
+  // stageId와 카테고리가 같으면 중복 표시 방지를 위해 null 반환
+  const category = categoryMap[stageId.toLowerCase()];
+  if (category && category === stageId.toUpperCase()) {
+    return null;
+  }
+  return category || null;
+}
+
+/** 유효한 AI Agent 이름인지 확인 (claude-* 형식만 유효) */
+function isValidAgentName(name: string | undefined): boolean {
+  if (!name) return false;
+  // claude-code, claude-opus-4.5, claude-sonnet-4 등의 패턴만 유효한 agent 이름으로 간주
+  return /^claude-[a-z0-9.-]+$/i.test(name.trim());
 }
 
 function extractStageInfo(entries: ParsedLogEntry[]): StageInfo | null {
@@ -257,8 +271,8 @@ export function ThinkingBlock({
               {/* Meta Section: Model & Skills */}
               <div className="mt-3 flex flex-wrap items-center gap-y-3 gap-x-4">
 
-                {/* AI Agent Section */}
-                {(stageInfo.role || stageInfo.engine) && (
+                {/* AI Agent Section - 유효한 agent 이름인 경우에만 표시 */}
+                {(isValidAgentName(stageInfo.role) || isValidAgentName(stageInfo.engine)) && (
                   <div className="flex items-center gap-2.5">
                     <div className="flex items-center gap-1 opacity-70">
                       <Bot className="w-3 h-3 text-cafe-500" />
@@ -278,7 +292,7 @@ export function ThinkingBlock({
                 )}
 
                 {/* Vertical Divider (Desktop) */}
-                {stageInfo.skills && stageInfo.skills.length > 0 && (stageInfo.role || stageInfo.engine) && (
+                {stageInfo.skills && stageInfo.skills.length > 0 && (isValidAgentName(stageInfo.role) || isValidAgentName(stageInfo.engine)) && (
                   <div className="hidden sm:block w-px h-5 bg-gradient-to-b from-transparent via-cafe-700/50 to-transparent"></div>
                 )}
 
