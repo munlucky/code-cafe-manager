@@ -15,6 +15,7 @@ import { formatRelativeTime } from '../../utils/formatters';
 import type { Order, ExtendedWorkflowInfo } from '../../types/models';
 import { OrderStatus } from '../../types/models';
 import type { RetryOption } from '../../types/window';
+import { useOrderStore } from '../../store/useOrderStore';
 
 /** Polling interval for refreshing order status */
 const ORDER_REFRESH_INTERVAL_MS = 3000;
@@ -43,11 +44,16 @@ export function OrderDetailView({
   const [isFollowupExecuting, setIsFollowupExecuting] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [mergeResult, setMergeResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Get awaiting input status from store
+  const sessionStatus = useOrderStore((state) => state.sessionStatuses[order.id]);
+  const isAwaitingInput = sessionStatus?.awaitingInput ?? false;
+
   const isRunning = currentOrder.status === OrderStatus.RUNNING;
   const isPending = currentOrder.status === OrderStatus.PENDING;
   const isCompleted = currentOrder.status === OrderStatus.COMPLETED;
   const isFailed = currentOrder.status === OrderStatus.FAILED;
-  const canSendInput = isRunning || isFollowupMode;
+  const canSendInput = isRunning || isFollowupMode || isAwaitingInput;
 
   // Workflow 정보 가져오기
   useEffect(() => {
@@ -723,6 +729,7 @@ export function OrderDetailView({
             orderId={currentOrder.id}
             onSendInput={canSendInput ? handleSendInput : undefined}
             isRunning={isRunning || isFollowupExecuting}
+            isAwaitingInput={isAwaitingInput}
             startedAt={currentOrder.startedAt}
             initialPrompt={currentOrder.prompt}
             className="h-full"
