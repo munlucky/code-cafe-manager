@@ -4,7 +4,7 @@
  */
 
 import { useState, useMemo } from 'react';
-import { ChevronDown, ChevronRight, BrainCircuit, AlertCircle, Layers } from 'lucide-react';
+import { ChevronDown, ChevronRight, BrainCircuit, AlertCircle, Layers, Terminal, Cpu, Bot } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import type { InteractionGroup, ParsedLogEntry } from '../../types/terminal';
 import { TerminalLogEntry } from './TerminalLogEntry';
@@ -21,11 +21,27 @@ interface ThinkingBlockProps {
 
 /** Stage 정보 추출 */
 interface StageInfo {
-  name: string;
+  stageId: string;      // 원래 Stage ID (예: analyze, plan, code)
+  category?: string;    // 카테고리 (예: ANALYSIS, PLANNING, IMPLEMENTATION, VERIFICATION)
   number?: number;
   engine?: string;
+  role?: string;        // role (예: claude-code, claude-opus-4.5)
   step?: string;
   skill?: string;
+  skills?: string[];    // 여러 스킬 목록
+}
+
+/** Stage별 카테고리 매핑 */
+function getStageCategory(stageId: string): string {
+  const categoryMap: Record<string, string> = {
+    'analyze': 'ANALYSIS',
+    'plan': 'PLANNING',
+    'code': 'IMPLEMENTATION',
+    'review': 'VERIFICATION',
+    'test': 'VERIFICATION',
+    'check': 'VERIFICATION',
+  };
+  return categoryMap[stageId] || stageId.toUpperCase();
 }
 
 function extractStageInfo(entries: ParsedLogEntry[]): StageInfo | null {
@@ -33,12 +49,15 @@ function extractStageInfo(entries: ParsedLogEntry[]): StageInfo | null {
     /^(Stage|Phase|Step)\s*(\d+)/i,
     /^\[?(Stage|Phase|Step)\]?:\s*(.+)/i,
     /^#{1,3}\s*(Stage|Phase|Step)\s*(\d+)?:?\s*(.+)?/i,
-    // "▶ Stage Started: NAME (engine)" or "Stage Started: NAME" pattern
-    /(?:▶\s*)?Stage\s+Started:\s*([^\s(]+)\s*(?:\(([^)]+)\))?/i,
+    // "▶ Stage Started: stageId (category) (engine)" or "Stage Started: stageId (category)" pattern
+    /(?:▶\s*)?Stage\s+Started:\s*([^\s(]+)\s*(?:\(([^)]+)\))?(?:\s*\(([^)]+)\))?/i,
   ];
 
   // 단계 정보 패턴 (예: "▶ Executing the agent chain", "▶ Planning...")
   const stepPattern = /▶\s+(Executing|Planning|Analyzing|Processing|Evaluating|Implementing)(.+)/i;
+
+  // Skills: 패턴 (여러 스킬 목록) - ▶ 접두사가 없는 경우도 처리
+  const skillsListPattern = /^(?:▶\s*)?Skills:\s*(.+)$/i;
 
   // 스킬 실행 패턴
   const skillPatterns = [
@@ -51,56 +70,82 @@ function extractStageInfo(entries: ParsedLogEntry[]): StageInfo | null {
   let stageInfo: StageInfo | null = null;
   let stepInfo: string | undefined;
   let skillInfo: string | undefined;
+  const skillsList: string[] = [];
 
   for (const entry of entries) {
-    const content = entry.content.trim();
+    // 멀티라인 콘텐츠를 줄 단위로 분리하여 확인
+    const lines = entry.content.trim().split('\n');
 
-    // 단계 정보 추출
-    if (!stepInfo) {
-      const stepMatch = content.match(stepPattern);
-      if (stepMatch) {
-        stepInfo = stepMatch[1] + (stepMatch[2] ? stepMatch[2].trim() : '');
+    for (const line of lines) {
+      const content = line.trim();
+
+      // 단계 정보 추출
+      if (!stepInfo) {
+        const stepMatch = content.match(stepPattern);
+        if (stepMatch) {
+          stepInfo = stepMatch[1] + (stepMatch[2] ? stepMatch[2].trim() : '');
+        }
       }
-    }
 
-    // 스킬 정보 추출
-    if (!skillInfo) {
-      for (const pattern of skillPatterns) {
-        const match = content.match(pattern);
-        if (match) {
-          // Delegating to Expert: task 형식인 경우
-          if (match[2]) {
-            skillInfo = `${match[1]}: ${match[2].trim()}`;
-          } else {
-            skillInfo = match[1];
+      // Skills 목록 추출
+      if (skillsList.length === 0) {
+        const skillsMatch = content.match(skillsListPattern);
+        if (skillsMatch && skillsMatch[1]) {
+          const skills = skillsMatch[1].split(',').map(s => s.trim()).filter(s => s.length > 0);
+          skillsList.push(...skills);
+        }
+      }
+
+      // 개별 스킬 정보 추출
+      if (!skillInfo) {
+        for (const pattern of skillPatterns) {
+          const match = content.match(pattern);
+          if (match) {
+            // Delegating to Expert: task 형식인 경우
+            if (match[2]) {
+              skillInfo = `${match[1]}: ${match[2].trim()}`;
+            } else {
+              skillInfo = match[1];
+            }
+            break;
           }
-          break;
+        }
+      }
+
+      // Stage 정보 추출
+      if (!stageInfo) {
+        for (const pattern of stagePatterns) {
+          const match = content.match(pattern);
+          if (match) {
+            // 패턴 4 (Stage Started: stageId (category) (engine))의 경우
+            // match[1]=stageId, match[2]=category, match[3]=engine
+            if (match.length > 1 && match[1]) {
+              const stageId = match[1];
+              // match[2]가 있으면서 숫자가 아니면 category, 숫자면 number
+              const hasCategory = match[2] && !/^\d+$/.test(match[2]);
+              const category = hasCategory ? match[2] : getStageCategory(stageId);
+              const engine = match[3] || undefined;
+              const number = !hasCategory && match[2] ? parseInt(match[2], 10) : undefined;
+              // engine을 role로도 사용 (claude-code 등)
+              stageInfo = { stageId, category, engine, role: engine, number };
+              break;
+            }
+          }
         }
       }
     }
 
-    // Stage 정보 추출
-    for (const pattern of stagePatterns) {
-      const match = content.match(pattern);
-      if (match) {
-        // 패턴 4 (Stage Started: NAME (engine))의 경우: match[1]=name, match[2]=engine
-        if (match.length > 1 && match[1]) {
-          const name = match[1];
-          // match[2]가 있으면서 숫자가 아니면 engine, 숫자면 number
-          const hasEngine = match[2] && !/^\d+$/.test(match[2]);
-          const engine = hasEngine ? match[2] : undefined;
-          const number = !hasEngine && match[2] ? parseInt(match[2], 10) : undefined;
-          stageInfo = { name, engine, number };
-          break;
-        }
-      }
-    }
-
-    if (stageInfo) break;
+    // Stage를 찾은 후에도 계속 진행하여 Skills 정보를 수집
+    // Stage와 Skills가 서로 다른 줄에 있을 수 있음
   }
 
   if (stageInfo) {
-    return { ...stageInfo, step: stepInfo, skill: skillInfo };
+    return {
+      ...stageInfo,
+      step: stepInfo,
+      skill: skillInfo,
+      skills: skillsList.length > 0 ? skillsList : undefined
+    };
   }
   return null;
 }
@@ -195,36 +240,90 @@ export function ThinkingBlock({
     <div className={cn('my-3 rounded-lg', className)}>
       {/* Stage를 별도 섹션으로 표시 - 더 큰 레벨임을 명확히 */}
       {stageInfo && (
-        <div className="mb-4 p-3 bg-gradient-to-r from-brand/10 to-cafe-900/50 border-l-4 border-brand rounded-r-lg">
-          <div className="flex items-center gap-3">
-            {/* Stage 아이콘 - 더 크게 */}
-            <div className="p-2 bg-brand/20 rounded-lg">
-              <Layers className="w-5 h-5 text-brand" />
+        <div className="mb-4 p-4 bg-gradient-to-r from-brand/10 via-cafe-900/60 to-cafe-900/40 border-l-4 border-brand rounded-r-lg shadow-sm backdrop-blur-sm">
+          <div className="flex items-start gap-4">
+
+            {/* Main Icon */}
+            <div className="p-2.5 bg-brand/15 rounded-xl border border-brand/10 shadow-inner shrink-0 mt-0.5">
+              <Layers className="w-5 h-5 text-brand drop-shadow-sm" />
             </div>
 
-            {/* Stage 이름 - 더 큰 폰트 */}
-            <div className="flex-1">
-              <div className="text-sm font-bold text-brand uppercase tracking-wide">
-                {stageInfo.name} {stageInfo.number ?? ''}
+            <div className="flex-1 min-w-0 pt-1">
+              {/* Title - StageID + Category 표시 */}
+              <div className="text-sm font-bold text-brand uppercase tracking-widest leading-none">
+                {stageInfo.stageId} {stageInfo.category && `(${stageInfo.category})`}
               </div>
 
-              {/* 부가 정보들을 같은 행에 표시 */}
-              <div className="flex items-center gap-2 mt-1">
-                {stageInfo.engine && (
-                  <span className="text-[10px] px-2 py-0.5 bg-cafe-800 rounded text-cafe-400 font-mono">
-                    {stageInfo.engine}
-                  </span>
+              {/* Meta Section: Model & Skills */}
+              <div className="mt-3 flex flex-wrap items-center gap-y-3 gap-x-4">
+
+                {/* AI Agent Section */}
+                {(stageInfo.role || stageInfo.engine) && (
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-1 opacity-70">
+                      <Bot className="w-3 h-3 text-cafe-500" />
+                      <span className="text-[9px] font-bold text-cafe-500 uppercase tracking-widest select-none">
+                        AI Agent
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 group">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-cafe-950/80 rounded-md border border-brand/20 shadow-sm transition-all duration-300 group-hover:border-brand/40 group-hover:shadow-brand/5">
+                        <Terminal className="w-3 h-3 text-brand" />
+                        <span className="text-[11px] font-mono text-cafe-200 font-medium tracking-tight">
+                          {stageInfo.role || stageInfo.engine}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 )}
-                {stageInfo.step && (
-                  <span className="text-[10px] text-cafe-500">
-                    {stageInfo.step}
-                  </span>
+
+                {/* Vertical Divider (Desktop) */}
+                {stageInfo.skills && stageInfo.skills.length > 0 && (stageInfo.role || stageInfo.engine) && (
+                  <div className="hidden sm:block w-px h-5 bg-gradient-to-b from-transparent via-cafe-700/50 to-transparent"></div>
                 )}
-                {stageInfo.skill && (
-                  <span className="text-[10px] px-2 py-0.5 bg-brand/20 rounded text-brand-light">
-                    Skill: {stageInfo.skill}
-                  </span>
+
+                {/* Skills Section */}
+                {stageInfo.skills && stageInfo.skills.length > 0 && (
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <div className="flex items-center gap-1 opacity-70">
+                      <Cpu className="w-3 h-3 text-cafe-500" />
+                      <span className="text-[9px] font-bold text-cafe-500 uppercase tracking-widest select-none">
+                        Skills
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {stageInfo.skills.map((skill, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-cafe-800/50 text-cafe-400 border border-cafe-700/30 transition-all duration-200 hover:bg-cafe-800 hover:text-cafe-200 hover:border-cafe-600 cursor-default"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 )}
+
+                {/* Single Skill (from skill field) */}
+                {!stageInfo.skills || stageInfo.skills.length === 0 ? (
+                  <>
+                    {stageInfo.skill && (
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-1 opacity-70">
+                          <Cpu className="w-3 h-3 text-cafe-500" />
+                          <span className="text-[9px] font-bold text-cafe-500 uppercase tracking-widest select-none">
+                            Skill
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-cafe-800/50 text-cafe-400 border border-cafe-700/30 transition-all duration-200 hover:bg-cafe-800 hover:text-cafe-200 hover:border-cafe-600 cursor-default">
+                            {stageInfo.skill}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : null}
               </div>
             </div>
           </div>
