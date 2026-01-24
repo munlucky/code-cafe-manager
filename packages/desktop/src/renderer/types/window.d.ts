@@ -167,6 +167,20 @@ export interface IpcResponse<T = void> {
   errors?: Array<{ path: string[]; message: string }>;
 }
 
+// Type aliases for complex IpcResponse types to avoid JSX conflicts
+export type IpcResponseSuccess = IpcResponse<{ success: boolean }>;
+export type IpcResponseStarted = IpcResponse<{ started: boolean }>;
+export type IpcResponseSent = IpcResponse<{ sent: boolean }>;
+export type IpcResponseDeleted = IpcResponse<{ deleted: boolean }>;
+export type IpcResponseCanFollowup = IpcResponse<{ canFollowup: boolean }>;
+export type IpcResponseCleanupWorktree = IpcResponse<{ success: boolean; branch: string; message: string }>;
+export type IpcResponseMergeWorktree = IpcResponse<{ success: boolean; targetBranch?: string; commitHash?: string; message?: string }>;
+export type IpcResponseRemoveOnly = IpcResponse<{ success: boolean; branch: string }>;
+export type IpcResponseMergeToTarget = IpcResponse<{ success: boolean; targetBranch: string; commitHash?: string }>;
+export type IpcResponseWorktreeList = IpcResponse<WorktreeInfo[]>;
+export type IpcResponseSubscribed = IpcResponse<{ subscribed: boolean; history?: Array<{ orderId: string; timestamp: string; type: string; content: string }> }>;
+export type IpcResponseUnsubscribed = IpcResponse<{ unsubscribed: boolean }>;
+
 export interface CreateOrderParams {
   workflowId?: string; // Optional for backward compatibility
   workflowName?: string; // Optional for backward compatibility
@@ -277,26 +291,34 @@ declare global {
         get: (orderId: string) => Promise<IpcResponse<Order>>;
         getLog: (orderId: string) => Promise<IpcResponse<string>>;
         cancel: (orderId: string) => Promise<IpcResponse<void>>;
-        delete: (orderId: string) => Promise<IpcResponse<{ deleted: boolean }>>;
+        delete: (orderId: string) => Promise<IpcResponseDeleted>;
         deleteMany: (orderIds: string[]) => Promise<IpcResponse<{ deleted: string[]; failed: string[] }>>;
         execute: (
           orderId: string,
           prompt: string,
           vars?: Record<string, string>
-        ) => Promise<IpcResponse<{ started: boolean }>>;
-        sendInput: (orderId: string, message: string) => Promise<IpcResponse<{ sent: boolean }>>;
+        ) => Promise<IpcResponseStarted>;
+        sendInput: (orderId: string, message: string) => Promise<IpcResponseSent>;
         createWithWorktree: (
           params: CreateOrderWithWorktreeParams
         ) => Promise<IpcResponse<CreateOrderWithWorktreeResult>>;
-        subscribeOutput: (orderId: string) => Promise<IpcResponse<{
-          subscribed: boolean;
-          history?: Array<{ orderId: string; timestamp: string; type: string; content: string }>;
-        }>>;
-        unsubscribeOutput: (orderId: string) => Promise<IpcResponse<{ unsubscribed: boolean }>>;
+        subscribeOutput: (orderId: string) => Promise<IpcResponseSubscribed>;
+        unsubscribeOutput: (orderId: string) => Promise<IpcResponseUnsubscribed>;
         // Retry support
-        retryFromStage: (orderId: string, fromStageId?: string) => Promise<IpcResponse<{ started: boolean }>>;
-        retryFromBeginning: (orderId: string, preserveContext?: boolean) => Promise<IpcResponse<{ started: boolean }>>;
+        retryFromStage: (orderId: string, fromStageId?: string) => Promise<IpcResponseStarted>;
+        retryFromBeginning: (orderId: string, preserveContext?: boolean) => Promise<IpcResponseStarted>;
         getRetryOptions: (orderId: string) => Promise<IpcResponse<RetryOption[] | null>>;
+        // Followup support (additional commands after completion)
+        enterFollowup: (orderId: string) => Promise<IpcResponseSuccess>;
+        executeFollowup: (orderId: string, message: string) => Promise<IpcResponseStarted>;
+        finishFollowup: (orderId: string) => Promise<IpcResponseSuccess>;
+        canFollowup: (orderId: string) => Promise<IpcResponseCanFollowup>;
+        cleanupWorktreeOnly: (orderId: string) => Promise<IpcResponseCleanupWorktree>;
+        mergeWorktreeToMain: (orderId: string, options?: {
+          targetBranch?: string;
+          deleteAfterMerge?: boolean;
+          squash?: boolean;
+        }) => Promise<IpcResponseMergeWorktree>;
         onEvent: (callback: (event: any) => void) => () => void;
         onAssigned: (callback: (data: any) => void) => () => void;
         onCompleted: (callback: (data: any) => void) => () => void;
@@ -307,7 +329,7 @@ declare global {
         onSessionCompleted: (callback: (data: { orderId: string }) => void) => () => void;
         onSessionFailed: (callback: (data: { orderId: string; error?: string }) => void) => () => void;
         // Stage events
-        onStageStarted: (callback: (data: { orderId: string; stageId: string; provider?: string }) => void) => () => void;
+        onStageStarted: (callback: (data: { orderId: string; stageId: string; provider?: string; skills?: string[] }) => void) => () => void;
         onStageCompleted: (callback: (data: { orderId: string; stageId: string; output?: string; duration?: number }) => void) => () => void;
         onStageFailed: (callback: (data: { orderId: string; stageId: string; error?: string }) => void) => () => void;
         // Awaiting input event
@@ -327,6 +349,39 @@ declare global {
         }) => void) => () => void;
         // Order status changed event (for retry status updates)
         onStatusChanged: (callback: (data: { orderId: string; status: string }) => void) => () => void;
+        // Followup events
+        onFollowup: (callback: (data: { orderId: string }) => void) => () => void;
+        onFollowupStarted: (callback: (data: { orderId: string }) => void) => () => void;
+        onFollowupCompleted: (callback: (data: { orderId: string }) => void) => () => void;
+        onFollowupFailed: (callback: (data: { orderId: string }) => void) => () => void;
+        onFollowupFinished: (callback: (data: { orderId: string }) => void) => () => void;
+      };
+
+      // Worktree Management
+      worktree: {
+        list: (repoPath: string) => Promise<IpcResponseWorktreeList>;
+        exportPatch: (
+          worktreePath: string,
+          baseBranch: string,
+          outputPath?: string
+        ) => Promise<IpcResponse<string>>;
+        remove: (
+          worktreePath: string,
+          repoPath: string,
+          force?: boolean
+        ) => Promise<IpcResponse<void>>;
+        removeOnly: (
+          worktreePath: string,
+          repoPath: string
+        ) => Promise<IpcResponseRemoveOnly>;
+        openFolder: (worktreePath: string) => Promise<IpcResponse<void>>;
+        mergeToTarget: (params: {
+          worktreePath: string;
+          repoPath: string;
+          targetBranch?: string;
+          deleteAfterMerge?: boolean;
+          squash?: boolean;
+        }) => Promise<IpcResponseMergeToTarget>;
       };
 
       // Order 관리 (Legacy flat API - backward compatibility)
