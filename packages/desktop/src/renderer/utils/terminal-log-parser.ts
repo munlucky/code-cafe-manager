@@ -329,9 +329,29 @@ function parseMessageBlock(
   }
 
   if (block.type === 'tool_result') {
-    const rawContent = typeof block.content === 'string'
-      ? block.content
-      : JSON.stringify(block.content, null, 2);
+    // block.content가 다양한 형태로 올 수 있음: string, object, array, undefined
+    let rawContent: string;
+    if (typeof block.content === 'string') {
+      rawContent = block.content;
+    } else if (block.content === undefined || block.content === null) {
+      rawContent = '';
+    } else if (typeof block.content === 'object') {
+      // 객체인 경우: {type: "text", file: {...}} 형태일 수 있음
+      const contentObj = block.content as Record<string, unknown>;
+      if (contentObj.content && typeof contentObj.content === 'string') {
+        // 중첩된 content 처리
+        rawContent = contentObj.content;
+      } else if (contentObj.file && typeof contentObj.file === 'object') {
+        // file 객체가 있는 경우
+        const fileObj = contentObj.file as Record<string, unknown>;
+        rawContent = typeof fileObj.content === 'string' ? fileObj.content : JSON.stringify(fileObj, null, 2);
+      } else {
+        rawContent = JSON.stringify(block.content, null, 2);
+      }
+    } else {
+      rawContent = String(block.content);
+    }
+
     const content = rawContent || '';
     const contentType = detectContentType(content);
     const isCollapsible = content.length > COLLAPSIBLE_THRESHOLD ||
@@ -412,7 +432,8 @@ export function parseTerminalOutput(raw: string): ParsedLogEntry {
     try {
       const parsed = JSON.parse(jsonCandidate) as ClaudeMessage;
 
-      if (parsed.type && parsed.message?.content) {
+      // message.content가 배열인 경우에만 처리
+      if (parsed.type && parsed.message?.content && Array.isArray(parsed.message.content)) {
         // 첫 번째 의미 있는 블록 반환
         for (const block of parsed.message.content) {
           const entry = parseMessageBlock(block, parsed.type, timestamp);
@@ -420,9 +441,45 @@ export function parseTerminalOutput(raw: string): ParsedLogEntry {
             return entry;
           }
         }
+
+        // 모든 블록에서 entry를 찾지 못한 경우, 첫 번째 블록의 content 사용
+        const firstBlock = parsed.message.content[0];
+        if (firstBlock && firstBlock.content) {
+          const blockContent = typeof firstBlock.content === 'string'
+            ? firstBlock.content
+            : JSON.stringify(firstBlock.content, null, 2);
+          const contentType = detectContentType(blockContent);
+          const isCollapsible = blockContent.length > COLLAPSIBLE_THRESHOLD ||
+            contentType === 'file' ||
+            contentType === 'json';
+
+          const entry: ParsedLogEntry = {
+            id: generateId(),
+            timestamp,
+            type: firstBlock.type === 'tool_result' ? 'tool_result' : 'thinking',
+            toolUseId: firstBlock.tool_use_id,
+            content: blockContent,
+            isCollapsible,
+          };
+
+          if (contentType === 'file') {
+            const fileSummary = summarizeFileContent(blockContent);
+            entry.metadata = { fileLines: fileSummary.lines, contentLength: blockContent.length };
+            entry.summary = `Result: ${fileSummary.lines} lines`;
+          } else if (contentType === 'json') {
+            const jsonSummary = summarizeJSONContent(blockContent);
+            entry.metadata = { jsonKeys: jsonSummary.keys, contentLength: blockContent.length };
+            entry.summary = `Result: JSON (${jsonSummary.size})`;
+          } else {
+            entry.metadata = { contentLength: blockContent.length };
+            entry.summary = generateSummary(entry);
+          }
+
+          return entry;
+        }
       }
 
-      // type은 있지만 message.content가 없는 경우
+      // type은 있지만 message.content가 없거나 배열이 아닌 경우
       if (parsed.type) {
         return {
           id: generateId(),
