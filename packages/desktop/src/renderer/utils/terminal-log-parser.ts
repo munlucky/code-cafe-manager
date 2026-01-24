@@ -14,6 +14,22 @@ import type {
 /** 콘텐츠가 collapsible로 간주되는 최소 길이 */
 const COLLAPSIBLE_THRESHOLD = 500;
 
+/**
+ * HTML 엔티티를 디코드
+ * convertAnsiToHtml에서 이스케이프된 문자열을 복원
+ */
+function decodeHtmlEntities(text: string): string {
+  const htmlDecodeMap: Record<string, string> = {
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+  };
+
+  return text.replace(/&(amp|lt|gt|quot|#39);/g, (match) => htmlDecodeMap[match] || match);
+}
+
 /** 파일 라인 번호 패턴 (예: "     1->" 또는 "   123->") */
 const FILE_LINE_PATTERN = /^\s*\d+->/m;
 
@@ -381,9 +397,14 @@ export function parseTerminalOutput(raw: string): ParsedLogEntry {
   const trimmed = raw.trim();
 
   // JSON 파싱 시도 (Claude Code 형식)
+  // HTML 엔티티가 포함된 경우 (convertAnsiToHtml에서 이스케이프됨) 디코드 후 파싱
   if (trimmed.startsWith('{')) {
+    // HTML 엔티티 포함 여부 확인 후 디코드
+    const jsonCandidate = trimmed.includes('&quot;') || trimmed.includes('&amp;')
+      ? decodeHtmlEntities(trimmed)
+      : trimmed;
     try {
-      const parsed = JSON.parse(trimmed) as ClaudeMessage;
+      const parsed = JSON.parse(jsonCandidate) as ClaudeMessage;
 
       if (parsed.type && parsed.message?.content) {
         // 첫 번째 의미 있는 블록 반환
@@ -401,8 +422,8 @@ export function parseTerminalOutput(raw: string): ParsedLogEntry {
           id: generateId(),
           timestamp,
           type: parsed.type === 'assistant' ? 'assistant' : parsed.type === 'user' ? 'user' : 'system',
-          content: trimmed,
-          isCollapsible: trimmed.length > COLLAPSIBLE_THRESHOLD,
+          content: jsonCandidate,
+          isCollapsible: jsonCandidate.length > COLLAPSIBLE_THRESHOLD,
           summary: `${parsed.type} message`,
         };
       }
