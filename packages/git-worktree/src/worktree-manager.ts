@@ -8,6 +8,8 @@ import {
   WorktreeCreateOptions,
   PatchExportOptions,
   WorktreeRemoveOptions,
+  WorktreeMergeOptions,
+  MergeResult,
 } from './types.js';
 
 const execFileAsync = promisify(execFile);
@@ -186,6 +188,133 @@ export class WorktreeManager {
     }
 
     throw new Error(`Failed to remove worktree after ${maxRetries} attempts: ${lastError?.message}`);
+  }
+
+  /**
+   * Worktree 브랜치를 대상 브랜치에 병합
+   */
+  static async mergeToTarget(options: WorktreeMergeOptions): Promise<MergeResult> {
+    const { worktreePath, repoPath, targetBranch, deleteAfterMerge, squash } = options;
+
+    try {
+      // 0. Safe directory 설정
+      await this.ensureSafeDirectory(repoPath);
+
+      // 1. 현재 브랜치명 조회 (worktree에서)
+      const { stdout: currentBranch } = await execFileAsync(
+        'git',
+        ['branch', '--show-current'],
+        { cwd: worktreePath }
+      );
+      const branchToMerge = currentBranch.trim();
+
+      if (!branchToMerge) {
+        throw new Error('Cannot determine current branch in worktree');
+      }
+
+      console.log(`[WorktreeManager] Merging ${branchToMerge} into ${targetBranch}`);
+
+      // 2. 미커밋 변경사항 확인
+      const hasChanges = await this.hasUncommittedChanges(worktreePath);
+      if (hasChanges) {
+        throw new Error(
+          'Worktree has uncommitted changes. Please commit or stash changes before merging.'
+        );
+      }
+
+      // 3. 메인 레포에서 대상 브랜치로 체크아웃
+      await execFileAsync('git', ['checkout', targetBranch], { cwd: repoPath });
+
+      // 4. 최신 상태로 pull (선택적 - 로컬 병합만 수행)
+      try {
+        await execFileAsync('git', ['pull', '--ff-only'], { cwd: repoPath });
+      } catch {
+        // pull 실패해도 로컬 병합은 진행 (원격이 없을 수 있음)
+        console.log('[WorktreeManager] Pull failed, continuing with local merge');
+      }
+
+      // 5. 병합 실행
+      const mergeArgs = squash
+        ? ['merge', '--squash', branchToMerge]
+        : ['merge', '--no-ff', branchToMerge, '-m', `Merge branch '${branchToMerge}' into ${targetBranch}`];
+
+      await execFileAsync('git', mergeArgs, { cwd: repoPath });
+
+      // squash 병합인 경우 별도 커밋 필요
+      let commitHash: string | undefined;
+      if (squash) {
+        await execFileAsync(
+          'git',
+          ['commit', '-m', `Squash merge branch '${branchToMerge}' into ${targetBranch}`],
+          { cwd: repoPath }
+        );
+      }
+
+      // 6. 최종 커밋 해시 조회
+      const { stdout: hash } = await execFileAsync(
+        'git',
+        ['rev-parse', 'HEAD'],
+        { cwd: repoPath }
+      );
+      commitHash = hash.trim();
+
+      console.log(`[WorktreeManager] Merge successful. Commit: ${commitHash}`);
+
+      // 7. Worktree 삭제 (옵션)
+      let worktreeRemoved = false;
+      if (deleteAfterMerge) {
+        await this.removeWorktree({ worktreePath, repoPath, force: true });
+        worktreeRemoved = true;
+
+        // 8. 브랜치 삭제 (worktree 삭제 후)
+        try {
+          await execFileAsync('git', ['branch', '-d', branchToMerge], { cwd: repoPath });
+          console.log(`[WorktreeManager] Deleted branch: ${branchToMerge}`);
+        } catch (branchError: any) {
+          console.warn(`[WorktreeManager] Failed to delete branch: ${branchError.message}`);
+        }
+      }
+
+      return {
+        success: true,
+        mergedBranch: branchToMerge,
+        targetBranch,
+        commitHash,
+        worktreeRemoved,
+      };
+    } catch (error: any) {
+      console.error(`[WorktreeManager] Merge failed:`, error);
+      return {
+        success: false,
+        mergedBranch: '',
+        targetBranch,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Worktree만 삭제하고 브랜치와 커밋 내역은 유지
+   * Order 작업 내역을 보존하면서 worktree 디렉터리만 정리
+   */
+  static async removeWorktreeOnly(
+    worktreePath: string,
+    repoPath: string
+  ): Promise<{ success: boolean; branch: string; error?: string }> {
+    try {
+      // 1. Worktree 정보 조회 (브랜치명 보존)
+      const worktreeInfo = await this.getWorktreeInfo(repoPath, worktreePath);
+      const branch = worktreeInfo.branch;
+
+      // 2. Worktree 삭제 (브랜치는 삭제하지 않음)
+      await this.removeWorktree({ worktreePath, repoPath, force: true });
+
+      console.log(`[WorktreeManager] Removed worktree only, branch preserved: ${branch}`);
+
+      return { success: true, branch };
+    } catch (error: any) {
+      return { success: false, branch: '', error: error.message };
+    }
   }
 
   /**

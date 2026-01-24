@@ -51,6 +51,14 @@ contextBridge.exposeInMainWorld('codecafe', {
     retryFromStage: createIpcInvoker('order:retryFromStage'),
     retryFromBeginning: createIpcInvoker('order:retryFromBeginning'),
     getRetryOptions: createIpcInvoker('order:getRetryOptions'),
+    // Followup support (additional commands after completion)
+    enterFollowup: createIpcInvoker('order:enterFollowup'),
+    executeFollowup: createIpcInvoker('order:executeFollowup'),
+    finishFollowup: createIpcInvoker('order:finishFollowup'),
+    canFollowup: createIpcInvoker('order:canFollowup'),
+    // Worktree management (preserve order history)
+    cleanupWorktreeOnly: createIpcInvoker('order:cleanupWorktreeOnly'),
+    mergeWorktreeToMain: createIpcInvoker('order:mergeWorktreeToMain'),
     onEvent: (callback: (event: any) => void) => setupIpcListener('order:event', callback),
     onAssigned: (callback: (data: any) => void) => setupIpcListener('order:assigned', callback),
     onCompleted: (callback: (data: any) => void) => setupIpcListener('order:completed', callback),
@@ -70,6 +78,12 @@ contextBridge.exposeInMainWorld('codecafe', {
     onTodoProgress: (callback: (data: any) => void) => setupIpcListener('order:todo-progress', callback),
     // Order status changed event (for retry status updates)
     onStatusChanged: (callback: (data: any) => void) => setupIpcListener('order:status-changed', callback),
+    // Followup events
+    onFollowup: (callback: (data: any) => void) => setupIpcListener('order:followup', callback),
+    onFollowupStarted: (callback: (data: any) => void) => setupIpcListener('order:followup-started', callback),
+    onFollowupCompleted: (callback: (data: any) => void) => setupIpcListener('order:followup-completed', callback),
+    onFollowupFailed: (callback: (data: any) => void) => setupIpcListener('order:followup-failed', callback),
+    onFollowupFinished: (callback: (data: any) => void) => setupIpcListener('order:followup-finished', callback),
   },
 
   receipt: {
@@ -85,6 +99,9 @@ contextBridge.exposeInMainWorld('codecafe', {
     exportPatch: createIpcInvoker('worktree:exportPatch'),
     remove: createIpcInvoker('worktree:remove'),
     openFolder: createIpcInvoker('worktree:openFolder'),
+    // New: merge and cleanup functions
+    mergeToTarget: createIpcInvoker('worktree:mergeToTarget'),
+    removeOnly: createIpcInvoker('worktree:removeOnly'),
   },
 
   workflow: {

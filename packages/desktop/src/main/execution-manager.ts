@@ -332,6 +332,32 @@ export class ExecutionManager {
       this.sendToRenderer('order:awaiting-input', data);
     });
 
+    // Followup 이벤트들
+    this.baristaEngine.on('order:followup', (data: { orderId: string }) => {
+      console.log(`[ExecutionManager] Order FOLLOWUP MODE: ${data.orderId}`);
+      this.sendToRenderer('order:followup', data);
+    });
+
+    this.baristaEngine.on('order:followup-started', (data: { orderId: string; prompt: string }) => {
+      console.log(`[ExecutionManager] Order FOLLOWUP STARTED: ${data.orderId}`);
+      this.sendToRenderer('order:followup-started', data);
+    });
+
+    this.baristaEngine.on('order:followup-completed', (data: { orderId: string; stageId?: string; output?: string }) => {
+      console.log(`[ExecutionManager] Order FOLLOWUP COMPLETED: ${data.orderId}`);
+      this.sendToRenderer('order:followup-completed', data);
+    });
+
+    this.baristaEngine.on('order:followup-failed', (data: { orderId: string; stageId?: string; error?: string }) => {
+      console.error(`[ExecutionManager] Order FOLLOWUP FAILED: ${data.orderId} | Error: ${data.error || 'Unknown'}`);
+      this.sendToRenderer('order:followup-failed', data);
+    });
+
+    this.baristaEngine.on('order:followup-finished', (data: { orderId: string }) => {
+      console.log(`[ExecutionManager] Order FOLLOWUP FINISHED: ${data.orderId}`);
+      this.sendToRenderer('order:followup-finished', data);
+    });
+
     // 이벤트 리스너 등록 완료 표시
     this.eventListenersRegistered = true;
   }

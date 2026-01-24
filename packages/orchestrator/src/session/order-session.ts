@@ -31,7 +31,7 @@ export interface WorkflowConfig {
   vars?: Record<string, unknown>;
 }
 
-export type SessionStatus = 'created' | 'running' | 'awaiting_input' | 'completed' | 'failed' | 'cancelled';
+export type SessionStatus = 'created' | 'running' | 'awaiting_input' | 'completed' | 'failed' | 'cancelled' | 'followup';
 
 /**
  * 대기 상태 정보
@@ -913,6 +913,115 @@ export class OrderSession extends EventEmitter {
         this.completedAt = new Date();
       }
     }
+  }
+
+  /**
+   * Followup 모드 진입
+   * completed 상태에서 사용자가 추가 명령을 내릴 수 있도록 함
+   */
+  async enterFollowup(): Promise<void> {
+    if (this.status !== 'completed') {
+      throw new Error(`Session ${this.orderId} is not in completed state. Current: ${this.status}`);
+    }
+
+    console.log(`[OrderSession] Entering followup mode for order ${this.orderId}`);
+    this.status = 'followup';
+    this.emit('session:followup', { orderId: this.orderId });
+  }
+
+  /**
+   * Followup 프롬프트 실행
+   * completed 또는 followup 상태에서 추가 명령 실행
+   */
+  async executeFollowup(prompt: string): Promise<void> {
+    if (this.status !== 'completed' && this.status !== 'followup') {
+      throw new Error(`Session ${this.orderId} must be in completed or followup state. Current: ${this.status}`);
+    }
+
+    const cwd = this.currentCwd;
+    if (!cwd) {
+      throw new Error(`No working directory set for session ${this.orderId}`);
+    }
+
+    console.log(`[OrderSession] Executing followup prompt for order ${this.orderId}`);
+
+    // Followup 상태로 전환
+    this.status = 'followup';
+    this.emit('session:followup-started', { orderId: this.orderId, prompt });
+
+    try {
+      // TerminalGroup이 없으면 재생성
+      if (!this.terminalGroup) {
+        const providers: ProviderType[] = [this.barista.provider as ProviderType];
+        this.terminalGroup = new TerminalGroup(
+          {
+            orderId: this.orderId,
+            cwd,
+            providers,
+          },
+          this.terminalPool,
+          this.sharedContext
+        );
+
+        this.terminalGroup.on('stage:output', (eventData) => {
+          this.emit('output', { orderId: this.orderId, stageId: eventData.stageId, data: eventData.data });
+        });
+      }
+
+      // Followup Stage 실행
+      const followupStageId = `followup-${Date.now()}`;
+      const result = await this.terminalGroup.executeStage(
+        followupStageId,
+        this.barista.provider as ProviderType,
+        prompt,
+        { includeContext: true }
+      );
+
+      if (result.success) {
+        // Followup 완료 후 completed 상태로 복귀
+        this.status = 'completed';
+        this.emit('session:followup-completed', {
+          orderId: this.orderId,
+          stageId: followupStageId,
+          output: result.output,
+        });
+      } else {
+        this.emit('session:followup-failed', {
+          orderId: this.orderId,
+          stageId: followupStageId,
+          error: result.error,
+        });
+        throw new Error(`Followup failed: ${result.error}`);
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.emit('session:followup-failed', {
+        orderId: this.orderId,
+        error: errorMsg,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Followup 모드 종료 및 세션 완전 종료
+   */
+  async finishFollowup(): Promise<void> {
+    if (this.status !== 'followup' && this.status !== 'completed') {
+      throw new Error(`Session ${this.orderId} is not in followup or completed state`);
+    }
+
+    console.log(`[OrderSession] Finishing followup mode for order ${this.orderId}`);
+    this.status = 'completed';
+    this.completedAt = new Date();
+    this.emit('session:followup-finished', { orderId: this.orderId });
+  }
+
+  /**
+   * 현재 작업 디렉터리 조회
+   */
+  getCwd(): string | null {
+    return this.currentCwd;
   }
 
   /**
