@@ -323,11 +323,15 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
       'desktop/workflows/moonshot-lite.workflow.yml'
     );
 
+    console.log('[BaristaEngineV2.loadDefaultWorkflow] Loading workflow from:', workflowPath);
+
     try {
       const content = await fs.readFile(workflowPath, 'utf-8');
       const parsed = yaml.parse(content) as {
         workflow: { stages: string[] };
       } & Record<string, { provider?: string; role?: string; mode?: string; on_failure?: string; skills?: string[] }>;
+
+      console.log('[BaristaEngineV2.loadDefaultWorkflow] Parsed workflow stages:', parsed.workflow.stages);
 
       // Convert YAML structure to WorkflowConfig with skill loading
       const stages: StageConfig[] = await Promise.all(
@@ -338,6 +342,13 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
             mode?: string;
             skills?: string[];
           };
+
+          console.log('[BaristaEngineV2.loadDefaultWorkflow] Stage config:', {
+            stageId,
+            skills: stageConfig.skills,
+            provider: stageConfig.provider,
+            role: stageConfig.role,
+          });
 
           // Load skill contents for this stage
           const skillContents: string[] = [];
@@ -365,11 +376,12 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
             role: stageConfig.role,
             mode: (stageConfig.mode || 'sequential') as 'sequential' | 'parallel',
             dependsOn: [],
+            skills: stageConfig.skills,  // 스킬 목록 추가
           };
         })
       );
 
-      console.log(`[BaristaEngineV2] Loaded workflow with ${stages.length} stages`);
+      console.log(`[BaristaEngineV2] Loaded workflow with ${stages.length} stages:`, stages.map(s => ({ id: s.id, name: s.name, skills: s.skills })));
       return { stages, vars: {} };
     } catch (error) {
       console.warn('[BaristaEngineV2] Failed to load default workflow:', error);

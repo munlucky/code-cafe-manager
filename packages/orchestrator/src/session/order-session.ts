@@ -24,6 +24,7 @@ export interface StageConfig {
   role?: string;
   mode?: 'sequential' | 'parallel';
   dependsOn?: string[];  // 의존하는 Stage ID 목록
+  skills?: string[];     // 이 Stage에서 사용할 스킬 목록
 }
 
 export interface WorkflowConfig {
@@ -125,6 +126,17 @@ export class OrderSession extends EventEmitter {
    * 워크플로우 설정
    */
   setWorkflow(config: WorkflowConfig): void {
+    console.log('[OrderSession.setWorkflow] Workflow config received:', {
+      orderId: this.orderId,
+      stagesCount: config.stages.length,
+      stages: config.stages.map(s => ({
+        id: s.id,
+        name: s.name,
+        provider: s.provider,
+        skills: s.skills,
+      })),
+    });
+
     this.workflowConfig = config;
 
     // 워크플로우 변수를 SharedContext에 추가
@@ -332,6 +344,7 @@ export class OrderSession extends EventEmitter {
           provider: stage.provider,
           prompt: this.interpolatePrompt(stage.prompt),
           role: stage.role,
+          skills: stage.skills,  // 스킬 정보 추가
         }));
 
         const results = await this.terminalGroup!.executeStagesParallel(stagesWithPrompts);
@@ -458,7 +471,7 @@ export class OrderSession extends EventEmitter {
       stage.id,
       stage.provider,
       interpolatedPrompt,
-      { role: stage.role, includeContext: true }
+      { role: stage.role, skills: stage.skills, includeContext: true }
     );
 
     if (!result.success) {
@@ -597,6 +610,18 @@ export class OrderSession extends EventEmitter {
    * 순차 모드에서는 원본 배열 순서를 유지
    */
   private buildExecutionPlan(stages: StageConfig[]): StageConfig[][] {
+    console.log('[OrderSession.buildExecutionPlan] Input stages:', {
+      count: stages.length,
+      stages: stages.map(s => ({
+        id: s.id,
+        name: s.name,
+        provider: s.provider,
+        mode: s.mode,
+        dependsOn: s.dependsOn,
+        skills: s.skills,
+      })),
+    });
+
     const plan: StageConfig[][] = [];
     const executed = new Set<string>();
     const remaining = [...stages];
@@ -644,6 +669,14 @@ export class OrderSession extends EventEmitter {
         batch.forEach((s) => executed.add(s.id));
       }
     }
+
+    console.log('[OrderSession.buildExecutionPlan] Execution plan:', {
+      batches: plan.length,
+      plan: plan.map((batch, idx) => ({
+        batch: idx,
+        stages: batch.map(s => ({ id: s.id, name: s.name, skills: s.skills })),
+      })),
+    });
 
     return plan;
   }
