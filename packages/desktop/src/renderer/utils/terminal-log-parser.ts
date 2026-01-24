@@ -10,25 +10,10 @@ import type {
   JSONSummary,
   InteractionGroup,
 } from '../types/terminal';
+import { decodeHtmlEntities } from '../../../common/output-markers';
 
 /** 콘텐츠가 collapsible로 간주되는 최소 길이 */
 const COLLAPSIBLE_THRESHOLD = 500;
-
-/**
- * HTML 엔티티를 디코드
- * convertAnsiToHtml에서 이스케이프된 문자열을 복원
- */
-function decodeHtmlEntities(text: string): string {
-  const htmlDecodeMap: Record<string, string> = {
-    '&amp;': '&',
-    '&lt;': '<',
-    '&gt;': '>',
-    '&quot;': '"',
-    '&#39;': "'",
-  };
-
-  return text.replace(/&(amp|lt|gt|quot|#39);/g, (match) => htmlDecodeMap[match] || match);
-}
 
 /** 파일 라인 번호 패턴 (예: "     1->" 또는 "   123->") */
 const FILE_LINE_PATTERN = /^\s*\d+->/m;
