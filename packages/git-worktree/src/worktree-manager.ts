@@ -303,14 +303,7 @@ export class WorktreeManager {
   ): Promise<{ success: boolean; branch: string; error?: string }> {
     try {
       // 1. Worktree 정보 조회 (브랜치명 보존)
-      const worktrees = await this.listWorktrees(repoPath);
-      const normalizedPath = normalizePath(worktreePath);
-      const worktreeInfo = worktrees.find((wt) => normalizePath(wt.path) === normalizedPath);
-
-      if (!worktreeInfo) {
-        throw new Error(`Worktree not found: ${worktreePath}`);
-      }
-
+      const worktreeInfo = await this.getWorktreeInfo(repoPath, worktreePath);
       const branch = worktreeInfo.branch;
 
       // 2. Worktree 삭제 (브랜치는 삭제하지 않음)

@@ -532,16 +532,30 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
   }
 
   /**
-   * Enter followup mode for a completed order
-   * Allows user to send additional commands to the AI
+   * Get session for an order (throws if not found)
    */
-  public async enterFollowup(orderId: string): Promise<void> {
+  private _getSession(orderId: string): OrderSession {
     const execution = this.activeExecutions.get(orderId);
     if (!execution?.session) {
       throw new Error(`No session found for order: ${orderId}`);
     }
+    return execution.session;
+  }
 
-    await execution.session.enterFollowup();
+  /**
+   * Get session for an order (returns null if not found)
+   */
+  private _getSessionOptional(orderId: string): OrderSession | null {
+    return this.activeExecutions.get(orderId)?.session ?? null;
+  }
+
+  /**
+   * Enter followup mode for a completed order
+   * Allows user to send additional commands to the AI
+   */
+  public async enterFollowup(orderId: string): Promise<void> {
+    const session = this._getSession(orderId);
+    await session.enterFollowup();
     this.emit('order:followup', { orderId });
   }
 
@@ -549,37 +563,30 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
    * Execute a followup prompt on a completed/followup order
    */
   public async executeFollowup(orderId: string, prompt: string): Promise<void> {
-    const execution = this.activeExecutions.get(orderId);
-    if (!execution?.session) {
-      throw new Error(`No session found for order: ${orderId}`);
-    }
+    const session = this._getSession(orderId);
 
     console.log(`[BaristaEngineV2] Executing followup for order ${orderId}`);
 
     // Forward session events
-    execution.session.once('session:followup-started', (data) => {
+    session.once('session:followup-started', (data) => {
       this.emit('order:followup-started', data);
     });
-    execution.session.once('session:followup-completed', (data) => {
+    session.once('session:followup-completed', (data) => {
       this.emit('order:followup-completed', data);
     });
-    execution.session.once('session:followup-failed', (data) => {
+    session.once('session:followup-failed', (data) => {
       this.emit('order:followup-failed', data);
     });
 
-    await execution.session.executeFollowup(prompt);
+    await session.executeFollowup(prompt);
   }
 
   /**
    * Finish followup mode and fully complete the session
    */
   public async finishFollowup(orderId: string): Promise<void> {
-    const execution = this.activeExecutions.get(orderId);
-    if (!execution?.session) {
-      throw new Error(`No session found for order: ${orderId}`);
-    }
-
-    await execution.session.finishFollowup();
+    const session = this._getSession(orderId);
+    await session.finishFollowup();
     this.emit('order:followup-finished', { orderId });
   }
 
@@ -587,12 +594,11 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
    * Check if an order is in followup or completed state (can receive followup commands)
    */
   public canFollowup(orderId: string): boolean {
-    const execution = this.activeExecutions.get(orderId);
-    if (!execution?.session) {
+    const session = this._getSessionOptional(orderId);
+    if (!session) {
       return false;
     }
-
-    const status = execution.session.getStatus().status;
+    const status = session.getStatus().status;
     return status === 'completed' || status === 'followup';
   }
 
@@ -600,11 +606,7 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
    * Get order session status
    */
   public getOrderSessionStatus(orderId: string): string | null {
-    const execution = this.activeExecutions.get(orderId);
-    if (!execution?.session) {
-      return null;
-    }
-
-    return execution.session.getStatus().status;
+    const session = this._getSessionOptional(orderId);
+    return session?.getStatus().status ?? null;
   }
 }
