@@ -51,6 +51,24 @@ function getStageCategory(stageId: string): string | null {
   return category || null;
 }
 
+/** FOLLOWUP 패턴 감지 (followup-1234567890 형태) */
+function isFollowupStage(stageId: string): boolean {
+  return /^followup-\d+$/i.test(stageId);
+}
+
+/** Stage 표시용 레이블 생성 */
+function getStageDisplayLabel(stageId: string, category: string | null): string {
+  // FOLLOWUP 패턴이면 사용자 친화적 레이블 반환
+  if (isFollowupStage(stageId)) {
+    return 'Follow-up';
+  }
+  // category가 있으면 stageId와 category 조합
+  if (category) {
+    return `${stageId} (${category})`;
+  }
+  return stageId;
+}
+
 /** 유효한 AI Agent 이름인지 확인 (claude-* 형식만 유효) */
 function isValidAgentName(name: string | undefined): boolean {
   if (!name) return false;
@@ -263,9 +281,9 @@ export function ThinkingBlock({
             </div>
 
             <div className="flex-1 min-w-0 pt-1">
-              {/* Title - StageID + Category 표시 */}
+              {/* Title - StageID + Category 표시 (FOLLOWUP은 사용자 친화적 레이블로) */}
               <div className="text-sm font-bold text-brand uppercase tracking-widest leading-none">
-                {stageInfo.stageId} {stageInfo.category && `(${stageInfo.category})`}
+                {getStageDisplayLabel(stageInfo.stageId, stageInfo.category)}
               </div>
 
               {/* Meta Section: Model & Skills */}
