@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Order, StageStatus } from '../types/models';
+import type { Order, StageStatus, WorkflowLog } from '../types/models';
 
 /**
  * Session status for a running order
@@ -58,6 +58,7 @@ interface OrderState {
   addOrder: (order: Order) => void;
   updateOrder: (id: string, updates: Partial<Order>) => void;
   removeOrder: (id: string) => void;
+  appendOrderLog: (orderId: string, log: WorkflowLog) => void;
 
   // Actions - Session Status
   updateSessionStatus: (orderId: string, status: Partial<SessionStatus>) => void;
@@ -92,9 +93,18 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       orders: state.orders.map((o) => (o.id === id ? { ...o, ...updates } : o)),
     })),
     
-  removeOrder: (id) => 
+  removeOrder: (id) =>
     set((state) => ({
       orders: state.orders.filter((o) => o.id !== id),
+    })),
+
+  appendOrderLog: (orderId, log) =>
+    set((state) => ({
+      orders: state.orders.map((o) =>
+        o.id === orderId
+          ? { ...o, logs: [...(o.logs || []), log] }
+          : o
+      ),
     })),
 
   // Session Status actions

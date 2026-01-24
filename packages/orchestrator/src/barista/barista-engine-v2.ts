@@ -653,21 +653,10 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
     // Register in active executions
     this.activeExecutions.set(order.id, { baristaId: barista.id, session });
 
-    // Forward session events
-    session.on('output', (data) => {
-      this.emit('order:output', { orderId: order.id, data: data.data });
-    });
-    session.on('stage:started', (data) => {
-      this.emit('stage:started', data);
-    });
-    session.on('stage:completed', (data) => {
-      this.emit('stage:completed', data);
-    });
-    session.on('stage:failed', (data) => {
-      this.emit('stage:failed', data);
-    });
+    // Note: output, stage:started, stage:completed, stage:failed events are already forwarded
+    // via CafeSessionManager, so we don't need to set up duplicate listeners here.
 
-    // Forward followup events (previously missing)
+    // Forward followup events (these are NOT forwarded by CafeSessionManager)
     session.on('session:followup', (data) => {
       this.emit('order:followup', data);
     });

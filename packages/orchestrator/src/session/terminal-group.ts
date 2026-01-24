@@ -137,9 +137,10 @@ export class TerminalGroup extends EventEmitter {
       includeContext?: boolean;
       role?: string;
       skills?: string[];
+      stageName?: string;
     } = {}
   ): Promise<{ success: boolean; output?: string; error?: string }> {
-    const { parallel = false, includeContext = true, role, skills } = options;
+    const { parallel = false, includeContext = true, role, skills, stageName } = options;
 
     // 터미널 획득
     const terminalInfo = parallel
@@ -153,10 +154,11 @@ export class TerminalGroup extends EventEmitter {
     this.sharedContext.startStage(stageId, provider, role, skills);
 
     // Stage 시작 마커를 터미널 출력으로 전송
+    const displayStageName = stageName || role || stageId;
     const stageStartInfo = JSON.stringify({
       stageId,
       provider,
-      stageName: role || stageId,
+      stageName: displayStageName,
       skills,
     });
     this.emit('stage:output', {

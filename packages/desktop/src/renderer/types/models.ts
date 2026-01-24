@@ -25,6 +25,13 @@ export interface Barista {
   lastActivityAt: Date | string;
 }
 
+export interface WorkflowLog {
+  timestamp: string;
+  type: 'info' | 'error' | 'success' | 'warning';
+  message: string;
+  data?: any;
+}
+
 export interface Order {
   id: string;
   workflowId: string;
@@ -39,6 +46,7 @@ export interface Order {
   startedAt: Date | string | null;
   endedAt: Date | string | null;
   error?: string;
+  logs: WorkflowLog[]; // Order execution logs
   worktreeInfo?: {
     path: string;
     branch: string;

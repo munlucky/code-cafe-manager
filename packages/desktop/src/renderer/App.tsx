@@ -34,6 +34,14 @@ const convertToDesignOrder = (order: Order, sessionStatus?: { awaitingInput: boo
     ? DesignOrderStatus.WAITING_INPUT
     : statusMap[order.status] || 'PENDING';
 
+  // Convert backend WorkflowLog to design WorkflowLog
+  const designLogs: WorkflowLog[] = (order.logs || []).map(log => ({
+    timestamp: log.timestamp,
+    type: log.type,
+    message: log.message,
+    data: log.data,
+  }));
+
   return {
     id: order.id,
     workflowId: order.workflowId || '',
@@ -48,7 +56,7 @@ const convertToDesignOrder = (order: Order, sessionStatus?: { awaitingInput: boo
       repoPath: order.worktreeInfo.repoPath || '',
     } : undefined,
     currentStage: 'Init', // Order doesn't track currentStage
-    logs: [], // Will be populated from order events
+    logs: designLogs,
     createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
     startedAt: order.startedAt ? new Date(order.startedAt) : undefined,
     completedAt: order.endedAt ? new Date(order.endedAt) : undefined,
@@ -107,7 +115,6 @@ export function App(): JSX.Element {
   // Global data state (recipes, skills)
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [skills, setSkills] = useState<DesignSkill[]>([]);
-  const [orderLogs, setOrderLogs] = useState<Record<string, WorkflowLog[]>>({});
 
   // Stage results for progress tracking
   const [stageResults, setStageResults] = useState<Record<string, Record<string, {
@@ -122,7 +129,7 @@ export function App(): JSX.Element {
   const [timelineEvents, setTimelineEvents] = useState<Record<string, TimelineEvent[]>>({});
 
   // Order state from useOrderStore (updated by IPC events)
-  const { orders: backendOrders, addOrder, removeOrder, updateOrder, sessionStatuses, setAwaitingInput } = useOrderStore();
+  const { orders: backendOrders, addOrder, removeOrder, updateOrder, appendOrderLog, sessionStatuses, setAwaitingInput } = useOrderStore();
 
   // Convert backend orders to design orders
   const orders: DesignOrder[] = backendOrders.map(order => {
@@ -132,10 +139,7 @@ export function App(): JSX.Element {
       console.error('[App] Order without id:', order);
     }
     return converted;
-  }).map(o => ({
-    ...o,
-    logs: orderLogs[o.id] || o.logs,
-  }));
+  });
 
   useIpcEffect();
 
@@ -168,44 +172,6 @@ export function App(): JSX.Element {
     };
     loadData();
   }, [loadCafes]);
-
-  // Subscribe to order output events
-  useEffect(() => {
-    const outputTypeMap: Record<string, WorkflowLog['type']> = {
-      stderr: 'error',
-      result: 'success',
-      tool: 'system',
-      tool_result: 'system',
-      todo_progress: 'system',
-      'user-input': 'system',
-      system: 'system',
-      stdout: 'ai',
-    };
-
-    const cleanup = window.codecafe.order.onOutput((event) => {
-      const { orderId, type, content, timestamp } = event;
-      if (!orderId || !content) {
-        return;
-      }
-
-      setOrderLogs(prev => {
-        const existingLogs = prev[orderId] || [];
-        return {
-          ...prev,
-          [orderId]: [
-            ...existingLogs,
-            {
-              id: crypto.randomUUID(),
-              timestamp: new Date(timestamp || Date.now()).toLocaleTimeString([], { hour12: false }),
-              content,
-              type: outputTypeMap[type] || 'info',
-            }
-          ]
-        };
-      });
-    });
-    return cleanup;
-  }, []);
 
   // Subscribe to stage events
   useEffect(() => {
@@ -294,12 +260,37 @@ export function App(): JSX.Element {
       }));
     });
 
+    // Subscribe to order output events for log storage
+    const cleanupOrderOutput = window.codecafe.order.onOutput((event: any) => {
+      const { orderId, data } = event;
+      if (data && data.data) {
+        // Determine log type based on content
+        let type: 'info' | 'error' | 'success' | 'warning' = 'info';
+        const message = data.data;
+        if (typeof message === 'string') {
+          if (message.toLowerCase().includes('error') || message.toLowerCase().includes('failed')) {
+            type = 'error';
+          } else if (message.toLowerCase().includes('success') || message.toLowerCase().includes('completed')) {
+            type = 'success';
+          } else if (message.toLowerCase().includes('warning')) {
+            type = 'warning';
+          }
+        }
+        appendOrderLog(orderId, {
+          timestamp: data.timestamp || new Date().toISOString(),
+          type,
+          message: typeof message === 'string' ? message : JSON.stringify(message),
+        });
+      }
+    });
+
     return () => {
       cleanupStageStarted();
       cleanupStageCompleted();
       cleanupStageFailed();
+      cleanupOrderOutput();
     };
-  }, []);
+  }, [appendOrderLog]);
 
   // Recipe CRUD handlers
   const handleAddRecipe = useCallback(async (recipe: Recipe) => {

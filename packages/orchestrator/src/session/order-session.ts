@@ -1003,11 +1003,13 @@ export class OrderSession extends EventEmitter {
 
       // Followup Stage 실행
       const followupStageId = `followup-${Date.now()}`;
+      const stageDisplayName = `추가 요청 ${new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+
       const result = await this.terminalGroup.executeStage(
         followupStageId,
         this.barista.provider as ProviderType,
         prompt,
-        { includeContext: true }
+        { includeContext: true, stageName: stageDisplayName }
       );
 
       if (result.success) {
