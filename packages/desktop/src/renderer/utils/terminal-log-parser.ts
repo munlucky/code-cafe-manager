@@ -162,18 +162,21 @@ export function summarizeFileContent(content: string): FileSummary {
  * JSON 콘텐츠 요약 생성
  */
 export function summarizeJSONContent(content: string): JSONSummary {
-  const byteSize = new TextEncoder().encode(content).length;
+  // HTML 엔티티 디코딩 (JSON 파싱 전)
+  const decodedContent = decodeHtmlEntities(content);
+  const byteSize = new TextEncoder().encode(decodedContent).length;
   const size = byteSize < 1024
     ? `${byteSize}B`
     : `${(byteSize / 1024).toFixed(1)}KB`;
 
   let keys: string[] = [];
   try {
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(decodedContent);
     if (Array.isArray(parsed)) {
       keys = [`array[${parsed.length}]`];
     } else if (typeof parsed === 'object' && parsed !== null) {
-      keys = Object.keys(parsed).slice(0, 5);
+      // 키도 HTML 엔티티 디코딩
+      keys = Object.keys(parsed).slice(0, 5).map(key => decodeHtmlEntities(key));
     }
   } catch {
     // JSON 파싱 실패 시 빈 키 배열
@@ -227,6 +230,36 @@ function inferTypeFromContent(content: string): ParsedLogEntry['type'] {
 }
 
 /**
+ * raw 텍스트에서 tool 정보 추출
+ * "▶ Tool: Bash {\"command\":\"ls\"}" 형식에서 tool 이름과 JSON 추출
+ */
+function extractToolInfoFromRawText(content: string): { toolName?: string; toolDetails?: import('../types/terminal').ToolDetails } | null {
+  const trimmed = content.trim();
+
+  // tool 사용 패턴: "▶ Tool: NAME {JSON}" 또는 "Using tool: NAME: JSON"
+  const toolPatterns = [
+    /(?:▶\s*)?Tool:\s*(\w+)\s*(\{.+\})/i,
+    /Using\s+tool:\s*(\w+)\s*:\s*(\{.+\})/i,
+    /\[?(Tool|TOOL)\]?\s*:\s*(\w+)\s*(\{.+\})/i,
+  ];
+
+  for (const pattern of toolPatterns) {
+    const match = trimmed.match(pattern);
+    if (match) {
+      const toolName = match[1];
+      const jsonStr = match[2];
+      // extractToolDetails 호출
+      const toolDetails = extractToolDetails(jsonStr, toolName);
+      if (toolDetails) {
+        return { toolName, toolDetails };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * ParsedLogEntry에 대한 요약 문자열 생성
  */
 export function generateSummary(entry: ParsedLogEntry): string {
@@ -246,9 +279,10 @@ export function generateSummary(entry: ParsedLogEntry): string {
     case 'error':
       return 'Error output';
     default: {
-      // 텍스트의 첫 50자 미리보기
-      const preview = entry.content.trim().substring(0, 50);
-      return preview.length < entry.content.trim().length
+      // 텍스트의 첫 50자 미리보기 (HTML 엔티티 디코딩 적용)
+      const decodedContent = decodeHtmlEntities(entry.content);
+      const preview = decodedContent.trim().substring(0, 50);
+      return preview.length < decodedContent.trim().length
         ? `${preview}...`
         : preview;
     }
@@ -321,9 +355,22 @@ function parseMessageBlock(
       isCollapsible,
     };
     entry.summary = `${block.name || 'Tool'} call`;
+
+    // Tool 상세 정보 추출
+    const toolDetails = extractToolDetails(content, block.name);
+    if (toolDetails) {
+      entry.metadata = {
+        ...entry.metadata,
+        toolDetails,
+      };
+    }
+
     if (isJSONContent(content)) {
       const jsonSummary = summarizeJSONContent(content);
-      entry.metadata = { jsonKeys: jsonSummary.keys };
+      entry.metadata = {
+        ...entry.metadata,
+        jsonKeys: jsonSummary.keys,
+      };
     }
     return entry;
   }
@@ -512,6 +559,20 @@ export function parseTerminalOutput(raw: string): ParsedLogEntry {
     isCollapsible,
   };
 
+  // tool_use 타입인 경우 raw 텍스트에서도 tool 정보 추출 시도
+  if (inferredType === 'tool_use') {
+    const toolInfo = extractToolInfoFromRawText(trimmed);
+    if (toolInfo) {
+      entry.toolName = toolInfo.toolName;
+      if (toolInfo.toolDetails) {
+        entry.metadata = {
+          ...entry.metadata,
+          toolDetails: toolInfo.toolDetails,
+        };
+      }
+    }
+  }
+
   if (contentType === 'file') {
     const fileSummary = summarizeFileContent(trimmed);
     entry.metadata = { fileLines: fileSummary.lines };
@@ -669,6 +730,74 @@ export function groupLogs(entries: ParsedLogEntry[]): InteractionGroup[] {
   }
 
   return groups;
+}
+
+/**
+ * Tool 상세 정보 추출
+ * tool_use JSON에서 상세 정보를 추출하여 ToolDetails로 반환
+ */
+export function extractToolDetails(content: string, toolName?: string): import('../types/terminal').ToolDetails | null {
+  if (!content.trim() || !toolName) return null;
+
+  try {
+    const parsed = JSON.parse(content);
+    if (typeof parsed !== 'object' || parsed === null) return null;
+
+    const details: import('../types/terminal').ToolDetails = {
+      toolType: toolName,
+    };
+
+    // 파일 경로 추출
+    if (parsed.file_path) {
+      details.filePath = parsed.file_path;
+    }
+
+    // 패턴 추출 (Grep, Glob)
+    if (parsed.pattern) {
+      details.pattern = parsed.pattern;
+    }
+
+    // 명령어 추출 (Bash)
+    if (parsed.command) {
+      details.command = parsed.command;
+    }
+
+    // 라인 수 (Read)
+    if (parsed.limit !== undefined) {
+      details.lines = typeof parsed.limit === 'number' ? parsed.limit : parseInt(String(parsed.limit), 10);
+    }
+
+    // Edit/Write의 경우 diff 추출 (old_string, new_string)
+    if ((toolName === 'Edit' || toolName === 'Write') && parsed.old_string && parsed.new_string) {
+      const oldLines = parsed.old_string.split('\n');
+      const newLines = parsed.new_string.split('\n');
+      const maxLines = Math.max(oldLines.length, newLines.length);
+
+      // diff 생성 (unified diff 형식)
+      let diffText = '';
+      for (let i = 0; i < maxLines; i++) {
+        const oldLine = oldLines[i] ?? '';
+        const newLine = newLines[i] ?? '';
+        if (oldLine !== newLine) {
+          if (oldLine) diffText += `- ${oldLine}\n`;
+          if (newLine) diffText += `+ ${newLine}\n`;
+        } else if (oldLine) {
+          diffText += `  ${oldLine}\n`;
+        }
+      }
+
+      const diffLines = diffText.split('\n').filter(l => l.trim());
+      details.diff = {
+        shortDiff: diffLines.slice(0, 5).join('\n'),
+        fullDiff: diffText,
+        totalLines: diffLines.length,
+      };
+    }
+
+    return Object.keys(details).length > 1 ? details : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

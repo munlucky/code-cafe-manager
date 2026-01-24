@@ -53,6 +53,31 @@ export interface ParsedLogEntry {
 }
 
 /**
+ * Tool 상세 정보
+ */
+export interface ToolDetails {
+  /** Tool 종류 (Read, Write, Edit, Bash, Grep 등) */
+  toolType: string;
+  /** 파일 경로 (파일 관련 작업인 경우) */
+  filePath?: string;
+  /** 패턴 (Grep, Glob 등) */
+  pattern?: string;
+  /** 명령어 (Bash 등) */
+  command?: string;
+  /** 라인 수 (Read의 경우) */
+  lines?: number;
+  /** Edit/Write의 경우 diff 정보 */
+  diff?: {
+    /** 약식 diff (3-5줄) */
+    shortDiff: string;
+    /** 전체 diff */
+    fullDiff: string;
+    /** 전체 diff 라인 수 */
+    totalLines: number;
+  };
+}
+
+/**
  * 로그 엔트리 메타데이터
  */
 export interface ParsedLogMetadata {
@@ -64,6 +89,8 @@ export interface ParsedLogMetadata {
   jsonKeys?: string[];
   /** 원본 콘텐츠 길이 */
   contentLength?: number;
+  /** Tool 상세 정보 (tool_use인 경우) */
+  toolDetails?: ToolDetails;
 }
 
 /**

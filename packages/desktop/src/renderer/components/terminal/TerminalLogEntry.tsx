@@ -3,7 +3,8 @@
  * 단일 로그 엔트리를 렌더링하는 컴포넌트
  */
 
-import { FileText, Code } from 'lucide-react';
+import { useState } from 'react';
+import { FileText, Code, ChevronDown, ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../utils/cn';
 import type { ParsedLogEntry } from '../../types/terminal';
@@ -17,6 +18,88 @@ import { CollapsibleContent } from './CollapsibleContent';
 import { FilePreview } from './FilePreview';
 import { JSONViewer } from './JSONViewer';
 import { MarkdownContentRenderer } from './MarkdownContentRenderer';
+
+/** Tool 상세 정보 컴포넌트 */
+function ToolDetails({ entry }: { entry: ParsedLogEntry }): JSX.Element | null {
+  const toolDetails = entry.metadata?.toolDetails;
+  if (!toolDetails) return null;
+
+  const [showFullDiff, setShowFullDiff] = useState(false);
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      {/* Tool 타입 */}
+      <div className="text-[10px] text-cafe-500 font-medium">
+        {toolDetails.toolType}
+      </div>
+
+      {/* 파일 경로 */}
+      {toolDetails.filePath && (
+        <div className="text-[10px] text-cafe-400 font-mono bg-cafe-950 px-2 py-1 rounded">
+          {toolDetails.filePath}
+        </div>
+      )}
+
+      {/* 라인 수 (Read) */}
+      {toolDetails.lines && (
+        <div className="text-[10px] text-cafe-500">
+          {toolDetails.lines}줄 읽음
+        </div>
+      )}
+
+      {/* 패턴 (Grep, Glob) */}
+      {toolDetails.pattern && (
+        <div className="text-[10px] text-cafe-400 font-mono bg-cafe-950 px-2 py-1 rounded">
+          pattern: &quot;{toolDetails.pattern}&quot;
+        </div>
+      )}
+
+      {/* 명령어 (Bash) */}
+      {toolDetails.command && (
+        <div className="text-[10px] text-cafe-400 font-mono bg-cafe-950 px-2 py-1 rounded break-all">
+          {toolDetails.command}
+        </div>
+      )}
+
+      {/* Diff (Edit, Write) */}
+      {toolDetails.diff && (
+        <div className="mt-2">
+          <div className="text-[10px] text-cafe-500 mb-1">변경사항:</div>
+          <pre className={cn(
+            'text-[10px] font-mono bg-cafe-950 rounded p-2 overflow-x-auto',
+            'text-cafe-300 border border-cafe-800'
+          )}>
+            <code>
+              {showFullDiff ? toolDetails.diff.fullDiff : toolDetails.diff.shortDiff}
+            </code>
+          </pre>
+          {toolDetails.diff.totalLines > 5 && (
+            <button
+              type="button"
+              onClick={() => setShowFullDiff(!showFullDiff)}
+              className={cn(
+                'mt-1 text-[10px] text-brand hover:text-brand-light transition-colors',
+                'flex items-center gap-1'
+              )}
+            >
+              {showFullDiff ? (
+                <>
+                  <ChevronDown className="w-3 h-3" />
+                  간략히 보기
+                </>
+              ) : (
+                <>
+                  <ChevronRight className="w-3 h-3" />
+                  전체 diff ({toolDetails.diff.totalLines}줄)
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface TerminalLogEntryProps {
   entry: ParsedLogEntry;
@@ -173,7 +256,12 @@ export function TerminalLogEntry({
                   : undefined,
             }}
           >
-            {renderContent(entry)}
+            <div className="space-y-2">
+              {/* Tool 상세 정보 (tool_use인 경우) */}
+              {entry.type === 'tool_use' && <ToolDetails entry={entry} />}
+              {/* 일반 콘텐츠 */}
+              <div>{renderContent(entry)}</div>
+            </div>
           </CollapsibleContent>
         ) : (
           <div

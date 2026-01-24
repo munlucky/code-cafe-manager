@@ -23,6 +23,9 @@ interface ThinkingBlockProps {
 interface StageInfo {
   name: string;
   number?: number;
+  engine?: string;
+  step?: string;
+  skill?: string;
 }
 
 function extractStageInfo(entries: ParsedLogEntry[]): StageInfo | null {
@@ -30,18 +33,74 @@ function extractStageInfo(entries: ParsedLogEntry[]): StageInfo | null {
     /^(Stage|Phase|Step)\s*(\d+)/i,
     /^\[?(Stage|Phase|Step)\]?:\s*(.+)/i,
     /^#{1,3}\s*(Stage|Phase|Step)\s*(\d+)?:?\s*(.+)?/i,
+    // "▶ Stage Started: NAME (engine)" or "Stage Started: NAME" pattern
+    /(?:▶\s*)?Stage\s+Started:\s*([^\s(]+)\s*(?:\(([^)]+)\))?/i,
   ];
+
+  // 단계 정보 패턴 (예: "▶ Executing the agent chain", "▶ Planning...")
+  const stepPattern = /▶\s+(Executing|Planning|Analyzing|Processing|Evaluating|Implementing)(.+)/i;
+
+  // 스킬 실행 패턴
+  const skillPatterns = [
+    /▶\s*(?:Launching|Executing)\s+skill:\s*(\S+)/i,
+    /▶\s*Delegating\s+to\s+(\w+):\s*(.+)/i,
+    /▶\s*Skill\s+execution:\s*(\S+)/i,
+    /▶\s*Running\s+\/?(\S+)/i,  // /moonshot-xxx
+  ];
+
+  let stageInfo: StageInfo | null = null;
+  let stepInfo: string | undefined;
+  let skillInfo: string | undefined;
 
   for (const entry of entries) {
     const content = entry.content.trim();
+
+    // 단계 정보 추출
+    if (!stepInfo) {
+      const stepMatch = content.match(stepPattern);
+      if (stepMatch) {
+        stepInfo = stepMatch[1] + (stepMatch[2] ? stepMatch[2].trim() : '');
+      }
+    }
+
+    // 스킬 정보 추출
+    if (!skillInfo) {
+      for (const pattern of skillPatterns) {
+        const match = content.match(pattern);
+        if (match) {
+          // Delegating to Expert: task 형식인 경우
+          if (match[2]) {
+            skillInfo = `${match[1]}: ${match[2].trim()}`;
+          } else {
+            skillInfo = match[1];
+          }
+          break;
+        }
+      }
+    }
+
+    // Stage 정보 추출
     for (const pattern of stagePatterns) {
       const match = content.match(pattern);
       if (match) {
-        const stageName = match[1];
-        const stageNum = match[2] ? parseInt(match[2], 10) : undefined;
-        return { name: stageName, number: stageNum };
+        // 패턴 4 (Stage Started: NAME (engine))의 경우: match[1]=name, match[2]=engine
+        if (match.length > 1 && match[1]) {
+          const name = match[1];
+          // match[2]가 있으면서 숫자가 아니면 engine, 숫자면 number
+          const hasEngine = match[2] && !/^\d+$/.test(match[2]);
+          const engine = hasEngine ? match[2] : undefined;
+          const number = !hasEngine && match[2] ? parseInt(match[2], 10) : undefined;
+          stageInfo = { name, engine, number };
+          break;
+        }
       }
     }
+
+    if (stageInfo) break;
+  }
+
+  if (stageInfo) {
+    return { ...stageInfo, step: stepInfo, skill: skillInfo };
   }
   return null;
 }
@@ -134,14 +193,40 @@ export function ThinkingBlock({
 
   return (
     <div className={cn('my-3 rounded-lg', className)}>
-      {/* Stage Badge - if stage detected */}
+      {/* Stage를 별도 섹션으로 표시 - 더 큰 레벨임을 명확히 */}
       {stageInfo && (
-        <div className="flex items-center gap-2 mb-1 ml-1">
-          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-brand/10 border border-brand/30 rounded text-[10px] text-brand">
-            <Layers className="w-3 h-3" />
-            <span className="font-medium">
-              {stageInfo.name} {stageInfo.number ?? ''}
-            </span>
+        <div className="mb-4 p-3 bg-gradient-to-r from-brand/10 to-cafe-900/50 border-l-4 border-brand rounded-r-lg">
+          <div className="flex items-center gap-3">
+            {/* Stage 아이콘 - 더 크게 */}
+            <div className="p-2 bg-brand/20 rounded-lg">
+              <Layers className="w-5 h-5 text-brand" />
+            </div>
+
+            {/* Stage 이름 - 더 큰 폰트 */}
+            <div className="flex-1">
+              <div className="text-sm font-bold text-brand uppercase tracking-wide">
+                {stageInfo.name} {stageInfo.number ?? ''}
+              </div>
+
+              {/* 부가 정보들을 같은 행에 표시 */}
+              <div className="flex items-center gap-2 mt-1">
+                {stageInfo.engine && (
+                  <span className="text-[10px] px-2 py-0.5 bg-cafe-800 rounded text-cafe-400 font-mono">
+                    {stageInfo.engine}
+                  </span>
+                )}
+                {stageInfo.step && (
+                  <span className="text-[10px] text-cafe-500">
+                    {stageInfo.step}
+                  </span>
+                )}
+                {stageInfo.skill && (
+                  <span className="text-[10px] px-2 py-0.5 bg-brand/20 rounded text-brand-light">
+                    Skill: {stageInfo.skill}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -151,7 +236,7 @@ export function ThinkingBlock({
         type="button"
         onClick={handleToggle}
         className={cn(
-          'w-full flex items-center gap-2 p-2.5 rounded-lg text-left transition-all border select-none',
+          'flex items-center gap-2 p-2.5 rounded-lg text-left transition-all border select-none',
           expanded
             ? 'bg-cafe-900 border-cafe-700'
             : 'bg-cafe-900/40 border-cafe-800 hover:bg-cafe-900 hover:border-cafe-700'
