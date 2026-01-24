@@ -69,6 +69,10 @@ export interface Order {
     branch: string;
     baseBranch: string;
     repoPath?: string;  // 원본 카페 경로 (worktree 삭제 시 Git 컨텍스트 제공)
+    removed?: boolean;  // worktree 삭제 여부
+    merged?: boolean;   // 병합 완료 여부
+    mergedTo?: string;  // 병합 대상 브랜치
+    mergeCommit?: string; // 병합 커밋 해시
   };
   // Session-based execution을 위한 cafeId (다중 터미널 관리)
   cafeId?: string;
