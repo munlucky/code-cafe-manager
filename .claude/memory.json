@@ -138,6 +138,17 @@
         "로그 형식에 category 정보 포함",
         "터미널 UI에서 Tool 상세 정보 표시"
       ]
+    },
+    {
+      "name": "UI 버그 수정 2025-01-24",
+      "type": "BugFix",
+      "observations": [
+        "commit: 8216519",
+        "OrderStageProgress.tsx: stageId가 undefined일 때 Unknown 표시",
+        "ThinkingBlock.tsx: stageId와 category 중복 표시 방지 (Phase (PHASE) 문제 해결)",
+        "ThinkingBlock.tsx: AI Agent 섹션에 claude-* 패턴만 유효한 이름으로 표시",
+        "StageInfo 인터페이스 category 타입을 string | null | undefined로 변경"
+      ]
     }
   ],
   "relations": [
@@ -210,6 +221,16 @@
       "from": "M2 개발 진행 중",
       "to": "로그 시스템 개선",
       "type": "includes"
+    },
+    {
+      "from": "M2 개발 진행 중",
+      "to": "UI 버그 수정 2025-01-24",
+      "type": "includes"
+    },
+    {
+      "from": "packages/desktop",
+      "to": "UI 버그 수정 2025-01-24",
+      "type": "contains"
     }
   ]
 }
