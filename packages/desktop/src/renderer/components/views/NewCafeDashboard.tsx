@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Play,
   Plus,
@@ -172,10 +172,10 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
     }
   }, [activeOrder]);
 
-  // Worktree 병합 처리
+  // Worktree 병합 처리 - AI 프롬프트 방식으로 변경 (바로 실행)
   const handleMergeWorktree = useCallback(async (deleteAfterMerge: boolean = false) => {
-    if (!activeOrder?.worktreeInfo?.path || !activeOrder?.worktreeInfo?.repoPath) {
-      console.error('No worktree info available');
+    if (!activeOrder?.id) {
+      console.error('No active order');
       return;
     }
 
@@ -183,35 +183,42 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
     setMergeResult(null);
 
     try {
-      const response = await window.codecafe.worktree.mergeToTarget({
-        worktreePath: activeOrder.worktreeInfo.path,
-        repoPath: activeOrder.worktreeInfo.repoPath,
-        targetBranch: activeOrder.worktreeInfo.baseBranch || 'main',
-        deleteAfterMerge,
-        squash: false,
-        autoCommit: true, // 미커밋 변경사항 자동 커밋
-      });
-
-      if (response.success && response.data) {
-        setMergeResult({
-          success: true,
-          message: `Merged to ${response.data.targetBranch}${deleteAfterMerge ? ' (worktree removed)' : ''}`,
-        });
-      } else {
-        setMergeResult({
-          success: false,
-          message: response.error?.message || 'Merge failed',
-        });
+      // Followup 모드로 진입
+      if (!isFollowupMode) {
+        const enterResponse = await window.codecafe.order.enterFollowup(activeOrder.id);
+        if (!enterResponse.success) {
+          throw new Error(enterResponse.error?.message || 'Failed to enter followup mode');
+        }
+        setIsFollowupMode(true);
       }
+
+      // AI에게 merge 작업 요청 프롬프트 생성 및 바로 실행
+      const targetBranch = activeOrder.worktreeInfo?.baseBranch || 'main';
+      const prompt = deleteAfterMerge
+        ? `Please merge the current worktree changes to ${targetBranch} branch with an appropriate commit message based on the changes. After merging, remove the worktree but preserve the branch.`
+        : `Please merge the current worktree changes to ${targetBranch} branch with an appropriate commit message based on the changes.`;
+
+      // 바로 followup 실행
+      const executeResponse = await window.codecafe.order.executeFollowup(activeOrder.id, prompt);
+      if (!executeResponse.success) {
+        throw new Error(executeResponse.error?.message || 'Failed to execute merge followup');
+      }
+
+      setIsFollowupExecuting(true);
+      setMergeResult({
+        success: true,
+        message: 'AI가 merge 작업을 시작했습니다.',
+      });
     } catch (error) {
+      console.error('Failed to execute merge followup:', error);
       setMergeResult({
         success: false,
-        message: error instanceof Error ? error.message : 'Merge failed',
+        message: error instanceof Error ? error.message : 'Merge followup failed',
       });
     } finally {
       setIsMerging(false);
     }
-  }, [activeOrder]);
+  }, [activeOrder, isFollowupMode]);
 
   // Worktree만 삭제 (브랜치 유지)
   const handleRemoveWorktreeOnly = useCallback(async () => {
@@ -416,8 +423,8 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
             {/* Content View - Logs or Timeline */}
             {viewMode === 'logs' ? (
               <div className="flex-1 overflow-hidden flex flex-col">
-                {/* Worktree Management Panel - 완료 상태에서 worktree가 있을 때 */}
-                {isCompleted && activeOrder.worktreeInfo && (
+                {/* Worktree Management Panel - 완료 상태에서 worktree가 있을 때, followup 실행 중이 아닐 때만 표시 */}
+                {isCompleted && activeOrder.worktreeInfo && !isFollowupMode && !isFollowupExecuting && (
                   <div className="mx-4 mt-4 p-4 bg-cafe-900 border border-green-500/30 rounded-lg">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
