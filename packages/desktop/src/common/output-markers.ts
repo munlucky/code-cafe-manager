@@ -89,6 +89,14 @@ export interface StageInfo {
 }
 
 /**
+ * Validate StageInfo structure from parsed JSON
+ * Returns true if the object has the required stageId field
+ */
+function isValidStageInfo(obj: unknown): obj is StageInfo {
+  return typeof obj === 'object' && obj !== null && typeof (obj as StageInfo).stageId === 'string';
+}
+
+/**
  * Parse output type from content with markers
  * Detects special markers and returns the type and cleaned content
  */
@@ -142,8 +150,11 @@ export function parseOutputType(content: string): { type: OutputType; content: s
   if (content.startsWith(STAGE_START_MARKER)) {
     const jsonStr = content.substring(STAGE_START_MARKER.length);
     try {
-      const stageInfo = JSON.parse(jsonStr) as StageInfo;
-      stageInfo.status = 'started';
+      const parsed = JSON.parse(jsonStr);
+      if (!isValidStageInfo(parsed)) {
+        throw new Error('Invalid STAGE_START JSON structure: missing stageId');
+      }
+      const stageInfo: StageInfo = { ...parsed, status: 'started' };
       const providerLabel = stageInfo.provider ? ` (${stageInfo.provider})` : '';
       const skillsLabel = stageInfo.skills?.length ? `\n   Skills: ${stageInfo.skills.join(', ')}` : '';
       return {
@@ -163,7 +174,11 @@ export function parseOutputType(content: string): { type: OutputType; content: s
   if (content.startsWith(STAGE_END_MARKER)) {
     const jsonStr = content.substring(STAGE_END_MARKER.length);
     try {
-      const stageInfo = JSON.parse(jsonStr) as StageInfo;
+      const parsed = JSON.parse(jsonStr);
+      if (!isValidStageInfo(parsed)) {
+        throw new Error('Invalid STAGE_END JSON structure: missing stageId');
+      }
+      const stageInfo = parsed as StageInfo;
       const durationLabel = stageInfo.duration ? ` (${(stageInfo.duration / 1000).toFixed(1)}s)` : '';
       const statusIcon = stageInfo.status === 'completed' ? '✓' : '✗';
       return {
