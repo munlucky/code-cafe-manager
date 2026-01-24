@@ -126,7 +126,7 @@ export class SharedContext extends EventEmitter {
   /**
    * Stage 결과 시작 기록
    */
-  startStage(stageId: string, provider: string): void {
+  startStage(stageId: string, provider: string, stageName?: string, skills?: string[]): void {
     const result: StageResult = {
       stageId,
       provider,
@@ -135,7 +135,7 @@ export class SharedContext extends EventEmitter {
     };
     this.stages.set(stageId, result);
     this.updatedAt = new Date();
-    this.emit('stage:started', { stageId, provider, orderId: this.orderId });
+    this.emit('stage:started', { stageId, stageName, provider, skills, orderId: this.orderId });
   }
 
   /**

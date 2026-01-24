@@ -150,7 +150,7 @@ export class TerminalGroup extends EventEmitter {
     terminalInfo.currentStageId = stageId;
 
     // SharedContext에 Stage 시작 기록
-    this.sharedContext.startStage(stageId, provider);
+    this.sharedContext.startStage(stageId, provider, role, skills);
 
     // Stage 시작 마커를 터미널 출력으로 전송
     const stageStartInfo = JSON.stringify({

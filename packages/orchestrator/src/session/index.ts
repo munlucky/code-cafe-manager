@@ -99,7 +99,9 @@ export interface OrderFailedEvent {
 export interface StageStartedEvent {
   orderId: string;
   stageId: string;
+  stageName?: string;  // Stage 표시 이름 (role 또는 stageId)
   provider: string;
+  skills?: string[];  // 이 Stage에서 사용하는 스킬 목록
 }
 
 /** stage:completed 이벤트 페이로드 */
