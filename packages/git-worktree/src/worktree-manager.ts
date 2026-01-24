@@ -194,7 +194,7 @@ export class WorktreeManager {
    * Worktree 브랜치를 대상 브랜치에 병합
    */
   static async mergeToTarget(options: WorktreeMergeOptions): Promise<MergeResult> {
-    const { worktreePath, repoPath, targetBranch, deleteAfterMerge, squash } = options;
+    const { worktreePath, repoPath, targetBranch, deleteAfterMerge, squash, autoCommit } = options;
 
     try {
       // 0. Safe directory 설정
@@ -214,12 +214,24 @@ export class WorktreeManager {
 
       console.log(`[WorktreeManager] Merging ${branchToMerge} into ${targetBranch}`);
 
-      // 2. 미커밋 변경사항 확인
+      // 2. 미커밋 변경사항 확인 및 처리
       const hasChanges = await this.hasUncommittedChanges(worktreePath);
       if (hasChanges) {
-        throw new Error(
-          'Worktree has uncommitted changes. Please commit or stash changes before merging.'
-        );
+        if (autoCommit) {
+          // autoCommit이 활성화되면 모든 변경사항을 자동 커밋
+          console.log('[WorktreeManager] Auto-committing uncommitted changes...');
+          await execFileAsync('git', ['add', '-A'], { cwd: worktreePath });
+          await execFileAsync(
+            'git',
+            ['commit', '-m', `Auto-commit before merge to ${targetBranch}`],
+            { cwd: worktreePath }
+          );
+          console.log('[WorktreeManager] Auto-commit completed');
+        } else {
+          throw new Error(
+            'Worktree has uncommitted changes. Please commit or stash changes before merging.'
+          );
+        }
       }
 
       // 3. 메인 레포에서 대상 브랜치로 체크아웃

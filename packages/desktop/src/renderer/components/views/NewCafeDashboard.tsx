@@ -189,6 +189,7 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
         targetBranch: activeOrder.worktreeInfo.baseBranch || 'main',
         deleteAfterMerge,
         squash: false,
+        autoCommit: true, // 미커밋 변경사항 자동 커밋
       });
 
       if (response.success && response.data) {
@@ -293,7 +294,7 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
                   }`}
                 >
                   <div className="flex justify-between items-start mb-2">
-                    <span className="text-xs font-mono text-cafe-500">#{order.id.substring(0,6)}</span>
+                    <span className="text-xs font-mono text-cafe-500">#{order.id.replace(/^order-/, '').substring(0,8)}</span>
                     <StatusBadge status={order.status} />
                   </div>
                   <h3 className={`text-sm font-semibold mb-1.5 ${activeOrderId === order.id ? 'text-white' : 'text-cafe-300'}`}>
