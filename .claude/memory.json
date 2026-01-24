@@ -1,0 +1,215 @@
+{
+  "memories": [
+    {
+      "name": "CodeCafe",
+      "type": "Project",
+      "observations": [
+        "AI CLI 도구(Claude Code, Codex 등)를 바리스타로 여러 개 관리하는 크로스플랫폼 오케스트레이션 시스템",
+        "기술 스택: TypeScript, Electron, React 18.2, Framer Motion, Zustand, Zod",
+        "pnpm workspace 기반 Monorepo 구조",
+        "카페 컨셉: Menu(워크플로우 템플릿), Order(실행 인스턴스), Beans(Provider), Counter(프로젝트), Receipt(결과)"
+      ]
+    },
+    {
+      "name": "packages/core",
+      "type": "Package",
+      "observations": [
+        "도메인 모델, 이벤트 시스템, 타입 정의 포함",
+        "프로젝트의 핵심 도메인 로직 담당"
+      ]
+    },
+    {
+      "name": "packages/cli",
+      "type": "Package",
+      "observations": [
+        "codecafe CLI 명령행 도구",
+        "주요 명령: init, run, ui, doctor"
+      ]
+    },
+    {
+      "name": "packages/desktop",
+      "type": "Package",
+      "observations": [
+        "Electron 기반 데스크톱 애플리케이션",
+        "워크플로우 실행 모니터링, 바리스타 상태 추적, 실시간 로그 표시 기능"
+      ]
+    },
+    {
+      "name": "packages/orchestrator",
+      "type": "Package",
+      "observations": [
+        "워크플로우 실행 엔진",
+        "FSM(Finite State Machine) 기반 실행",
+        "DAG(Directed Acyclic Graph) 지원"
+      ]
+    },
+    {
+      "name": "Barista",
+      "type": "Component",
+      "observations": [
+        "독립 실행 유닛으로 별도 프로세스에서 실행",
+        "각자의 AI 엔진 인스턴스 보유",
+        "Git 작업 트리 격리 지원"
+      ]
+    },
+    {
+      "name": "Manager",
+      "type": "Component",
+      "observations": [
+        "Electron UI의 핵심 컴포넌트",
+        "워크플로우 실행 모니터링 담당",
+        "바리스타 상태 추적 및 실시간 로그 표시"
+      ]
+    },
+    {
+      "name": "Orchestrator",
+      "type": "Component",
+      "observations": [
+        "워크플로우 엔진",
+        "FSM 기반 상태 관리",
+        "이벤트 기반 실행 모델"
+      ]
+    },
+    {
+      "name": "Skills System",
+      "type": "System",
+      "observations": [
+        ".agent/skills/ 디렉토리에 22개 내장 스킬 구현",
+        "5개 카테고리: analysis, planning, implementation, verification, utility",
+        "내장 스킬 + 사용자 정의 스킬 지원"
+      ]
+    },
+    {
+      "name": "packages/providers",
+      "type": "Package",
+      "observations": [
+        "AI 제공자 플러그인 시스템",
+        "claude-code, codex 제공자 포함",
+        "공통 제공자 인터페이스(common 패키지)"
+      ]
+    },
+    {
+      "name": "packages/schema",
+      "type": "Package",
+      "observations": [
+        "YAML/JSON 스키마 정의",
+        "워크플로우 및 설정 파일의 스키마 관리"
+      ]
+    },
+    {
+      "name": "packages/roles",
+      "type": "Package",
+      "observations": [
+        "역할 템플릿 시스템",
+        "기획자, 개발자, 테스터 등 역할 정의"
+      ]
+    },
+    {
+      "name": "packages/git-worktree",
+      "type": "Package",
+      "observations": [
+        "Git 작업 트리 관리 기능",
+        "바리스타별 격리된 작업 환경 제공"
+      ]
+    },
+    {
+      "name": "StageInfo 인터페이스 개선",
+      "type": "Feature",
+      "observations": [
+        "최근 커밋에서 완료된 기능",
+        "Order 컴포넌트와 Orchestrator UI에 스킬 정보 표시 추가",
+        "OrderSession과 BaristaEngine에 스킬 정보 전파 기능"
+      ]
+    },
+    {
+      "name": "M2 개발 진행 중",
+      "type": "Milestone",
+      "observations": [
+        "워크플로우 엔진 개발",
+        "Git worktree 통합",
+        "워크플로우 UI 개선",
+        "M1 완료: CLI 코어, Provider, Core 패키지, Electron UI"
+      ]
+    },
+    {
+      "name": "로그 시스템 개선",
+      "type": "Feature",
+      "observations": [
+        "로그 형식에 category 정보 포함",
+        "터미널 UI에서 Tool 상세 정보 표시"
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "from": "CodeCafe",
+      "to": "packages/core",
+      "type": "contains"
+    },
+    {
+      "from": "CodeCafe",
+      "to": "packages/cli",
+      "type": "contains"
+    },
+    {
+      "from": "CodeCafe",
+      "to": "packages/desktop",
+      "type": "contains"
+    },
+    {
+      "from": "CodeCafe",
+      "to": "packages/orchestrator",
+      "type": "contains"
+    },
+    {
+      "from": "packages/desktop",
+      "to": "Manager",
+      "type": "contains"
+    },
+    {
+      "from": "packages/orchestrator",
+      "to": "Orchestrator",
+      "type": "contains"
+    },
+    {
+      "from": "Orchestrator",
+      "to": "Barista",
+      "type": "manages"
+    },
+    {
+      "from": "CodeCafe",
+      "to": "Skills System",
+      "type": "contains"
+    },
+    {
+      "from": "CodeCafe",
+      "to": "packages/providers",
+      "type": "contains"
+    },
+    {
+      "from": "CodeCafe",
+      "to": "packages/schema",
+      "type": "contains"
+    },
+    {
+      "from": "CodeCafe",
+      "to": "packages/roles",
+      "type": "contains"
+    },
+    {
+      "from": "CodeCafe",
+      "to": "packages/git-worktree",
+      "type": "contains"
+    },
+    {
+      "from": "M2 개발 진행 중",
+      "to": "StageInfo 인터페이스 개선",
+      "type": "includes"
+    },
+    {
+      "from": "M2 개발 진행 중",
+      "to": "로그 시스템 개선",
+      "type": "includes"
+    }
+  ]
+}
