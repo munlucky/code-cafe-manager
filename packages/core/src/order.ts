@@ -17,7 +17,8 @@ export class OrderManager extends EventEmitter {
     workflowName: string,
     counter: string,
     provider: ProviderType,
-    vars: Record<string, string> = {}
+    vars: Record<string, string> = {},
+    cafeId?: string
   ): Order {
     const order: Order = {
       id: this.generateId(),
@@ -28,6 +29,7 @@ export class OrderManager extends EventEmitter {
       counter,
       provider,
       vars,
+      cafeId,
       createdAt: new Date(),
       startedAt: null,
       endedAt: null,

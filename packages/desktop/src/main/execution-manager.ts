@@ -5,7 +5,8 @@
 
 import * as path from 'path';
 import { BrowserWindow } from 'electron';
-import { Orchestrator, Order, Barista } from '@codecafe/core';
+import { existsSync } from 'fs';
+import { Orchestrator, Order, Barista, OrderStatus } from '@codecafe/core';
 import { BaristaEngineV2, TerminalPool } from '@codecafe/orchestrator';
 import type {
   OrderStartedEvent,
@@ -86,6 +87,9 @@ export class ExecutionManager {
 
     // 메트릭 샘플링 타이머 시작 (10초마다 IPC 성능 로깅)
     this.startMetricsSampling();
+
+    // Worktree가 있는 완료된 Order들의 Session 복원
+    await this.restoreSessionsForWorktreeOrders();
 
     console.log('[ExecutionManager] Started successfully');
   }
@@ -535,6 +539,8 @@ export class ExecutionManager {
 
   /**
    * Order 입력 처리
+   * - 실행 중인 order: 터미널에 직접 입력
+   * - 완료된 order(worktree 존재): followup 모드로 추가 요청 처리
    */
   private async handleOrderInput(orderId: string, message: string): Promise<void> {
     if (!this.baristaEngine) {
@@ -543,11 +549,84 @@ export class ExecutionManager {
     }
 
     const execution = this.activeExecutions.get(orderId);
+
+    // activeExecutions에 없는 경우 (복원되지 않은 완료된 order 등)
     if (!execution) {
+      // Order가 존재하고 worktree가 있는지 확인
+      const order = this.orchestrator.getOrder(orderId);
+      if (order && order.worktreeInfo?.path && !order.worktreeInfo.removed && existsSync(order.worktreeInfo.path)) {
+        // Worktree가 있는 완료된 order - 복원 후 followup 실행
+        console.log(`[ExecutionManager] Restoring session for order ${orderId} on-demand (worktree exists)`);
+
+        try {
+          // Barista 확인
+          let barista = this.orchestrator.getAllBaristas().find(b => b.provider === order.provider);
+          if (!barista) {
+            barista = this.orchestrator.createBarista(order.provider);
+          }
+
+          const cwd = order.worktreeInfo!.path;
+          const cafeId = order.cafeId || 'default';
+
+          // Session 복원
+          await this.baristaEngine.restoreSessionForFollowup(order, barista, cafeId, cwd);
+          this.activeExecutions.set(orderId, { baristaId: barista.id });
+
+          console.log(`[ExecutionManager] Session restored for order ${orderId}, executing followup`);
+
+          // Followup 실행
+          await this.baristaEngine.executeFollowup(orderId, message);
+
+          // UI에 알림
+          this.sendToRenderer('order:execution-progress', {
+            orderId,
+            stage: 'followup-started',
+            message: `Followup request sent: ${message.substring(0, 50)}...`,
+          });
+
+          return;
+        } catch (error: any) {
+          console.error(`[ExecutionManager] Failed to restore and execute followup for order ${orderId}:`, error);
+          return;
+        }
+      }
+
+      // Worktree도 없는 order - 찾을 수 없음
       console.warn('[ExecutionManager] No active execution for order:', orderId);
       return;
     }
 
+    // activeExecutions에 있는 경우 - 세션 상태에 따라 처리
+    const sessionStatus = this.baristaEngine.getOrderSessionStatus(orderId);
+    const order = this.orchestrator.getOrder(orderId);
+
+    // 완료된 order (worktree 존재) - followup으로 처리
+    // sessionStatus가 null이지만 order가 완료되고 worktree가 있으면 followup 처리
+    const isCompletedOrder = order && (
+      order.status === OrderStatus.COMPLETED ||
+      (order.worktreeInfo?.path && !order.worktreeInfo.removed)
+    );
+
+    if (sessionStatus === 'completed' || sessionStatus === 'followup' ||
+        (sessionStatus === null && isCompletedOrder && order.worktreeInfo?.path && existsSync(order.worktreeInfo.path))) {
+      console.log(`[ExecutionManager] Order ${orderId} is in ${sessionStatus || 'restored'} state, executing followup`);
+
+      try {
+        await this.baristaEngine.executeFollowup(orderId, message);
+
+        // UI에 알림
+        this.sendToRenderer('order:execution-progress', {
+          orderId,
+          stage: 'followup-started',
+          message: `Followup request sent: ${message.substring(0, 50)}...`,
+        });
+      } catch (error: any) {
+        console.error('[ExecutionManager] Failed to execute followup:', error);
+      }
+      return;
+    }
+
+    // 실행 중인 order - 터미널에 직접 입력
     try {
       await this.baristaEngine.sendInput(orderId, message);
       console.log('[ExecutionManager] Input sent to order:', orderId);
@@ -587,6 +666,80 @@ export class ExecutionManager {
    */
   getBaristaEngine(): BaristaEngineV2 | null {
     return this.baristaEngine;
+  }
+
+  /**
+   * Worktree가 있는 완료된 Order들의 Session 복원
+   * 앱 재시작 후 worktree가 존재하는 order에 추가 요청을 보낼 수 있도록 함
+   */
+  private async restoreSessionsForWorktreeOrders(): Promise<void> {
+    if (!this.baristaEngine) {
+      console.warn('[ExecutionManager] Barista engine not initialized, skipping session restore');
+      return;
+    }
+
+    console.log('[ExecutionManager] Restoring sessions for worktree orders...');
+
+    try {
+      // 모든 Order 조회
+      const allOrders = this.orchestrator.getAllOrders();
+      console.log(`[ExecutionManager] Found ${allOrders.length} total orders`);
+
+      // 복원 대상 Order 필터링:
+      // 1. status가 COMPLETED인 (완료된)
+      // 2. worktreeInfo가 있는
+      // 3. worktree 경로가 실제로 존재하는
+      // 4. worktree가 삭제되지 않은 (removed !== true)
+      const restorableOrders = allOrders.filter((order: Order) => {
+        // OrderStatus enum 사용
+        const isCompleted = order.status === OrderStatus.COMPLETED;
+
+        // worktreeInfo 확인
+        const hasWorktree = order.worktreeInfo?.path &&
+          order.worktreeInfo.path.length > 0 &&
+          !order.worktreeInfo.removed;
+
+        // 경로 실제 존재 확인
+        const pathExists = hasWorktree && existsSync(order.worktreeInfo!.path);
+
+        return isCompleted && hasWorktree && pathExists;
+      });
+
+      console.log(`[ExecutionManager] Found ${restorableOrders.length} orders with valid worktrees to restore`);
+
+      // 각 Order에 대해 Session 복원
+      for (const order of restorableOrders) {
+        try {
+          // Order의 provider와 일치하는 Barista 획득 (없으면 생성)
+          let barista = this.orchestrator.getAllBaristas().find(b => b.provider === order.provider);
+          if (!barista) {
+            // 일치하는 Barista가 없으면 생성
+            barista = this.orchestrator.createBarista(order.provider);
+            console.log(`[ExecutionManager] Created barista with provider ${order.provider} for session restore`);
+          }
+
+          // worktree 경로를 cwd로 사용
+          const cwd = order.worktreeInfo!.path;
+          const cafeId = order.cafeId || 'default';
+
+          // Session 복원 (이미 completed 상태로 복원됨)
+          await this.baristaEngine.restoreSessionForFollowup(order, barista, cafeId, cwd);
+
+          // activeExecutions에 등록 (worktree가 존재하는 한 계속 유지)
+          // 복원된 세션은 completed 상태이지만 followup이 가능하므로 activeExecutions에 유지
+          this.activeExecutions.set(order.id, { baristaId: barista.id });
+
+          console.log(`[ExecutionManager] Restored session for order ${order.id} with worktree ${cwd} (followup ready)`);
+        } catch (err: any) {
+          console.error(`[ExecutionManager] Failed to restore session for order ${order.id}:`, err);
+          // 실패해도 다른 order는 계속 시도
+        }
+      }
+
+      console.log(`[ExecutionManager] Session restore completed. ${restorableOrders.length} orders restored.`);
+    } catch (error: any) {
+      console.error('[ExecutionManager] Error restoring sessions:', error);
+    }
   }
 }
 

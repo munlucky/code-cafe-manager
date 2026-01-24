@@ -106,24 +106,32 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
   };
 
   const handleSendInput = useCallback(async (message: string) => {
-    if (!activeOrder) return;
+    // Debug logging
+    console.log('[NewCafeDashboard] handleSendInput called:', { activeOrderId, activeOrder, ordersCount: orders.length });
+
+    if (!activeOrder) {
+      console.error('[NewCafeDashboard] activeOrder is undefined:', { activeOrderId, orders });
+      return;
+    }
+
+    if (!activeOrder.id) {
+      console.error('[NewCafeDashboard] activeOrder.id is undefined:', { activeOrder, activeOrderId });
+      return;
+    }
 
     // Followup 모드 또는 완료 상태에서는 executeFollowup 사용
     if (isFollowupMode || isCompleted) {
       setIsFollowupExecuting(true);
       try {
-        // 완료 상태에서 처음 입력 시 백엔드 상태 동기화를 위해 enterFollowup 먼저 호출
-        if (isCompleted && !isFollowupMode) {
-          const enterResponse = await window.codecafe.order.enterFollowup(activeOrder.id);
-          if (!enterResponse.success) {
-            throw new Error(enterResponse.error?.message || 'Failed to enter followup mode');
-          }
-          setIsFollowupMode(true);
-        }
-
+        // executeFollowup은 completed/followup 상태에서 바로 동작
+        // 앱 재시작 후 복원된 세션에서도 enterFollowup 없이 바로 실행 가능
         const response = await window.codecafe.order.executeFollowup(activeOrder.id, message);
         if (!response.success) {
           throw new Error(response.error?.message || 'Failed to execute followup');
+        }
+        // 성공 시 followup 모드로 전환
+        if (!isFollowupMode) {
+          setIsFollowupMode(true);
         }
       } finally {
         setIsFollowupExecuting(false);
@@ -132,7 +140,7 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
       // Running 상태에서는 sendInput 사용
       onSendInput(activeOrder.id, message);
     }
-  }, [activeOrder, isFollowupMode, isCompleted, onSendInput]);
+  }, [activeOrder, isFollowupMode, isCompleted]);
 
   // Followup 모드 진입
   const handleEnterFollowup = useCallback(async () => {

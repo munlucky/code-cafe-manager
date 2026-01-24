@@ -79,11 +79,12 @@ export class Orchestrator extends EventEmitter {
     workflowName: string,
     counter: string,
     provider?: ProviderType,
-    vars: Record<string, string> = {}
+    vars: Record<string, string> = {},
+    cafeId?: string
   ): Order {
     // Provider가 지정되지 않으면 기본값 사용 (workflow의 stageConfigs가 우선)
     const defaultProvider: ProviderType = provider || 'claude-code';
-    const order = this.orderManager.createOrder(workflowId, workflowName, counter, defaultProvider, vars);
+    const order = this.orderManager.createOrder(workflowId, workflowName, counter, defaultProvider, vars, cafeId);
 
     // 첫 번째 stage의 provider를 사용하여 barista 생성 시도
     const idleBarista = this.baristaManager.findIdleBarista(defaultProvider);

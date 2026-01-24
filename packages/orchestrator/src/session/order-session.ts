@@ -1051,6 +1051,43 @@ export class OrderSession extends EventEmitter {
   }
 
   /**
+   * 세션을 followup/completed 상태로 복원 (앱 재시작 후 세션 복원용)
+   * worktree가 존재하는 완료된 order를 추가 요청 가능한 상태로 복원
+   *
+   * @param cwd 작업 디렉터리 (보통 worktree 경로)
+   */
+  restoreForFollowup(cwd: string): void {
+    console.log(`[OrderSession] Restoring session ${this.orderId} for followup with cwd: ${cwd}`);
+
+    // 상태를 completed로 설정 (followup 가능 상태)
+    this.status = 'completed';
+    this.currentCwd = cwd;
+
+    // TerminalGroup 미리 생성 (executeFollowup에서 바로 사용 가능하도록)
+    if (!this.terminalGroup) {
+      const providers: ProviderType[] = [this.barista.provider as ProviderType];
+      this.terminalGroup = new TerminalGroup(
+        {
+          orderId: this.orderId,
+          cwd,
+          providers,
+        },
+        this.terminalPool,
+        this.sharedContext
+      );
+
+      // 터미널 출력 이벤트 전파
+      this.terminalGroup.on('stage:output', (eventData) => {
+        this.emit('output', { orderId: this.orderId, stageId: eventData.stageId, data: eventData.data });
+      });
+
+      console.log(`[OrderSession] Created terminalGroup for restored session ${this.orderId}`);
+    }
+
+    console.log(`[OrderSession] Session ${this.orderId} restored to completed state, ready for followup`);
+  }
+
+  /**
    * 현재 작업 디렉터리 조회
    */
   getCwd(): string | null {

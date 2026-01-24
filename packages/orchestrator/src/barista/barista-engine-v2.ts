@@ -621,4 +621,66 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
     const session = this._getSessionOptional(orderId);
     return session?.getStatus().status ?? null;
   }
+
+  /**
+   * Restore session for followup mode (app restart recovery)
+   * Creates a new session in followup/completed state for an existing order
+   * @param order The order to restore session for
+   * @param barista The barista to use
+   * @param cafeId The cafe ID
+   * @param cwd The working directory (usually worktree path)
+   */
+  public async restoreSessionForFollowup(
+    order: Order,
+    barista: Barista,
+    cafeId: string,
+    cwd: string
+  ): Promise<void> {
+    console.log(`[BaristaEngineV2] Restoring session for order ${order.id} in followup mode`);
+
+    // Check if session already exists
+    if (this.activeExecutions.has(order.id)) {
+      console.log(`[BaristaEngineV2] Session already exists for order ${order.id}, skipping restore`);
+      return;
+    }
+
+    // Create new session
+    const session = this.sessionManager.createSession(order, barista, cafeId, cwd);
+
+    // Restore session to completed state with terminalGroup initialized
+    session.restoreForFollowup(cwd);
+
+    // Register in active executions
+    this.activeExecutions.set(order.id, { baristaId: barista.id, session });
+
+    // Forward session events
+    session.on('output', (data) => {
+      this.emit('order:output', { orderId: order.id, data: data.data });
+    });
+    session.on('stage:started', (data) => {
+      this.emit('stage:started', data);
+    });
+    session.on('stage:completed', (data) => {
+      this.emit('stage:completed', data);
+    });
+    session.on('stage:failed', (data) => {
+      this.emit('stage:failed', data);
+    });
+
+    // Forward followup events (previously missing)
+    session.on('session:followup', (data) => {
+      this.emit('order:followup', data);
+    });
+    session.on('session:followup-started', (data) => {
+      this.emit('order:followup-started', data);
+    });
+    session.on('session:followup-completed', (data) => {
+      this.emit('order:followup-completed', data);
+    });
+    session.on('session:followup-failed', (data) => {
+      this.emit('order:followup-failed', data);
+    });
+
+    console.log(`[BaristaEngineV2] Session restored for order ${order.id} with terminalGroup initialized`);
+  }
 }

@@ -125,9 +125,14 @@ export function App(): JSX.Element {
   const { orders: backendOrders, addOrder, removeOrder, updateOrder, sessionStatuses, setAwaitingInput } = useOrderStore();
 
   // Convert backend orders to design orders
-  const orders: DesignOrder[] = backendOrders.map(order =>
-    convertToDesignOrder(order, sessionStatuses[order.id])
-  ).map(o => ({
+  const orders: DesignOrder[] = backendOrders.map(order => {
+    const converted = convertToDesignOrder(order, sessionStatuses[order.id]);
+    // Debug logging
+    if (!converted.id) {
+      console.error('[App] Order without id:', order);
+    }
+    return converted;
+  }).map(o => ({
     ...o,
     logs: orderLogs[o.id] || o.logs,
   }));
