@@ -138,7 +138,8 @@ export function OrderStageProgress({
                     isActive ? 'text-brand' : colors.text
                   )}
                 >
-                  {stage.stageId}
+                  {/* followup-* 패턴은 "FOLLOWUP"으로 짧게 표시 */}
+                  {/^followup-\d+$/.test(stage.stageId) ? 'FOLLOWUP' : stage.stageId}
                 </span>
                 <span
                   className={cn(

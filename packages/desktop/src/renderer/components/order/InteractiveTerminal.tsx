@@ -18,6 +18,7 @@ interface OrderOutputEvent {
   timestamp: string;
   type: 'stdout' | 'stderr' | 'system' | 'user-input' | 'stage_start' | 'stage_end' | 'tool' | 'tool_result' | 'todo_progress' | 'result';
   content: string;
+  stageInfo?: { stageId: string; stageName?: string };
 }
 
 interface InteractiveTerminalProps {
@@ -108,7 +109,10 @@ export function InteractiveTerminal({
     } else if (event.type === 'user-input') {
       parsedEntry.type = 'user';
     } else if (event.type === 'stage_start' || event.type === 'stage_end') {
-      parsedEntry.type = 'thinking';
+      // FOLLOWUP 패턴 감지 (followup-1234567890)
+      const isFollowup = event.stageInfo?.stageId && /^followup-\d+$/.test(event.stageInfo.stageId);
+      // FOLLOWUP은 assistant 응답으로, 일반 stage는 thinking으로 처리
+      parsedEntry.type = isFollowup ? 'assistant' : 'thinking';
     } else if (event.type === 'tool' || event.type === 'tool_result') {
       parsedEntry.type = event.type === 'tool' ? 'tool_use' : 'tool_result';
     }

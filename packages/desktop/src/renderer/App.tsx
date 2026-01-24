@@ -36,10 +36,10 @@ const convertToDesignOrder = (order: Order, sessionStatus?: { awaitingInput: boo
 
   // Convert backend WorkflowLog to design WorkflowLog
   const designLogs: WorkflowLog[] = (order.logs || []).map(log => ({
+    id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     timestamp: log.timestamp,
-    type: log.type,
-    message: log.message,
-    data: log.data,
+    content: log.message,
+    type: log.type === 'warning' ? 'system' : log.type,
   }));
 
   return {

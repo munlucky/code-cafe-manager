@@ -435,24 +435,41 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
 
   /**
    * Find Claude CLI executable path
+   *
+   * 검색 순서 (안정적인 것 우선):
+   * 1. 공식 설치 경로 (Program Files)
+   * 2. npm 기반 설치 (Node.js)
+   * 3. 사용자 지정 경로 (CLAUDE_CODE_PATH)
+   * 4. 네이티브 설치 (.local/bin) - Bun 기반일 수 있음
+   *
+   * CODECAFE_SKIP_BUN 환경 변수가 설정되면 네이티브 경로 건너뜀
    */
   private findClaude(): string {
     const isWindows = os.platform() === 'win32';
     const homedir = os.homedir();
+    const skipBun = process.env.CODECAFE_SKIP_BUN === '1' || process.env.CODECAFE_SKIP_BUN === 'true';
 
-    const paths = isWindows
+    // 안정적인 경로 우선 (Node.js 기반)
+    const stablePaths = isWindows
       ? [
-          `${homedir}\\.local\\bin\\claude.exe`,
-          `${homedir}\\AppData\\Roaming\\npm\\claude.cmd`,
           `${homedir}\\AppData\\Local\\Programs\\claude\\claude.exe`,
+          `${homedir}\\AppData\\Roaming\\npm\\claude.cmd`,
           process.env.CLAUDE_CODE_PATH,
         ]
-      : [`${homedir}/.local/bin/claude`, '/usr/local/bin/claude', process.env.CLAUDE_CODE_PATH];
+      : ['/usr/local/bin/claude', process.env.CLAUDE_CODE_PATH];
+
+    // 네이티브 경로 (Bun 기반일 수 있음)
+    const nativePaths = isWindows
+      ? [`${homedir}\\.local\\bin\\claude.exe`]
+      : [`${homedir}/.local/bin/claude`];
+
+    // 검색 경로 구성 (안정적인 것 우선)
+    const paths = skipBun ? stablePaths : [...stablePaths, ...nativePaths];
 
     for (const p of paths.filter(Boolean) as string[]) {
       try {
         fs.accessSync(p);
-        this.log('claude-found', { path: p });
+        this.log('claude-found', { path: p, skipBun });
         return p;
       } catch {}
     }
@@ -733,6 +750,28 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         const chunk = data.toString();
         this.log('stderr-chunk', { chunk });
         errorOutput += chunk;
+
+        // Detect Bun crash (known issue with Bun-based Claude CLI)
+        if (chunk.includes('Bun v') && chunk.includes('panic')) {
+          const bunCrashMessage = `
+[BUN CRASH DETECTED]
+Your Claude CLI appears to be running on Bun, which is unstable.
+Please reinstall Claude CLI using Node.js:
+
+  npm uninstall -g @anthropic-ai/claude-code
+  npm install -g @anthropic-ai/claude-code
+
+Or download the official Node.js-based installer from:
+  https://claude.ai/download
+
+Original error:
+${chunk}
+`;
+          if (onData) {
+            onData(`${STDERR_MARKER}${bunCrashMessage}`);
+          }
+          return;
+        }
 
         // Forward stderr to UI with special marker for identification
         // execution-manager will parse this and set type='stderr'
