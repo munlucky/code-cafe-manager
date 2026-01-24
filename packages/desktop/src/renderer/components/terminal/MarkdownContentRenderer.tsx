@@ -6,6 +6,24 @@
 import { cn } from '../../utils/cn';
 import { CodeBlock, parseMarkdownCodeBlocks } from './CodeBlock';
 
+/**
+ * HTML 엔티티 디코딩
+ * ANSI to HTML 변환 시 이스케이프된 문자를 복원
+ * (보안: 이 함수는 이미 이스케이프된 콘텐츠에만 사용)
+ */
+function decodeHtmlEntities(text: string): string {
+  const htmlDecodeMap: Record<string, string> = {
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+    '&#x27;': "'",
+  };
+
+  return text.replace(/&(?:amp|lt|gt|quot|#39|#x27);/g, (match) => htmlDecodeMap[match] || match);
+}
+
 interface MarkdownContentRendererProps {
   content: string;
   /** 텍스트 크기 클래스 (기본: text-xs) */
@@ -31,7 +49,9 @@ export function MarkdownContentRenderer({
   isError = false,
   className,
 }: MarkdownContentRendererProps): JSX.Element {
-  const parsedContent = parseMarkdownCodeBlocks(content);
+  // HTML 엔티티 디코딩 적용 (ANSI to HTML 변환 시 이스케이프된 문자 복원)
+  const decodedContent = decodeHtmlEntities(content);
+  const parsedContent = parseMarkdownCodeBlocks(decodedContent);
   const hasCodeBlocks = parsedContent.some((p) => p.type === 'code');
 
   if (!hasCodeBlocks) {
@@ -45,7 +65,7 @@ export function MarkdownContentRenderer({
           className
         )}
       >
-        {content}
+        {decodedContent}
       </div>
     );
   }

@@ -138,7 +138,7 @@ export class TerminalGroup extends EventEmitter {
       role?: string;
     } = {}
   ): Promise<{ success: boolean; output?: string; error?: string }> {
-    const { parallel = false, includeContext = true } = options;
+    const { parallel = false, includeContext = true, role } = options;
 
     // 터미널 획득
     const terminalInfo = parallel
@@ -150,6 +150,18 @@ export class TerminalGroup extends EventEmitter {
 
     // SharedContext에 Stage 시작 기록
     this.sharedContext.startStage(stageId, provider);
+
+    // Stage 시작 마커를 터미널 출력으로 전송
+    const stageStartInfo = JSON.stringify({
+      stageId,
+      provider,
+      stageName: role || stageId,
+    });
+    this.emit('stage:output', {
+      orderId: this.orderId,
+      stageId,
+      data: `[STAGE_START] ${stageStartInfo}`,
+    });
 
     try {
       // 이전 Stage 결과를 프롬프트에 포함
@@ -175,6 +187,20 @@ export class TerminalGroup extends EventEmitter {
         // SharedContext에 결과 저장
         this.sharedContext.completeStage(stageId, result.output);
 
+        // Stage 완료 마커를 터미널 출력으로 전송
+        const stageResult = this.sharedContext.getStageResult(stageId);
+        const stageEndInfo = JSON.stringify({
+          stageId,
+          status: 'completed',
+          stageName: role || stageId,
+          duration: stageResult?.duration,
+        });
+        this.emit('stage:output', {
+          orderId: this.orderId,
+          stageId,
+          data: `[STAGE_END] ${stageEndInfo}`,
+        });
+
         this.emit('stage:completed', {
           orderId: this.orderId,
           stageId,
@@ -183,6 +209,19 @@ export class TerminalGroup extends EventEmitter {
         });
       } else {
         this.sharedContext.failStage(stageId, result.error || 'Unknown error');
+
+        // Stage 실패 마커를 터미널 출력으로 전송
+        const stageEndInfo = JSON.stringify({
+          stageId,
+          status: 'failed',
+          stageName: role || stageId,
+          error: result.error,
+        });
+        this.emit('stage:output', {
+          orderId: this.orderId,
+          stageId,
+          data: `[STAGE_END] ${stageEndInfo}`,
+        });
 
         this.emit('stage:failed', {
           orderId: this.orderId,
@@ -196,6 +235,19 @@ export class TerminalGroup extends EventEmitter {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.sharedContext.failStage(stageId, errorMessage);
+
+      // Stage 실패 마커를 터미널 출력으로 전송 (catch 블록)
+      const stageEndInfo = JSON.stringify({
+        stageId,
+        status: 'failed',
+        stageName: role || stageId,
+        error: errorMessage,
+      });
+      this.emit('stage:output', {
+        orderId: this.orderId,
+        stageId,
+        data: `[STAGE_END] ${stageEndInfo}`,
+      });
 
       this.emit('stage:failed', {
         orderId: this.orderId,

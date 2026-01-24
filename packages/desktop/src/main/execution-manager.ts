@@ -195,23 +195,26 @@ export class ExecutionManager {
       metrics.totalChunks++;
 
       // Parse output type from markers (uses parseOutputType helper)
-      const { type, content, todoProgress } = parseOutputType(data.data);
+      const parsed = parseOutputType(data.data);
+
+      // Map user_prompt to user-input for frontend display
+      const outputType = parsed.type === 'user_prompt' ? 'user-input' : parsed.type;
 
       // 1. UI 전송 (실시간 보기용) - order:output 형식으로 전송 (ANSI를 HTML로 변환)
       // SECURITY: convertAnsiToHtml properly escapes HTML to prevent XSS
       this.sendToRenderer('order:output', {
         orderId: data.orderId,
         timestamp: new Date().toISOString(),
-        type,
-        content: convertAnsiToHtml(content),
+        type: outputType,
+        content: convertAnsiToHtml(parsed.content),
       });
 
       // 2. Todo 진행률이 있으면 별도 이벤트로 전송
-      if (todoProgress) {
+      if (parsed.todoProgress) {
         this.sendToRenderer('order:todo-progress', {
           orderId: data.orderId,
           timestamp: new Date().toISOString(),
-          ...todoProgress,
+          ...parsed.todoProgress,
         });
       }
 
