@@ -43,6 +43,12 @@ export const TOOL_MARKER = '[TOOL] ' as const;
 export const TOOL_RESULT_MARKER = '[TOOL_RESULT] ' as const;
 
 /**
+ * Marker for file edit operations
+ * Format: [FILE_EDIT] {"type": "write|edit", "path": "...", "success": true}
+ */
+export const FILE_EDIT_MARKER = '[FILE_EDIT] ' as const;
+
+/**
  * Marker for todo progress
  * Used to forward todo progress information from Claude's TodoWrite
  */
@@ -75,7 +81,7 @@ export const USER_PROMPT_MARKER = '[USER_PROMPT] ' as const;
 /**
  * Output type discriminator
  */
-export type OutputType = 'stdout' | 'stderr' | 'system' | 'user-input' | 'tool' | 'tool_result' | 'todo_progress' | 'result' | 'stage_start' | 'stage_end' | 'user_prompt';
+export type OutputType = 'stdout' | 'stderr' | 'system' | 'user-input' | 'tool' | 'tool_result' | 'file_edit' | 'todo_progress' | 'result' | 'stage_start' | 'stage_end' | 'user_prompt';
 
 /**
  * Todo progress data structure
@@ -135,6 +141,34 @@ export function parseOutputType(content: string): { type: OutputType; content: s
       type: 'tool_result',
       content: content.substring(TOOL_RESULT_MARKER.length),
     };
+  }
+
+  if (content.startsWith(FILE_EDIT_MARKER)) {
+    const jsonStr = content.substring(FILE_EDIT_MARKER.length);
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        typeof parsed.type === 'string' &&
+        typeof parsed.path === 'string' &&
+        typeof parsed.success === 'boolean'
+      ) {
+        const icon = parsed.success ? '+' : 'x';
+        const action = parsed.type === 'write' ? 'Created' : 'Modified';
+        return {
+          type: 'file_edit',
+          content: `[${icon}] ${action}: ${parsed.path}`,
+        };
+      }
+      throw new Error('Invalid FILE_EDIT JSON structure');
+    } catch (error) {
+      console.error(`[parseOutputType] Failed to parse FILE_EDIT JSON:`, error, jsonStr);
+      return {
+        type: 'file_edit',
+        content: jsonStr,
+      };
+    }
   }
 
   if (content.startsWith(TODO_PROGRESS_MARKER)) {

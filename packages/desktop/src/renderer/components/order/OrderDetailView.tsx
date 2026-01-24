@@ -4,7 +4,8 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { ArrowLeft, Terminal, Info, Clock, GitBranch, User, RefreshCw, XCircle } from 'lucide-react';
+import { cn } from '../../utils/cn';
+import { ArrowLeft, Terminal, Info, Clock, GitBranch, User, RefreshCw, XCircle, MessageSquarePlus, GitMerge, Trash2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { StatusBadge } from '../ui/Badge';
@@ -14,6 +15,7 @@ import { formatRelativeTime } from '../../utils/formatters';
 import type { Order, ExtendedWorkflowInfo } from '../../types/models';
 import { OrderStatus } from '../../types/models';
 import type { RetryOption } from '../../types/window';
+import { useOrderStore } from '../../store/useOrderStore';
 
 /** Polling interval for refreshing order status */
 const ORDER_REFRESH_INTERVAL_MS = 3000;
@@ -38,10 +40,20 @@ export function OrderDetailView({
   const [selectedRetryStage, setSelectedRetryStage] = useState<string>('');
   const [retryType, setRetryType] = useState<'stage' | 'beginning'>('stage');
   const [isRetrying, setIsRetrying] = useState(false);
+  const [isFollowupMode, setIsFollowupMode] = useState(false);
+  const [isFollowupExecuting, setIsFollowupExecuting] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
+  const [mergeResult, setMergeResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Get awaiting input status from store
+  const sessionStatus = useOrderStore((state) => state.sessionStatuses[order.id]);
+  const isAwaitingInput = sessionStatus?.awaitingInput ?? false;
+
   const isRunning = currentOrder.status === OrderStatus.RUNNING;
   const isPending = currentOrder.status === OrderStatus.PENDING;
   const isCompleted = currentOrder.status === OrderStatus.COMPLETED;
   const isFailed = currentOrder.status === OrderStatus.FAILED;
+  const canSendInput = isRunning || isFollowupMode || isAwaitingInput;
 
   // Workflow 정보 가져오기
   useEffect(() => {
@@ -138,12 +150,174 @@ export function OrderDetailView({
     fetchRetryOptions();
   }, [order.id, isFailed]);
 
-  // 사용자 입력 전송
+  // 사용자 입력 전송 (running 또는 followup 모드)
   const handleSendInput = useCallback(async (message: string) => {
-    const response = await window.codecafe.order.sendInput(order.id, message);
-    if (!response.success) {
-      throw new Error(response.error?.message || 'Failed to send input');
+    if (isFollowupMode) {
+      // Followup 모드에서는 executeFollowup 사용
+      setIsFollowupExecuting(true);
+      try {
+        const response = await window.codecafe.order.executeFollowup(order.id, message);
+        if (!response.success) {
+          throw new Error(response.error?.message || 'Failed to execute followup');
+        }
+      } finally {
+        setIsFollowupExecuting(false);
+      }
+    } else {
+      // Running 상태에서는 sendInput 사용
+      const response = await window.codecafe.order.sendInput(order.id, message);
+      if (!response.success) {
+        throw new Error(response.error?.message || 'Failed to send input');
+      }
     }
+  }, [order.id, isFollowupMode]);
+
+  // Followup 모드 진입
+  const handleEnterFollowup = useCallback(async () => {
+    try {
+      const response = await window.codecafe.order.enterFollowup(order.id);
+      if (response.success) {
+        setIsFollowupMode(true);
+      } else {
+        console.error('Failed to enter followup mode:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to enter followup mode:', error);
+    }
+  }, [order.id]);
+
+  // Followup 모드 종료
+  const handleFinishFollowup = useCallback(async () => {
+    try {
+      const response = await window.codecafe.order.finishFollowup(order.id);
+      if (response.success) {
+        setIsFollowupMode(false);
+      } else {
+        console.error('Failed to finish followup:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to finish followup:', error);
+    }
+  }, [order.id]);
+
+  // Worktree 병합 처리
+  const handleMergeWorktree = useCallback(async (deleteAfterMerge: boolean = false) => {
+    if (!currentOrder.worktreeInfo?.path || !currentOrder.worktreeInfo?.repoPath) {
+      console.error('No worktree info available');
+      return;
+    }
+
+    setIsMerging(true);
+    setMergeResult(null);
+
+    try {
+      const response = await window.codecafe.worktree.mergeToTarget({
+        worktreePath: currentOrder.worktreeInfo.path,
+        repoPath: currentOrder.worktreeInfo.repoPath,
+        targetBranch: currentOrder.worktreeInfo.baseBranch || 'main',
+        deleteAfterMerge,
+        squash: false,
+      });
+
+      if (response.success) {
+        setMergeResult({
+          success: true,
+          message: `Merged to ${response.data.targetBranch}${deleteAfterMerge ? ' (worktree removed)' : ''}`,
+        });
+        // Refresh order data
+        const orderResponse = await window.codecafe.order.get(order.id);
+        if (orderResponse.success && orderResponse.data) {
+          setCurrentOrder(orderResponse.data);
+        }
+      } else {
+        setMergeResult({
+          success: false,
+          message: response.error?.message || 'Merge failed',
+        });
+      }
+    } catch (error) {
+      setMergeResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Merge failed',
+      });
+    } finally {
+      setIsMerging(false);
+    }
+  }, [currentOrder.worktreeInfo, order.id]);
+
+  // Worktree만 삭제 (브랜치 유지)
+  const handleRemoveWorktreeOnly = useCallback(async () => {
+    if (!currentOrder.worktreeInfo?.path || !currentOrder.worktreeInfo?.repoPath) {
+      console.error('No worktree info available');
+      return;
+    }
+
+    setIsMerging(true);
+    setMergeResult(null);
+    try {
+      const response = await window.codecafe.worktree.removeOnly(
+        currentOrder.worktreeInfo.path,
+        currentOrder.worktreeInfo.repoPath
+      );
+
+      if (response.success) {
+        setMergeResult({
+          success: true,
+          message: `Worktree removed, branch '${response.data.branch}' preserved`,
+        });
+        // Refresh order data
+        const orderResponse = await window.codecafe.order.get(order.id);
+        if (orderResponse.success && orderResponse.data) {
+          setCurrentOrder(orderResponse.data);
+        }
+      } else {
+        setMergeResult({
+          success: false,
+          message: response.error?.message || 'Failed to remove worktree',
+        });
+      }
+    } catch (error) {
+      setMergeResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to remove worktree',
+      });
+    } finally {
+      setIsMerging(false);
+    }
+  }, [currentOrder.worktreeInfo, order.id]);
+
+  // Followup 이벤트 리스너
+  useEffect(() => {
+    const cleanupFollowup = window.codecafe.order.onFollowup((data: { orderId: string }) => {
+      if (data.orderId === order.id) {
+        setIsFollowupMode(true);
+      }
+    });
+
+    const cleanupFollowupCompleted = window.codecafe.order.onFollowupCompleted((data: { orderId: string }) => {
+      if (data.orderId === order.id) {
+        setIsFollowupExecuting(false);
+      }
+    });
+
+    const cleanupFollowupFailed = window.codecafe.order.onFollowupFailed((data: { orderId: string }) => {
+      if (data.orderId === order.id) {
+        setIsFollowupExecuting(false);
+      }
+    });
+
+    const cleanupFollowupFinished = window.codecafe.order.onFollowupFinished((data: { orderId: string }) => {
+      if (data.orderId === order.id) {
+        setIsFollowupMode(false);
+      }
+    });
+
+    return () => {
+      cleanupFollowup();
+      cleanupFollowupCompleted();
+      cleanupFollowupFailed();
+      cleanupFollowupFinished();
+    };
   }, [order.id]);
 
   // 재시도 처리 (선택한 stage부터)
@@ -265,6 +439,30 @@ export function OrderDetailView({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Followup 버튼 - 완료 상태에서 추가 명령 가능 */}
+          {isCompleted && !isFollowupMode && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleEnterFollowup}
+              className="flex items-center gap-1"
+            >
+              <MessageSquarePlus className="w-4 h-4" />
+              Continue
+            </Button>
+          )}
+          {/* Followup 종료 버튼 */}
+          {isFollowupMode && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleFinishFollowup}
+              className="flex items-center gap-1"
+            >
+              <XCircle className="w-4 h-4" />
+              Finish
+            </Button>
+          )}
           {(isPending || isRunning) && onCancel && (
             <Button
               variant="secondary"
@@ -323,6 +521,72 @@ export function OrderDetailView({
               )}
             </div>
           </Card>
+
+          {/* Worktree Management Card - 완료 상태에서 worktree가 있을 때 */}
+          {isCompleted && currentOrder.worktreeInfo && !currentOrder.worktreeInfo.removed && (
+            <Card className="p-4 border-green-500/30 bg-green-500/5">
+              <h3 className="text-sm font-medium text-green-400 mb-3 flex items-center gap-2">
+                <GitMerge className="w-4 h-4" />
+                Worktree Management
+              </h3>
+              <div className="space-y-3">
+                <div className="text-xs text-gray-400 bg-gray-800/50 p-2 rounded">
+                  <div className="flex items-center gap-2 mb-1">
+                    <GitBranch className="w-3 h-3" />
+                    <span className="font-mono text-coffee">{currentOrder.worktreeInfo.branch}</span>
+                  </div>
+                  <div className="text-gray-500 truncate">
+                    {currentOrder.worktreeInfo.path}
+                  </div>
+                </div>
+
+                {mergeResult && (
+                  <div className={cn(
+                    'text-xs p-2 rounded',
+                    mergeResult.success ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                  )}>
+                    {mergeResult.message}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleMergeWorktree(false)}
+                    disabled={isMerging}
+                    className="flex items-center justify-center gap-1 w-full"
+                  >
+                    <GitMerge className={cn('w-3 h-3', isMerging && 'animate-spin')} />
+                    {isMerging ? 'Merging...' : 'Merge to Main'}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => handleMergeWorktree(true)}
+                    disabled={isMerging}
+                    className="flex items-center justify-center gap-1 w-full text-yellow-400 hover:text-yellow-300"
+                  >
+                    <GitMerge className="w-3 h-3" />
+                    Merge & Delete Worktree
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleRemoveWorktreeOnly}
+                    disabled={isMerging}
+                    className="flex items-center justify-center gap-1 w-full text-red-400 hover:text-red-300"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Remove Worktree Only
+                  </Button>
+                </div>
+                <div className="text-[10px] text-gray-500">
+                  * "Remove Worktree Only" preserves the branch for later use
+                </div>
+              </div>
+            </Card>
+          )}
 
           {/* Prompt Card */}
           {currentOrder.prompt && (
@@ -463,11 +727,13 @@ export function OrderDetailView({
         <div className="flex-1 min-h-[400px] lg:min-h-0">
           <InteractiveTerminal
             orderId={currentOrder.id}
-            onSendInput={isRunning ? handleSendInput : undefined}
-            isRunning={isRunning}
+            onSendInput={canSendInput ? handleSendInput : undefined}
+            isRunning={isRunning || isFollowupExecuting}
+            isAwaitingInput={isAwaitingInput}
             startedAt={currentOrder.startedAt}
             initialPrompt={currentOrder.prompt}
             className="h-full"
+            placeholder={isFollowupMode ? 'Enter followup command...' : undefined}
           />
         </div>
       </div>
