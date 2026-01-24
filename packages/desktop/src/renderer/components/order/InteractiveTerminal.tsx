@@ -30,6 +30,8 @@ interface InteractiveTerminalProps {
   startedAt?: string | Date | null;
   /** 초기 프롬프트 (order 생성 시 사용자가 입력한 요청) */
   initialPrompt?: string;
+  /** 입력 필드 placeholder */
+  placeholder?: string;
 }
 
 /**
@@ -48,6 +50,7 @@ export function InteractiveTerminal({
   worktreePath,
   startedAt,
   initialPrompt,
+  placeholder,
 }: InteractiveTerminalProps): JSX.Element {
   const [entries, setEntries] = useState<ParsedLogEntry[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -364,8 +367,8 @@ export function InteractiveTerminal({
         </button>
       )}
 
-      {/* Input Area - Highlight when awaiting input */}
-      {(isAwaitingInput || isRunning) && onSendInput && (
+      {/* Input Area - Show when onSendInput is available */}
+      {onSendInput && (
         <div className={cn(
           'border-t border-cafe-800 p-3 transition-colors duration-300',
           isAwaitingInput ? 'bg-brand/10 border-brand/30' : 'bg-cafe-900'
@@ -385,7 +388,7 @@ export function InteractiveTerminal({
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type command or response..."
+              placeholder={placeholder || "Type command or response..."}
               className="flex-1 bg-transparent border-none text-cafe-100 focus:ring-0 outline-none placeholder-cafe-700"
               disabled={sending}
             />

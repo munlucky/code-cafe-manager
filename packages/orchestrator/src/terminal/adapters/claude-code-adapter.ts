@@ -151,6 +151,67 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
   }
 
   /**
+   * Format tool input parameters for display
+   * Shows relevant details based on tool type
+   */
+  private formatToolInput(toolName: string, input: Record<string, unknown>): string {
+    const lines: string[] = [];
+    const indent = '  ';
+
+    switch (toolName) {
+      case 'Edit':
+        if (input.file_path) lines.push(`${indent}file: ${input.file_path}`);
+        break;
+      case 'Write':
+        if (input.file_path) lines.push(`${indent}file: ${input.file_path}`);
+        break;
+      case 'Read':
+        if (input.file_path) lines.push(`${indent}file: ${input.file_path}`);
+        break;
+      case 'Glob':
+        if (input.pattern) lines.push(`${indent}pattern: ${input.pattern}`);
+        if (input.path) lines.push(`${indent}path: ${input.path}`);
+        break;
+      case 'Grep':
+        if (input.pattern) lines.push(`${indent}pattern: ${input.pattern}`);
+        if (input.path) lines.push(`${indent}path: ${input.path}`);
+        break;
+      case 'Bash':
+        if (input.command) {
+          const cmd = String(input.command);
+          // Truncate long commands
+          const displayCmd = cmd.length > 100 ? cmd.substring(0, 100) + '...' : cmd;
+          lines.push(`${indent}$ ${displayCmd}`);
+        }
+        break;
+      case 'Task':
+        if (input.description) lines.push(`${indent}desc: ${input.description}`);
+        if (input.subagent_type) lines.push(`${indent}type: ${input.subagent_type}`);
+        break;
+      case 'TodoWrite':
+        if (input.todos && Array.isArray(input.todos)) {
+          const count = input.todos.length;
+          lines.push(`${indent}todos: ${count} items`);
+        }
+        break;
+      default:
+        // For other tools, show first few key parameters
+        const keys = Object.keys(input).slice(0, 3);
+        for (const key of keys) {
+          const value = input[key];
+          if (value !== undefined && value !== null) {
+            const displayValue = typeof value === 'string'
+              ? (value.length > 50 ? value.substring(0, 50) + '...' : value)
+              : JSON.stringify(value).substring(0, 50);
+            lines.push(`${indent}${key}: ${displayValue}`);
+          }
+        }
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
    * Structured log helper
    */
   private log(step: string, details: Record<string, unknown> = {}): void {
@@ -184,7 +245,24 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
           if (onData) onData(block.text);
           extracted = true;
         } else if (block.type === 'tool_use') {
-          if (onData) onData(`[TOOL] ${block.name}\n`);
+          // Format tool details with name and input parameters
+          let toolLog = `[TOOL] ${block.name}`;
+          if (block.input && typeof block.input === 'object') {
+            const input = block.input as Record<string, unknown>;
+            // Format key parameters for visibility
+            const formattedParams = this.formatToolInput(block.name, input);
+            if (formattedParams) {
+              toolLog += `\n${formattedParams}`;
+            }
+            // Emit FILE_EDIT marker for Edit/Write operations
+            if ((block.name === 'Edit' || block.name === 'Write') && input.file_path) {
+              const editType = block.name === 'Write' ? 'write' : 'edit';
+              if (onData) {
+                onData(`[FILE_EDIT] ${JSON.stringify({ type: editType, path: input.file_path, success: true })}\n`);
+              }
+            }
+          }
+          if (onData) onData(`${toolLog}\n`);
           extracted = true;
         } else if (block.type === 'thinking') {
           // Thinking block - skip silently (internal reasoning)
