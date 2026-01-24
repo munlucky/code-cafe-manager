@@ -733,7 +733,10 @@ class OrderManager {
           console.log('[Order IPC] Cleaning up worktree only for order:', orderId);
 
           const order = orchestrator.getOrder(orderId);
-          if (!order?.worktreeInfo?.path) {
+          if (!order) {
+            throw new Error(`Order not found: ${orderId}`);
+          }
+          if (!order.worktreeInfo?.path) {
             throw new Error(`No worktree info for order: ${orderId}`);
           }
 
@@ -774,7 +777,10 @@ class OrderManager {
           console.log('[Order IPC] Merging worktree to main for order:', orderId);
 
           const order = orchestrator.getOrder(orderId);
-          if (!order?.worktreeInfo?.path) {
+          if (!order) {
+            throw new Error(`Order not found: ${orderId}`);
+          }
+          if (!order.worktreeInfo?.path) {
             throw new Error(`No worktree info for order: ${orderId}`);
           }
 

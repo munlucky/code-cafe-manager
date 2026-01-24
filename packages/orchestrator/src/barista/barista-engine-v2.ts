@@ -557,6 +557,9 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
     console.log(`[BaristaEngineV2] Executing followup for order ${orderId}`);
 
     // Forward session events
+    execution.session.once('session:followup-started', (data) => {
+      this.emit('order:followup-started', data);
+    });
     execution.session.once('session:followup-completed', (data) => {
       this.emit('order:followup-completed', data);
     });

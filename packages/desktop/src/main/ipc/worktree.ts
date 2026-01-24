@@ -60,10 +60,7 @@ export function registerWorktreeHandlers(): void {
   ipcMain.handle(
     'worktree:mergeToTarget',
     async (_, options: WorktreeMergeOptions) =>
-      handleIpc(async () => {
-        const result = await WorktreeManager.mergeToTarget(options);
-        return { success: result.success, data: result };
-      }, 'worktree:mergeToTarget')
+      handleIpc(() => WorktreeManager.mergeToTarget(options), 'worktree:mergeToTarget')
   );
 
   /**
@@ -73,10 +70,7 @@ export function registerWorktreeHandlers(): void {
   ipcMain.handle(
     'worktree:removeOnly',
     async (_, worktreePath: string, repoPath: string) =>
-      handleIpc(async () => {
-        const result = await WorktreeManager.removeWorktreeOnly(worktreePath, repoPath);
-        return { success: result.success, data: result };
-      }, 'worktree:removeOnly')
+      handleIpc(() => WorktreeManager.removeWorktreeOnly(worktreePath, repoPath), 'worktree:removeOnly')
   );
 
   console.log('[IPC] Worktree handlers registered');

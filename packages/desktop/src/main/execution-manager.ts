@@ -338,6 +338,11 @@ export class ExecutionManager {
       this.sendToRenderer('order:followup', data);
     });
 
+    this.baristaEngine.on('order:followup-started', (data: { orderId: string; prompt: string }) => {
+      console.log(`[ExecutionManager] Order FOLLOWUP STARTED: ${data.orderId}`);
+      this.sendToRenderer('order:followup-started', data);
+    });
+
     this.baristaEngine.on('order:followup-completed', (data: { orderId: string; stageId?: string; output?: string }) => {
       console.log(`[ExecutionManager] Order FOLLOWUP COMPLETED: ${data.orderId}`);
       this.sendToRenderer('order:followup-completed', data);
