@@ -48,6 +48,7 @@ export interface WorktreeMergeOptions {
   deleteAfterMerge?: boolean; // 병합 후 worktree 삭제 여부
   squash?: boolean; // squash merge 사용 여부
   autoCommit?: boolean; // 미커밋 변경사항 자동 커밋 여부
+  autoCommitMessage?: string; // AI가 생성한 커밋 메시지 (autoCommit 시 사용)
 }
 
 /**

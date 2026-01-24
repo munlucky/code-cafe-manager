@@ -102,6 +102,8 @@ contextBridge.exposeInMainWorld('codecafe', {
     // New: merge and cleanup functions
     mergeToTarget: createIpcInvoker('worktree:mergeToTarget'),
     removeOnly: createIpcInvoker('worktree:removeOnly'),
+    // AI commit message generation
+    generateCommitMessage: createIpcInvoker('worktree:generateCommitMessage'),
   },
 
   workflow: {

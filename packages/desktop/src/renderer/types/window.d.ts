@@ -381,7 +381,13 @@ declare global {
           targetBranch?: string;
           deleteAfterMerge?: boolean;
           squash?: boolean;
+          autoCommit?: boolean;
+          autoCommitMessage?: string;
         }) => Promise<IpcResponseMergeToTarget>;
+        generateCommitMessage: (
+          worktreePath: string,
+          orderPrompt?: string
+        ) => Promise<IpcResponse<{ success: boolean; message?: string; error?: string }>>;
       };
 
       // Order 관리 (Legacy flat API - backward compatibility)

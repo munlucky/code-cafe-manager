@@ -183,13 +183,30 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = ({
     setMergeResult(null);
 
     try {
+      // 1. AI로 커밋 메시지 생성
+      let autoCommitMessage: string | undefined;
+      try {
+        const commitMsgResponse = await window.codecafe.worktree.generateCommitMessage(
+          activeOrder.worktreeInfo.path,
+          activeOrder.prompt
+        );
+        if (commitMsgResponse.success && commitMsgResponse.data?.message) {
+          autoCommitMessage = commitMsgResponse.data.message;
+          console.log('[Merge] AI generated commit message:', autoCommitMessage);
+        }
+      } catch (err) {
+        console.warn('[Merge] Failed to generate AI commit message, using default:', err);
+      }
+
+      // 2. Merge 실행
       const response = await window.codecafe.worktree.mergeToTarget({
         worktreePath: activeOrder.worktreeInfo.path,
         repoPath: activeOrder.worktreeInfo.repoPath,
         targetBranch: activeOrder.worktreeInfo.baseBranch || 'main',
         deleteAfterMerge,
         squash: false,
-        autoCommit: true, // 미커밋 변경사항 자동 커밋
+        autoCommit: true,
+        autoCommitMessage,
       });
 
       if (response.success && response.data) {

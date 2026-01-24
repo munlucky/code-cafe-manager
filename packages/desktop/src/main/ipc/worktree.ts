@@ -1,5 +1,6 @@
 import { ipcMain, shell } from 'electron';
 import { WorktreeManager, WorktreeMergeOptions } from '@codecafe/git-worktree';
+import { generateCommitMessage } from '../utils/ai-commit-message';
 
 /**
  * Standardized IPC handler wrapper
@@ -71,6 +72,16 @@ export function registerWorktreeHandlers(): void {
     'worktree:removeOnly',
     async (_, worktreePath: string, repoPath: string) =>
       handleIpc(() => WorktreeManager.removeWorktreeOnly(worktreePath, repoPath), 'worktree:removeOnly')
+  );
+
+  /**
+   * AI로 커밋 메시지 생성
+   * git diff를 분석해서 conventional commit 형식의 메시지 생성
+   */
+  ipcMain.handle(
+    'worktree:generateCommitMessage',
+    async (_, worktreePath: string, orderPrompt?: string) =>
+      handleIpc(() => generateCommitMessage({ worktreePath, orderPrompt }), 'worktree:generateCommitMessage')
   );
 
   console.log('[IPC] Worktree handlers registered');
