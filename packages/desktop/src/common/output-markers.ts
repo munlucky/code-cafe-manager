@@ -4,9 +4,33 @@
  */
 
 /**
+ * HTML 엔티티 디코딩
+ * JSON 내의 &quot; &amp; 등을 원래 문자로 변환
+ */
+function decodeHtmlEntities(text: string): string {
+  const htmlDecodeMap: Record<string, string> = {
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+    '&#x27;': "'",
+    '&apos;': "'",
+  };
+
+  return text.replace(/&(amp|lt|gt|quot|#39|#x27|apos);/g, (match) => htmlDecodeMap[match] || match);
+}
+
+/**
  * Stage별 카테고리 매핑
+ * followup-* 패턴은 FOLLOWUP 카테고리로 처리
  */
 function getStageCategory(stageId: string): string {
+  // FOLLOWUP 패턴 처리 (followup-1234567890 형태)
+  if (/^followup-\d+$/.test(stageId)) {
+    return 'FOLLOWUP';
+  }
+
   const categoryMap: Record<string, string> = {
     'analyze': 'ANALYSIS',
     'plan': 'PLANNING',
@@ -199,17 +223,21 @@ export function parseOutputType(content: string): { type: OutputType; content: s
   if (content.startsWith(STAGE_START_MARKER)) {
     const jsonStr = content.substring(STAGE_START_MARKER.length);
     try {
-      const parsed = JSON.parse(jsonStr);
+      // HTML 엔티티 디코딩 후 JSON 파싱
+      const decodedJsonStr = decodeHtmlEntities(jsonStr);
+      const parsed = JSON.parse(decodedJsonStr);
       if (!isValidStageInfo(parsed)) {
         throw new Error('Invalid STAGE_START JSON structure: missing stageId');
       }
       const stageInfo: StageInfo = { ...parsed, status: 'started' };
-      const category = getStageCategory(stageInfo.stageId);
+      // stageId도 디코딩 필요할 수 있음
+      const decodedStageId = decodeHtmlEntities(stageInfo.stageId);
+      const category = getStageCategory(decodedStageId);
       const providerLabel = stageInfo.provider ? ` (${stageInfo.provider})` : '';
       const skillsLabel = stageInfo.skills?.length ? `\n   Skills: ${stageInfo.skills.join(', ')}` : '';
       return {
         type: 'stage_start',
-        content: `▶ Stage Started: ${stageInfo.stageId} (${category})${providerLabel}${skillsLabel}`,
+        content: `▶ Stage Started: ${decodedStageId} (${category})${providerLabel}${skillsLabel}`,
         stageInfo,
       };
     } catch (error) {
@@ -224,17 +252,21 @@ export function parseOutputType(content: string): { type: OutputType; content: s
   if (content.startsWith(STAGE_END_MARKER)) {
     const jsonStr = content.substring(STAGE_END_MARKER.length);
     try {
-      const parsed = JSON.parse(jsonStr);
+      // HTML 엔티티 디코딩 후 JSON 파싱
+      const decodedJsonStr = decodeHtmlEntities(jsonStr);
+      const parsed = JSON.parse(decodedJsonStr);
       if (!isValidStageInfo(parsed)) {
         throw new Error('Invalid STAGE_END JSON structure: missing stageId');
       }
       const stageInfo = parsed as StageInfo;
-      const category = getStageCategory(stageInfo.stageId);
+      // stageId도 디코딩
+      const decodedStageId = decodeHtmlEntities(stageInfo.stageId);
+      const category = getStageCategory(decodedStageId);
       const durationLabel = stageInfo.duration ? ` (${(stageInfo.duration / 1000).toFixed(1)}s)` : '';
       const statusIcon = stageInfo.status === 'completed' ? '✓' : '✗';
       return {
         type: 'stage_end',
-        content: `${statusIcon} Stage ${stageInfo.status === 'completed' ? 'Completed' : 'Failed'}: ${stageInfo.stageId} (${category})${durationLabel}`,
+        content: `${statusIcon} Stage ${stageInfo.status === 'completed' ? 'Completed' : 'Failed'}: ${decodedStageId} (${category})${durationLabel}`,
         stageInfo,
       };
     } catch (error) {
@@ -259,3 +291,8 @@ export function parseOutputType(content: string): { type: OutputType; content: s
     content,
   };
 }
+
+/**
+ * HTML 엔티티 디코딩을 export (다른 모듈에서 사용 가능하도록)
+ */
+export { decodeHtmlEntities };

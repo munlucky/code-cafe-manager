@@ -188,12 +188,16 @@ export function summarizeJSONContent(content: string): JSONSummary {
 /**
  * raw 텍스트에서 더 구체적인 타입 추론
  * 패턴 기반으로 assistant, thinking 등을 감지
+ *
+ * 개선사항: AI 응답 끝 감지를 더 정확하게 하여 thinking으로 오분류되는 문제 해결
  */
 function inferTypeFromContent(content: string): ParsedLogEntry['type'] {
   const trimmed = content.trim();
+  const lines = trimmed.split('\n');
 
   // Stage/Phase 시작 패턴 - thinking으로 분류
-  if (/^(Stage|Phase|Step)\s*\d+/i.test(trimmed)) {
+  // 단, 전체가 stage 패턴일 때만 (AI 응답 내에 stage 패턴이 있을 수 있음)
+  if (/^(Stage|Phase|Step)\s*\d+/i.test(trimmed) && lines.length < 5) {
     return 'thinking';
   }
 
@@ -215,18 +219,46 @@ function inferTypeFromContent(content: string): ParsedLogEntry['type'] {
     return 'tool_result';
   }
 
-  // 일반 텍스트 응답 패턴 (마침표로 끝나는 문장들) - assistant
+  // AI 응답 끝 감지 패턴 (개선됨)
+  // 1. 여러 줄의 텍스트로 구성된 응답
+  if (lines.length >= 2 && trimmed.length > 50) {
+    // 도구/에러 패턴이 아니면 assistant로 분류
+    const hasToolPattern = /^\[?(Tool|TOOL)\]?[:\s]/i.test(trimmed) ||
+                          /^(Result|Output)[:\s]/i.test(trimmed);
+    const hasErrorPattern = /^(error|failed|exception|panic)/i.test(trimmed);
+
+    if (!hasToolPattern && !hasErrorPattern) {
+      return 'assistant';
+    }
+  }
+
+  // 2. 리스트 형식의 응답 (- 로 시작하는 여러 줄)
+  if (lines.filter(l => l.trim().startsWith('-')).length >= 2) {
+    return 'assistant';
+  }
+
+  // 3. 완전한 문장 패턴 (대문자로 시작, 문장 부호로 끝남)
   if (/^[A-Z].*[.!?]$/.test(trimmed) && trimmed.length > 20) {
     return 'assistant';
   }
 
+  // 4. Sources: 또는 References: 헤더로 끝나는 응답 (WebSearch 사용 후)
+  if (/^(Sources|References):?\s*$/im.test(trimmed) || trimmed.includes('Sources:')) {
+    return 'assistant';
+  }
+
+  // 5. 요약/결과 형식 응답
+  if (/^(Summary|Conclusion|Result|Outcome|Analysis):/i.test(trimmed)) {
+    return 'assistant';
+  }
+
   // 에러 패턴
-  if (/^(error|failed|exception)/i.test(trimmed)) {
+  if (/^(error|failed|exception|panic)/i.test(trimmed)) {
     return 'system';
   }
 
-  // 기본값은 thinking (system보다 나음)
-  return 'thinking';
+  // 기본값은 assistant (thinking보다 AI 응답일 확률이 높음)
+  return 'assistant';
 }
 
 /**
@@ -386,8 +418,8 @@ function parseMessageBlock(
       // 객체인 경우: {type: "text", file: {...}} 형태일 수 있음
       const contentObj = block.content as Record<string, unknown>;
       if (contentObj.content && typeof contentObj.content === 'string') {
-        // 중첩된 content 처리
-        rawContent = contentObj.content;
+        // 중첩된 content 처리 - HTML 엔티티 디코딩
+        rawContent = decodeHtmlEntities(contentObj.content);
       } else if (contentObj.file && typeof contentObj.file === 'object') {
         // file 객체가 있는 경우
         const fileObj = contentObj.file as Record<string, unknown>;
