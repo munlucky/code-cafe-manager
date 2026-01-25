@@ -59,6 +59,31 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
       }
     }, [orders, activeOrderId]);
 
+    // Listen for followup stage completion to reset isFollowupExecuting
+    useEffect(() => {
+      if (!isFollowupExecuting || !activeOrderId) return;
+
+      const cleanup = window.codecafe.order.onOutput(
+        (event: {
+          orderId: string;
+          type: string;
+          stageInfo?: { stageId: string; status?: string };
+        }) => {
+          if (event.orderId !== activeOrderId) return;
+          if (event.type !== 'stage_end') return;
+          if (!event.stageInfo?.stageId) return;
+
+          // Check if it's a followup stage (pattern: followup-{timestamp})
+          const isFollowupStage = /^followup-\d+$/.test(event.stageInfo.stageId);
+          if (isFollowupStage) {
+            setIsFollowupExecuting(false);
+          }
+        }
+      );
+
+      return cleanup;
+    }, [isFollowupExecuting, activeOrderId]);
+
     // Followup handlers
     const handleEnterFollowup = useCallback(async () => {
       if (!activeOrder) return;
@@ -101,6 +126,7 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
               message
             );
             if (!response.success) {
+              setIsFollowupExecuting(false);
               throw new Error(
                 response.error?.message || 'Failed to execute followup'
               );
@@ -108,8 +134,10 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
             if (!isFollowupMode) {
               setIsFollowupMode(true);
             }
-          } finally {
+            // Note: isFollowupExecuting will be reset by useEffect when stage_end event is received
+          } catch (error) {
             setIsFollowupExecuting(false);
+            throw error;
           }
         } else {
           onSendInput(activeOrder.id, message);
