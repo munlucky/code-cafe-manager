@@ -126,6 +126,7 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
               message
             );
             if (!response.success) {
+              setIsFollowupExecuting(false);
               throw new Error(
                 response.error?.message || 'Failed to execute followup'
               );
@@ -133,8 +134,10 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
             if (!isFollowupMode) {
               setIsFollowupMode(true);
             }
-          } finally {
+            // Note: isFollowupExecuting will be reset by useEffect when stage_end event is received
+          } catch (error) {
             setIsFollowupExecuting(false);
+            throw error;
           }
         } else {
           onSendInput(activeOrder.id, message);
