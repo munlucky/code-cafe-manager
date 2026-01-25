@@ -202,7 +202,9 @@ export class ExecutionManager {
       const parsed = parseOutputType(data.data);
 
       // Map user_prompt to user-input for frontend display
-      const outputType = parsed.type === 'user_prompt' ? 'user-input' : parsed.type;
+      // Map json to tool_result for collapsible treatment
+      const outputType = parsed.type === 'user_prompt' ? 'user-input' :
+                        parsed.type === 'json' ? 'tool_result' : parsed.type;
 
       // 1. UI 전송 (실시간 보기용) - order:output 형식으로 전송 (ANSI를 HTML로 변환)
       // SECURITY: convertAnsiToHtml properly escapes HTML to prevent XSS

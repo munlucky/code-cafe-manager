@@ -8,6 +8,9 @@ import { join } from 'path';
 export class LogManager {
   private logsDir: string;
 
+  // Maximum length for a single log entry to prevent excessive file growth
+  private static readonly MAX_LOG_ENTRY_LENGTH = 500;
+
   constructor(logsDir: string) {
     this.logsDir = logsDir;
   }
@@ -34,7 +37,13 @@ export class LogManager {
   async appendLog(orderId: string, message: string): Promise<void> {
     const logPath = this.getLogPath(orderId);
     const timestamp = new Date().toISOString();
-    const logLine = `[${timestamp}] ${message}\n`;
+
+    // Truncate long messages to prevent excessive file growth
+    const truncatedMessage = message.length > LogManager.MAX_LOG_ENTRY_LENGTH
+      ? message.substring(0, LogManager.MAX_LOG_ENTRY_LENGTH) + '...(truncated)'
+      : message;
+
+    const logLine = `[${timestamp}] ${truncatedMessage}\n`;
     await appendFile(logPath, logLine, 'utf-8');
   }
 
