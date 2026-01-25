@@ -361,4 +361,11 @@ export class Orchestrator extends EventEmitter {
       console.error('Failed to save state:', error);
     }
   }
+
+  /**
+   * 상태 저장 (공개 메서드)
+   */
+  async persistState(): Promise<void> {
+    await this.saveState();
+  }
 }

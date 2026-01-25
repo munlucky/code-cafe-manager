@@ -43,6 +43,7 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
     const [viewMode, setViewMode] = useState<'logs' | 'timeline'>('logs');
     const [isFollowupMode, setIsFollowupMode] = useState(false);
     const [isFollowupExecuting, setIsFollowupExecuting] = useState(false);
+    const [isWorktreeRemoved, setIsWorktreeRemoved] = useState(false);
 
     const activeOrder = orders.find((o) => o.id === activeOrderId);
 
@@ -50,7 +51,17 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
     const isRunning = activeOrder?.status === 'RUNNING';
     const isWaitingInput = activeOrder?.status === 'WAITING_INPUT';
     const canSendInput =
-      isRunning || isWaitingInput || isFollowupMode || isCompleted;
+      (isRunning || isWaitingInput || isFollowupMode) &&
+      !isWorktreeRemoved;
+
+    // Sync worktree removed state when order changes or worktreeInfo.removed updates
+    useEffect(() => {
+      if (activeOrder?.worktreeInfo?.removed) {
+        setIsWorktreeRemoved(true);
+      } else {
+        setIsWorktreeRemoved(false);
+      }
+    }, [activeOrderId, activeOrder?.worktreeInfo?.removed]);
 
     // Auto-select first order
     useEffect(() => {
@@ -181,6 +192,7 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
                 order={activeOrder}
                 viewMode={viewMode}
                 isFollowupMode={isFollowupMode}
+                isWorktreeRemoved={isWorktreeRemoved}
                 onViewModeChange={setViewMode}
                 onEnterFollowup={handleEnterFollowup}
                 onFinishFollowup={handleFinishFollowup}
@@ -193,12 +205,20 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
                   {isCompleted &&
                     activeOrder.worktreeInfo &&
                     !isFollowupMode &&
-                    !isFollowupExecuting && (
+                    !isFollowupExecuting &&
+                    !isWorktreeRemoved &&
+                    !activeOrder.worktreeInfo.removed && (
                       <WorktreeManagementPanel
                         order={activeOrder}
                         isFollowupMode={isFollowupMode}
                         onClose={() => setViewMode('timeline')}
-                        onMergeComplete={() => setIsFollowupExecuting(true)}
+                        onMergeComplete={(result) => {
+                          setIsFollowupExecuting(true);
+                          // Set worktree as removed if it was a delete operation
+                          if (result.worktreeRemoved) {
+                            setIsWorktreeRemoved(true);
+                          }
+                        }}
                       />
                     )}
                   <InteractiveTerminal

@@ -18,6 +18,7 @@ interface OrderDetailHeaderProps {
   order: DesignOrder;
   viewMode: 'logs' | 'timeline';
   isFollowupMode: boolean;
+  isWorktreeRemoved?: boolean;
   onViewModeChange: (mode: 'logs' | 'timeline') => void;
   onEnterFollowup: () => void;
   onFinishFollowup: () => void;
@@ -30,6 +31,7 @@ export const OrderDetailHeader: React.FC<OrderDetailHeaderProps> = memo(
     order,
     viewMode,
     isFollowupMode,
+    isWorktreeRemoved = false,
     onViewModeChange,
     onEnterFollowup,
     onFinishFollowup,
@@ -92,8 +94,15 @@ export const OrderDetailHeader: React.FC<OrderDetailHeaderProps> = memo(
 
           <div className="h-6 w-px bg-cafe-800 mx-2" />
 
+          {/* Worktree Removed Status */}
+          {isWorktreeRemoved && (
+            <div className="px-3 py-1.5 bg-cafe-800 rounded-lg border border-cafe-700">
+              <span className="text-xs text-cafe-500">Worktree removed</span>
+            </div>
+          )}
+
           {/* Followup Buttons */}
-          {isCompleted && !isFollowupMode && (
+          {isCompleted && !isFollowupMode && !isWorktreeRemoved && (
             <button
               onClick={onEnterFollowup}
               className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors flex items-center gap-1.5"

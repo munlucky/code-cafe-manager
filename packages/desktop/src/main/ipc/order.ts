@@ -803,6 +803,9 @@ class OrderManager {
             removed: true,
           };
 
+          // Order 상태 저장 (removed 플래그 유지)
+          await orchestrator.persistState();
+
           console.log('[Order IPC] Worktree removed, order preserved. Branch:', worktreeBranch);
 
           return {
@@ -851,6 +854,9 @@ class OrderManager {
               mergedTo: targetBranch,
               mergeCommit: result.commitHash,
             };
+
+            // Order 상태 저장 (removed 플래그 유지)
+            await orchestrator.persistState();
           }
 
           return result;

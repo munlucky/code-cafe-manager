@@ -9,6 +9,7 @@ import type { DesignOrder } from '../../types/design';
 interface MergeResult {
   success: boolean;
   message: string;
+  worktreeRemoved: boolean;
 }
 
 interface WorktreeManagementPanelProps {
@@ -69,6 +70,7 @@ export const WorktreeManagementPanel: React.FC<WorktreeManagementPanelProps> =
           const result = {
             success: true,
             message: 'AI is starting the merge operation.',
+            worktreeRemoved: deleteAfterMerge,
           };
           setMergeResult(result);
           onMergeComplete(result);
@@ -77,6 +79,7 @@ export const WorktreeManagementPanel: React.FC<WorktreeManagementPanelProps> =
             success: false,
             message:
               error instanceof Error ? error.message : 'Merge followup failed',
+            worktreeRemoved: false,
           };
           setMergeResult(result);
           onMergeComplete(result);
@@ -88,10 +91,7 @@ export const WorktreeManagementPanel: React.FC<WorktreeManagementPanelProps> =
     );
 
     const handleRemoveWorktreeOnly = useCallback(async () => {
-      if (
-        !order?.worktreeInfo?.path ||
-        !order?.worktreeInfo?.repoPath
-      ) {
+      if (!order?.id) {
         return;
       }
 
@@ -99,15 +99,15 @@ export const WorktreeManagementPanel: React.FC<WorktreeManagementPanelProps> =
       setMergeResult(null);
 
       try {
-        const response = await window.codecafe.worktree.removeOnly(
-          order.worktreeInfo.path,
-          order.worktreeInfo.repoPath
+        const response = await window.codecafe.order.cleanupWorktreeOnly(
+          order.id
         );
 
         if (response.success && response.data) {
           const result = {
             success: true,
-            message: `Worktree removed, branch '${response.data.branch}' preserved`,
+            message: response.data.message || `Worktree removed, branch '${response.data.branch}' preserved`,
+            worktreeRemoved: true,
           };
           setMergeResult(result);
           onMergeComplete(result);
@@ -115,6 +115,7 @@ export const WorktreeManagementPanel: React.FC<WorktreeManagementPanelProps> =
           const result = {
             success: false,
             message: response.error?.message || 'Failed to remove worktree',
+            worktreeRemoved: false,
           };
           setMergeResult(result);
           onMergeComplete(result);
@@ -124,6 +125,7 @@ export const WorktreeManagementPanel: React.FC<WorktreeManagementPanelProps> =
           success: false,
           message:
             error instanceof Error ? error.message : 'Failed to remove worktree',
+          worktreeRemoved: false,
         };
         setMergeResult(result);
         onMergeComplete(result);
