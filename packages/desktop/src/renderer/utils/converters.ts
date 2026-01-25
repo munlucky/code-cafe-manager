@@ -51,14 +51,16 @@ export const convertToDesignOrder = (
     status,
     cafeId: order.counter || '',
     vars: order.vars || {},
-    worktreeInfo: order.worktreeInfo
-      ? {
-          path: order.worktreeInfo.path,
-          branch: order.worktreeInfo.branch,
-          baseBranch: order.worktreeInfo.baseBranch,
-          repoPath: order.worktreeInfo.repoPath || '',
-        }
-      : undefined,
+    worktreeInfo: order.worktreeInfo?.removed
+      ? order.worktreeInfo
+      : order.worktreeInfo
+        ? {
+            path: order.worktreeInfo.path,
+            branch: order.worktreeInfo.branch,
+            baseBranch: order.worktreeInfo.baseBranch,
+            repoPath: order.worktreeInfo.repoPath || '',
+          }
+        : undefined,
     currentStage: 'Init',
     logs: designLogs,
     createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),

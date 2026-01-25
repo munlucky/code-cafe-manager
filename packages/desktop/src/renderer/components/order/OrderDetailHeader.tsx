@@ -57,7 +57,7 @@ export const OrderDetailHeader: React.FC<OrderDetailHeaderProps> = memo(
 
         <div className="flex items-center space-x-3">
           {/* Worktree info */}
-          {order.worktreeInfo && (
+          {order.worktreeInfo && !order.worktreeInfo.removed && (
             <div className="flex items-center px-3 py-1.5 bg-cafe-950 rounded-lg border border-cafe-800 shadow-inner">
               <Box className="w-3.5 h-3.5 text-brand mr-2" />
               <span className="text-xs text-cafe-300 font-mono">

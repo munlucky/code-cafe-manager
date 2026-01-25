@@ -47,16 +47,28 @@ export interface Order {
   endedAt: Date | string | null;
   error?: string;
   logs: WorkflowLog[]; // Order execution logs
-  worktreeInfo?: {
-    path: string;
-    branch: string;
-    baseBranch: string;
-    repoPath?: string;  // 원본 카페 경로 (worktree 삭제 시 Git 컨텍스트 제공)
-    removed?: boolean;  // worktree 삭제 여부
-    merged?: boolean;   // 병합 완료 여부
-    mergedTo?: string;  // 병합 대상 브랜치
-    mergeCommit?: string; // 병합 커밋 해시
-  };
+  worktreeInfo?: (
+    | {
+        path: string;
+        branch: string;
+        baseBranch: string;
+        repoPath?: string;
+        removed?: false;
+        merged?: boolean;
+        mergedTo?: string;
+        mergeCommit?: string;
+      }
+    | {
+        removed: true;
+        path?: string;
+        branch?: string;
+        baseBranch?: string;
+        repoPath?: string;
+        merged?: boolean;
+        mergedTo?: string;
+        mergeCommit?: string;
+      }
+  );
 }
 
 export interface WorktreeInfo {

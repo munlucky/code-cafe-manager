@@ -21,16 +21,27 @@ export interface Cafe {
   activeOrdersCount: number;
 }
 
-export interface WorktreeInfo {
-  path: string;
-  branch: string;
-  baseBranch: string;
-  repoPath: string;
-  removed?: boolean;  // worktree 삭제 여부
-  merged?: boolean;   // 병합 완료 여부
-  mergedTo?: string;  // 병합 대상 브랜치
-  mergeCommit?: string; // 병합 커밋 해시
-}
+export type WorktreeInfo =
+  | {
+      path: string;
+      branch: string;
+      baseBranch: string;
+      repoPath: string;
+      removed?: false;
+      merged?: boolean;
+      mergedTo?: string;
+      mergeCommit?: string;
+    }
+  | {
+      removed: true;
+      path?: string;
+      branch?: string;
+      baseBranch?: string;
+      repoPath?: string;
+      merged?: boolean;
+      mergedTo?: string;
+      mergeCommit?: string;
+    };
 
 export interface WorkflowLog {
   id: string;
