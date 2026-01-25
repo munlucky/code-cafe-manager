@@ -1,5 +1,5 @@
 import React from 'react';
-import { Coffee, GitBranch, Settings, Plus, Home, BookOpen, Zap } from 'lucide-react';
+import { Coffee, GitBranch, Settings, Plus, Home, BookOpen, Zap, FileText } from 'lucide-react';
 import type { Cafe } from '../../types/design';
 
 interface NewSidebarProps {
@@ -65,6 +65,17 @@ export const NewSidebar: React.FC<NewSidebarProps> = ({
               <Zap className={`w-4 h-4 mr-3 ${activeView === 'skills' ? 'text-white' : 'text-cafe-500'}`} />
               Skills
             </button>
+            <button
+              onClick={() => onNavigate('blueprints')}
+              className={`w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                activeView === 'blueprints'
+                  ? 'bg-brand text-white shadow-lg shadow-brand/20'
+                  : 'text-cafe-400 hover:bg-cafe-800 hover:text-cafe-100'
+              }`}
+            >
+              <FileText className={`w-4 h-4 mr-3 ${activeView === 'blueprints' ? 'text-white' : 'text-cafe-500'}`} />
+              Blueprints
+            </button>
           </div>
         </div>
 
@@ -114,7 +125,14 @@ export const NewSidebar: React.FC<NewSidebarProps> = ({
 
       {/* Footer */}
       <div className="p-4 border-t border-cafe-800 bg-cafe-900/50">
-        <button className="w-full flex items-center px-3 py-2.5 rounded-lg text-sm text-cafe-400 hover:text-cafe-100 hover:bg-cafe-800 transition-colors">
+        <button
+          onClick={() => onNavigate('settings')}
+          className={`w-full flex items-center px-3 py-2.5 rounded-lg text-sm transition-colors ${
+            activeView === 'settings'
+              ? 'bg-cafe-800 text-cafe-100'
+              : 'text-cafe-400 hover:text-cafe-100 hover:bg-cafe-800'
+          }`}
+        >
           <Settings className="w-4 h-4 mr-3" />
           Settings
         </button>

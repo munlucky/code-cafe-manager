@@ -151,6 +151,17 @@ contextBridge.exposeInMainWorld('codecafe', {
       setupIpcListener(`terminal:data:${terminalId}`, callback),
   },
 
+  dialog: {
+    selectFolder: createIpcInvoker('dialog:selectFolder'),
+    selectFile: createIpcInvoker('dialog:selectFile'),
+  },
+
+  system: {
+    checkEnvironment: createIpcInvoker('system:checkEnvironment'),
+    checkGitRepo: createIpcInvoker('system:checkGitRepo'),
+    gitInit: createIpcInvoker('system:gitInit'),
+  },
+
   // Backward compatibility - legacy flat API
   createBarista: createIpcInvoker('barista:create'),
   getAllBaristas: createIpcInvoker('barista:getAll'),

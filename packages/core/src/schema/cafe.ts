@@ -12,9 +12,13 @@ import type {
   UpdateCafeParams,
 } from '../types/cafe.js';
 
+export const SupportedLanguageSchema = z.enum(['ko', 'en', 'ja', 'zh']);
+
 export const CafeSettingsSchema = z.object({
   baseBranch: z.string().min(1),
   worktreeRoot: z.string().min(1),
+  systemPrompt: z.string().optional(),
+  language: SupportedLanguageSchema.optional(),
 }) satisfies z.ZodType<CafeSettings>;
 
 export const CafeSchema: z.ZodType<Cafe> = z.object({

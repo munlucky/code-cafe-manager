@@ -23,6 +23,8 @@ import { NewGlobalLobby } from './components/views/NewGlobalLobby';
 import { NewCafeDashboard } from './components/views/NewCafeDashboard';
 import { NewWorkflows } from './components/views/NewWorkflows';
 import { NewSkills } from './components/views/NewSkills';
+import { BlueprintsView } from './components/views/BlueprintsView';
+import { SettingsView } from './components/views/SettingsView';
 
 // View mapping
 const VIEW_MAP = {
@@ -30,6 +32,8 @@ const VIEW_MAP = {
   dashboard: NewCafeDashboard,
   workflows: NewWorkflows,
   skills: NewSkills,
+  blueprints: BlueprintsView,
+  settings: SettingsView,
 };
 
 export function App(): JSX.Element {
@@ -196,6 +200,26 @@ export function App(): JSX.Element {
               onUpdateSkill={handleUpdateSkill}
               onDeleteSkill={handleDeleteSkill}
               onDuplicateSkill={handleDuplicateSkill}
+            />
+          )}
+
+          {currentView === 'blueprints' && (
+            <BlueprintsView
+              cafe={currentCafeId ? convertToDesignCafe(getCurrentCafe()!) : null}
+              onUpdateCafe={async (id, settings) => {
+                await window.codecafe.cafe.update(id, { settings });
+                await loadCafes();
+              }}
+            />
+          )}
+
+          {currentView === 'settings' && (
+            <SettingsView
+              cafe={currentCafeId ? convertToDesignCafe(getCurrentCafe()!) : null}
+              onUpdateCafe={async (id, settings) => {
+                await window.codecafe.cafe.update(id, { settings });
+                await loadCafes();
+              }}
             />
           )}
         </div>
