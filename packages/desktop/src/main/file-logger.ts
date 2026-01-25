@@ -36,15 +36,23 @@ function getTimestamp(): string {
 /**
  * 로그 메시지 포맷팅
  */
+// Maximum length for a single log entry to prevent excessive file growth
+const MAX_LOG_ENTRY_LENGTH = 2000;
+
 function formatMessage(level: string, args: unknown[]): string {
   const timestamp = getTimestamp();
   const message = args
     .map((arg) => {
       if (typeof arg === 'string') {
-        return arg;
+        return arg.length > MAX_LOG_ENTRY_LENGTH
+          ? arg.substring(0, MAX_LOG_ENTRY_LENGTH) + '...(truncated)'
+          : arg;
       }
       try {
-        return JSON.stringify(arg);
+        const jsonStr = JSON.stringify(arg);
+        return jsonStr.length > MAX_LOG_ENTRY_LENGTH
+          ? jsonStr.substring(0, MAX_LOG_ENTRY_LENGTH) + '...(truncated)'
+          : jsonStr;
       } catch {
         return String(arg);
       }

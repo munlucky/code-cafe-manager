@@ -16,7 +16,7 @@ import { useSmartScroll } from '../../hooks/useSmartScroll';
 interface OrderOutputEvent {
   orderId: string;
   timestamp: string;
-  type: 'stdout' | 'stderr' | 'system' | 'user-input' | 'stage_start' | 'stage_end' | 'tool' | 'tool_result' | 'todo_progress' | 'result';
+  type: 'stdout' | 'stderr' | 'system' | 'user-input' | 'stage_start' | 'stage_end' | 'tool' | 'tool_result' | 'todo_progress' | 'result' | 'json';
   content: string;
   stageInfo?: { stageId: string; stageName?: string };
 }
