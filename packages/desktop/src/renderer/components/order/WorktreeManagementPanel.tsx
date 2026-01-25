@@ -51,9 +51,7 @@ export const WorktreeManagementPanel: React.FC<WorktreeManagementPanelProps> =
 
           // Create merge prompt
           const targetBranch = order.worktreeInfo?.baseBranch || 'main';
-          const prompt = deleteAfterMerge
-            ? `Please merge the current worktree changes to ${targetBranch} branch with an appropriate commit message based on the changes. After merging, remove the worktree but preserve the branch.`
-            : `Please merge the current worktree changes to ${targetBranch} branch with an appropriate commit message based on the changes.`;
+          const prompt = `Please merge the current worktree changes to ${targetBranch} branch with an appropriate commit message based on the changes.`;
 
           // Execute followup
           const executeResponse = await window.codecafe.order.executeFollowup(
@@ -67,13 +65,34 @@ export const WorktreeManagementPanel: React.FC<WorktreeManagementPanelProps> =
             );
           }
 
-          const result = {
-            success: true,
-            message: 'AI is starting the merge operation.',
-            worktreeRemoved: deleteAfterMerge,
-          };
-          setMergeResult(result);
-          onMergeComplete(result);
+          // If deleteAfterMerge is true, automatically cleanup worktree after AI completes merge
+          if (deleteAfterMerge) {
+            const cleanupResponse = await window.codecafe.order.cleanupWorktreeOnly(
+              order.id
+            );
+            if (!cleanupResponse.success) {
+              throw new Error(
+                cleanupResponse.error?.message ||
+                  'Merge completed but failed to remove worktree'
+              );
+            }
+
+            const result = {
+              success: true,
+              message: cleanupResponse.data?.message || 'Merge completed and worktree removed',
+              worktreeRemoved: true,
+            };
+            setMergeResult(result);
+            onMergeComplete(result);
+          } else {
+            const result = {
+              success: true,
+              message: 'AI is starting the merge operation.',
+              worktreeRemoved: false,
+            };
+            setMergeResult(result);
+            onMergeComplete(result);
+          }
         } catch (error) {
           const result = {
             success: false,
