@@ -203,33 +203,8 @@ export function App(): JSX.Element {
       }));
     });
 
-    const cleanupStageCompleted = window.codecafe.order.onStageCompleted((data: { orderId: string; stageId: string; duration?: number }) => {
-      const timestamp = new Date().toISOString();
-      setStageResults(prev => ({
-        ...prev,
-        [data.orderId]: {
-          ...(prev[data.orderId] || {}),
-          [data.stageId]: {
-            ...(prev[data.orderId]?.[data.stageId] || { stageId: data.stageId }),
-            status: 'completed',
-            completedAt: timestamp,
-          },
-        },
-      }));
-      setTimelineEvents(prev => ({
-        ...prev,
-        [data.orderId]: [
-          ...(prev[data.orderId] || []),
-          {
-            id: crypto.randomUUID(),
-            type: 'stage_complete',
-            timestamp,
-            content: `Stage completed${data.duration ? ` in ${data.duration}ms` : ''}`,
-            stageName: data.stageId,
-          },
-        ],
-      }));
-    });
+    // onStageCompleted 리스너 제거: stage 완료 정보는 onOutput의 stage_end 타입으로 처리
+    // (IPC → Output 단일 경로 전환)
 
     const cleanupStageFailed = window.codecafe.order.onStageFailed((data: { orderId: string; stageId: string; error?: string }) => {
       const timestamp = new Date().toISOString();
@@ -260,33 +235,67 @@ export function App(): JSX.Element {
       }));
     });
 
-    // Subscribe to order output events for log storage
+    // Subscribe to order output events for log storage and stage completion
     const cleanupOrderOutput = window.codecafe.order.onOutput((event: any) => {
-      const { orderId, data } = event;
-      if (data && data.data) {
+      const { orderId, type: outputType, content, timestamp: eventTimestamp, stageInfo } = event;
+
+      // Handle stage_end type: update stage results and timeline (단일 경로 통합)
+      if (outputType === 'stage_end' && stageInfo) {
+        const timestamp = eventTimestamp || new Date().toISOString();
+        const stageId = stageInfo.stageId;
+        const status = stageInfo.status === 'completed' ? 'completed' : 'failed';
+
+        setStageResults(prev => ({
+          ...prev,
+          [orderId]: {
+            ...(prev[orderId] || {}),
+            [stageId]: {
+              ...(prev[orderId]?.[stageId] || { stageId }),
+              status,
+              completedAt: timestamp,
+            },
+          },
+        }));
+
+        setTimelineEvents(prev => ({
+          ...prev,
+          [orderId]: [
+            ...(prev[orderId] || []),
+            {
+              id: crypto.randomUUID(),
+              type: status === 'completed' ? 'stage_complete' : 'stage_fail',
+              timestamp,
+              content: `Stage ${status}${stageInfo.duration ? ` in ${stageInfo.duration}ms` : ''}`,
+              stageName: stageId,
+            },
+          ],
+        }));
+      }
+
+      // Log storage (기존 로직)
+      if (content) {
         // Determine log type based on content
-        let type: 'info' | 'error' | 'success' | 'warning' = 'info';
-        const message = data.data;
-        if (typeof message === 'string') {
-          if (message.toLowerCase().includes('error') || message.toLowerCase().includes('failed')) {
-            type = 'error';
-          } else if (message.toLowerCase().includes('success') || message.toLowerCase().includes('completed')) {
-            type = 'success';
-          } else if (message.toLowerCase().includes('warning')) {
-            type = 'warning';
+        let logType: 'info' | 'error' | 'success' | 'warning' = 'info';
+        if (typeof content === 'string') {
+          if (content.toLowerCase().includes('error') || content.toLowerCase().includes('failed')) {
+            logType = 'error';
+          } else if (content.toLowerCase().includes('success') || content.toLowerCase().includes('completed')) {
+            logType = 'success';
+          } else if (content.toLowerCase().includes('warning')) {
+            logType = 'warning';
           }
         }
         appendOrderLog(orderId, {
-          timestamp: data.timestamp || new Date().toISOString(),
-          type,
-          message: typeof message === 'string' ? message : JSON.stringify(message),
+          timestamp: eventTimestamp || new Date().toISOString(),
+          type: logType,
+          message: typeof content === 'string' ? content : JSON.stringify(content),
         });
       }
     });
 
     return () => {
       cleanupStageStarted();
-      cleanupStageCompleted();
+      // cleanupStageCompleted 제거: stage 완료는 onOutput에서 처리
       cleanupStageFailed();
       cleanupOrderOutput();
     };

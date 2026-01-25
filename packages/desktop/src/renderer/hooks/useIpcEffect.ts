@@ -104,20 +104,9 @@ export function useIpcEffect() {
       });
     });
 
-    // Stage Completed
-    const cleanupStageCompleted = window.codecafe.order.onStageCompleted?.((data: { 
-      orderId: string; 
-      stageId: string; 
-      output?: string;
-      duration?: number;
-    }) => {
-      console.log('[IpcEffect] Stage Completed:', data);
-      updateStageResult(data.orderId, data.stageId, { 
-        status: 'completed',
-        completedAt: new Date().toISOString(),
-        duration: data.duration,
-      });
-    });
+    // Stage Completed: IPC 리스너 제거
+    // stage 완료 정보는 Output 스트림([STAGE_END] 마커)을 통해 App.tsx의 onOutput에서 처리
+    // (IPC → Output 단일 경로 전환)
 
     // Stage Failed
     const cleanupStageFailed = window.codecafe.order.onStageFailed?.((data: { 
@@ -181,7 +170,7 @@ export function useIpcEffect() {
       cleanupSessionCompleted?.();
       cleanupSessionFailed?.();
       cleanupStageStarted?.();
-      cleanupStageCompleted?.();
+      // cleanupStageCompleted 제거: stage 완료는 Output 스트림에서 처리
       cleanupStageFailed?.();
       cleanupAwaitingInput?.();
       cleanupOrderCompleted?.();
