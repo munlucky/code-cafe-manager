@@ -37,9 +37,10 @@ interface InteractiveTerminalProps {
 
 /**
  * 로그 항목 고유 키 생성 (중복 검사용)
+ * timestamp + type + content 조합으로 생성하여 같은 밀리초 타임스탬프를 가진 이벤트도 구분
  */
 function getLogKey(event: OrderOutputEvent): string {
-  return `${event.timestamp}:${event.content}`;
+  return `${event.timestamp}:${event.type}:${event.content}`;
 }
 
 export function InteractiveTerminal({
@@ -143,13 +144,16 @@ export function InteractiveTerminal({
 
   useEffect(() => {
     let isActive = true;
+    let historyLoaded = false;
     setLoading(true);
     setEntries((prev) => prev.filter((e) => e.id.startsWith('initial-prompt-'))); // 초기 프롬프트만 유지
-    seenKeysRef.current.clear();
+    // seenKeysRef 초기화는 orderId가 변경될 때만 수행 (StrictMode 더블 마운트 방지)
+    // cleanup 후에 재마운트되는 경우를 대비해 초기화는 조건부로 수행
 
     // 출력 이벤트 리스너
     const cleanup = window.codecafe.order.onOutput((event: OrderOutputEvent) => {
-      if (event.orderId === orderId) {
+      if (event.orderId === orderId && historyLoaded) {
+        // 히스토리 로드 완료 후 실시간 이벤트만 수신
         addOutputEvent(event);
       }
     });
@@ -162,10 +166,12 @@ export function InteractiveTerminal({
         if (history.length > 0) {
           history.forEach((event) => addOutputEvent(event as OrderOutputEvent));
         }
-        console.log('[InteractiveTerminal] Subscribed to order:', orderId);
+        console.log('[InteractiveTerminal] Subscribed to order:', orderId, `(${history.length} history entries)`);
       } else {
         console.error('[InteractiveTerminal] Failed to subscribe:', result.error);
       }
+      // 히스토리 로드 완료 후 실시간 이벤트 수신 시작
+      historyLoaded = true;
       setLoading(false);
     });
 
@@ -174,7 +180,9 @@ export function InteractiveTerminal({
       window.codecafe.order.unsubscribeOutput(orderId);
       if (cleanup) cleanup();
     };
-  }, [orderId, addOutputEvent]);
+  // addOutputEvent를 의존성에서 제거 (orderId 변경 시에만 재실행)
+  // seenKeysRef는 ref이므로 의존성 불필요
+  }, [orderId]);
 
   // Running 시작 시간 추적 (startedAt이 없을 때 fallback)
   const runningStartRef = useRef<number | null>(null);
