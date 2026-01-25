@@ -263,9 +263,85 @@ export function CodeBlock({ code, language, className, showLineNumbers = true }:
 
 /** 마크다운 코드블럭 파싱 결과 */
 export interface ParsedContent {
-  type: 'text' | 'code';
+  type: 'text' | 'code' | 'diagram' | 'diff';
   content: string;
   language?: string;
+}
+
+/** ASCII 박스 문자 패턴 */
+const BOX_DRAWING_CHARS = /[┌┐└┘│─├┤┬┴┼╔╗╚╝║═╠╣╦╩╬┏┓┗┛┃━┣┫┳┻╋]/;
+const ARROW_CHARS = /[▼▲◀▶→←↑↓⇒⇐⇑⇓➔➜➝]/;
+const STATUS_MARKERS = /[✓✔✗✘❌⚠️⭕●○◆◇■□]/;
+
+/**
+ * ASCII 다이어그램인지 감지
+ */
+function isAsciiDiagramContent(content: string): boolean {
+  const lines = content.split('\n');
+  let boxLineCount = 0;
+  let hasArrowOrMarker = false;
+
+  for (const line of lines) {
+    if (BOX_DRAWING_CHARS.test(line)) {
+      boxLineCount++;
+    }
+    if (ARROW_CHARS.test(line) || STATUS_MARKERS.test(line)) {
+      hasArrowOrMarker = true;
+    }
+  }
+
+  return boxLineCount >= 3 || (boxLineCount >= 1 && hasArrowOrMarker);
+}
+
+/**
+ * Diff 콘텐츠인지 감지
+ */
+function isDiffLikeContent(content: string): boolean {
+  const lines = content.split('\n');
+  if (lines.length < 2) return false;
+
+  let diffLineCount = 0;
+  let hasAddOrRemove = false;
+
+  for (const line of lines) {
+    const trimmed = line.trimStart();
+
+    if (trimmed.startsWith('@@') || trimmed.startsWith('diff ') ||
+        trimmed.startsWith('---') || trimmed.startsWith('+++') ||
+        trimmed.startsWith('index ')) {
+      diffLineCount++;
+      continue;
+    }
+
+    if (/^[+\-]\s/.test(line) || /^[+\-][^+\-]/.test(line)) {
+      diffLineCount++;
+      hasAddOrRemove = true;
+    }
+
+    if (/^\s{1,2}[^\s]/.test(line)) {
+      diffLineCount++;
+    }
+  }
+
+  return hasAddOrRemove && (diffLineCount / lines.length) >= 0.3;
+}
+
+/**
+ * 코드블럭 콘텐츠 타입 결정
+ */
+function determineContentType(content: string, language?: string): ParsedContent['type'] {
+  // diff 언어로 명시되었거나 diff 패턴이면 diff
+  if (language === 'diff' || isDiffLikeContent(content)) {
+    return 'diff';
+  }
+
+  // ASCII 다이어그램 감지
+  if (isAsciiDiagramContent(content)) {
+    return 'diagram';
+  }
+
+  // 기본 코드블럭
+  return 'code';
 }
 
 /** 마크다운 텍스트에서 코드블럭 파싱 */
@@ -284,11 +360,15 @@ export function parseMarkdownCodeBlocks(text: string): ParsedContent[] {
       }
     }
 
-    // 코드블럭
+    // 코드블럭 - 타입 결정
+    const codeContent = match[2].trim();
+    const language = match[1] || undefined;
+    const contentType = determineContentType(codeContent, language);
+
     parts.push({
-      type: 'code',
-      language: match[1] || undefined,
-      content: match[2].trim(),
+      type: contentType,
+      language,
+      content: codeContent,
     });
 
     lastIndex = match.index + match[0].length;

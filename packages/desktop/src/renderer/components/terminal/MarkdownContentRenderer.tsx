@@ -5,6 +5,8 @@
 
 import { cn } from '../../utils/cn';
 import { CodeBlock, parseMarkdownCodeBlocks } from './CodeBlock';
+import { AsciiDiagramBlock } from './AsciiDiagramBlock';
+import { DiffBlock } from './DiffBlock';
 
 /**
  * HTML 엔티티 디코딩
@@ -52,9 +54,9 @@ export function MarkdownContentRenderer({
   // HTML 엔티티 디코딩 적용 (ANSI to HTML 변환 시 이스케이프된 문자 복원)
   const decodedContent = decodeHtmlEntities(content);
   const parsedContent = parseMarkdownCodeBlocks(decodedContent);
-  const hasCodeBlocks = parsedContent.some((p) => p.type === 'code');
+  const hasSpecialBlocks = parsedContent.some((p) => p.type === 'code' || p.type === 'diagram' || p.type === 'diff');
 
-  if (!hasCodeBlocks) {
+  if (!hasSpecialBlocks) {
     // 코드블럭이 없으면 단순 텍스트 렌더링
     return (
       <div
@@ -73,22 +75,29 @@ export function MarkdownContentRenderer({
   // 코드블럭이 있으면 파싱된 콘텐츠 렌더링
   return (
     <div className={cn('space-y-2', className)}>
-      {parsedContent.map((part, index) =>
-        part.type === 'code' ? (
-          <CodeBlock key={index} code={part.content} language={part.language} />
-        ) : (
-          <div
-            key={index}
-            className={cn(
-              textSize,
-              'whitespace-pre-wrap break-words',
-              isError ? errorColor : textColor
-            )}
-          >
-            {part.content}
-          </div>
-        )
-      )}
+      {parsedContent.map((part, index) => {
+        switch (part.type) {
+          case 'diagram':
+            return <AsciiDiagramBlock key={index} content={part.content} />;
+          case 'diff':
+            return <DiffBlock key={index} content={part.content} language={part.language} />;
+          case 'code':
+            return <CodeBlock key={index} code={part.content} language={part.language} />;
+          default:
+            return (
+              <div
+                key={index}
+                className={cn(
+                  textSize,
+                  'whitespace-pre-wrap break-words',
+                  isError ? errorColor : textColor
+                )}
+              >
+                {part.content}
+              </div>
+            );
+        }
+      })}
     </div>
   );
 }
