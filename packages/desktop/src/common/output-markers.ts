@@ -105,7 +105,7 @@ export const USER_PROMPT_MARKER = '[USER_PROMPT] ' as const;
 /**
  * Output type discriminator
  */
-export type OutputType = 'stdout' | 'stderr' | 'system' | 'user-input' | 'tool' | 'tool_result' | 'file_edit' | 'todo_progress' | 'result' | 'stage_start' | 'stage_end' | 'user_prompt';
+export type OutputType = 'stdout' | 'stderr' | 'system' | 'user-input' | 'tool' | 'tool_result' | 'file_edit' | 'todo_progress' | 'result' | 'stage_start' | 'stage_end' | 'user_prompt' | 'json';
 
 /**
  * Todo progress data structure
@@ -150,6 +150,14 @@ export function parseOutputType(content: string): { type: OutputType; content: s
     return {
       type: 'stderr',
       content: content.substring(STDERR_MARKER.length),
+    };
+  }
+
+  if (content.startsWith(JSON_MARKER)) {
+    // JSON_MARKER is used for unknown JSON formats (already truncated by adapter)
+    return {
+      type: 'json',
+      content: content.substring(JSON_MARKER.length),
     };
   }
 

@@ -732,9 +732,15 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
 
             // If JSON parsed but no known content field, log for debugging
             if (!contentExtracted && onData) {
-              this.log('unknown-json-format', { parsed });
-              // Forward as formatted JSON for visibility
-              onData(`${JSON_MARKER}${JSON.stringify(parsed)}`);
+              // Truncate large JSON payloads to prevent excessive logging
+              const jsonStr = JSON.stringify(parsed);
+              const truncated =
+                jsonStr.length > CONFIG.MAX_TOOL_RESULT_LOG_LENGTH
+                  ? jsonStr.substring(0, CONFIG.MAX_TOOL_RESULT_LOG_LENGTH) + '...(truncated)'
+                  : jsonStr;
+              this.log('unknown-json-format', { summary: truncated.substring(0, 200) });
+              // Forward truncated JSON for visibility
+              onData(`${JSON_MARKER}${truncated}`);
             }
           } catch {
             // Not JSON or parsing failed - pass raw chunk as-is
