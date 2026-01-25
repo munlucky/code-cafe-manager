@@ -149,6 +149,32 @@
         "ThinkingBlock.tsx: AI Agent 섹션에 claude-* 패턴만 유효한 이름으로 표시",
         "StageInfo 인터페이스 category 타입을 string | null | undefined로 변경"
       ]
+    },
+    {
+      "name": "Followup 세션 복원 버그 수정",
+      "type": "BugFix",
+      "observations": [
+        "commit: 9bfaddf (2026-01-25)",
+        "문제: 세션 삭제된 상태에서 enterFollowup 호출 시 'No session found' 에러",
+        "발생 시나리오: order 완료 후 merge & delete 버튼 사용",
+        "원인: COMPLETED 상태의 order에서 세션 복원 로직 누락",
+        "해결: ensureSessionForFollowup 헬퍼 함수 추출로 코드 중복 제거",
+        "영향 파일: packages/desktop/src/main/ipc/order.ts",
+        "order:enterFollowup, order:executeFollowup 핸들러 간소화"
+      ]
+    },
+    {
+      "name": "ensureSessionForFollowup",
+      "type": "HelperFunction",
+      "observations": [
+        "파일: packages/desktop/src/main/ipc/order.ts",
+        "목적: followup 시 세션 복원 로직 중복 제거",
+        "order:enterFollowup, order:executeFollowup 핸들러에서 재사용",
+        "COMPLETED 상태 + worktree 존재 시 세션 자동 복원",
+        "returns: boolean (복원 성공 시 true, 불필요/실패 시 false)",
+        "throws: order not found 시 Error",
+        "추가: commit 9bfaddf (2026-01-25)"
+      ]
     }
   ],
   "relations": [
@@ -231,6 +257,21 @@
       "from": "packages/desktop",
       "to": "UI 버그 수정 2025-01-24",
       "type": "contains"
+    },
+    {
+      "from": "M2 개발 진행 중",
+      "to": "Followup 세션 복원 버그 수정",
+      "type": "includes"
+    },
+    {
+      "from": "packages/desktop",
+      "to": "Followup 세션 복원 버그 수정",
+      "type": "contains"
+    },
+    {
+      "from": "Followup 세션 복원 버그 수정",
+      "to": "ensureSessionForFollowup",
+      "type": "implements"
     }
   ]
 }
