@@ -57,7 +57,8 @@ function isFollowupStage(stageId: string): boolean {
 }
 
 /** Stage 표시용 레이블 생성 */
-function getStageDisplayLabel(stageId: string, category: string | null): string {
+function getStageDisplayLabel(stageId: string | null | undefined, category: string | null | undefined): string {
+  if (!stageId) return 'Unknown Stage';
   // FOLLOWUP 패턴이면 사용자 친화적 레이블 반환
   if (isFollowupStage(stageId)) {
     return 'Follow-up';

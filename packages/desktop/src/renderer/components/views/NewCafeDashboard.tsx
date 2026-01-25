@@ -73,9 +73,12 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
           if (event.type !== 'stage_end') return;
           if (!event.stageInfo?.stageId) return;
 
+          console.log('[NewCafeDashboard] stage_end event:', event);
+
           // Check if it's a followup stage (pattern: followup-{timestamp})
           const isFollowupStage = /^followup-\d+$/.test(event.stageInfo.stageId);
           if (isFollowupStage) {
+            console.log('[NewCafeDashboard] Resetting isFollowupExecuting for followup stage:', event.stageInfo.stageId);
             setIsFollowupExecuting(false);
           }
         }

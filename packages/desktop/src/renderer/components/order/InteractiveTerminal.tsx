@@ -109,10 +109,8 @@ export function InteractiveTerminal({
     } else if (event.type === 'user-input') {
       parsedEntry.type = 'user';
     } else if (event.type === 'stage_start' || event.type === 'stage_end') {
-      // FOLLOWUP 패턴 감지 (followup-1234567890)
-      const isFollowup = event.stageInfo?.stageId && /^followup-\d+$/.test(event.stageInfo.stageId);
-      // FOLLOWUP은 assistant 응답으로, 일반 stage는 thinking으로 처리
-      parsedEntry.type = isFollowup ? 'assistant' : 'thinking';
+      // 모든 stage 이벤트를 thinking으로 처리하여 stage UI를 표시
+      parsedEntry.type = 'thinking';
     } else if (event.type === 'tool' || event.type === 'tool_result') {
       parsedEntry.type = event.type === 'tool' ? 'tool_use' : 'tool_result';
     }

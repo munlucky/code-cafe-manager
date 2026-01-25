@@ -1,14 +1,14 @@
 import { create } from 'zustand';
 
 export type ViewParams = {
-  cafes: void;
-  dashboard: void;
-  'new-order': void;
-  orders: { orderId?: string };
+  cafes: { cafeId?: string } | void;
+  dashboard: { cafeId: string };
+  'new-order': { cafeId: string };
+  orders: { cafeId: string; orderId?: string } | void;
   terminals: void;
-  workflows: void;
-  'workflow-detail': { workflowId: string };
-  skills: void;
+  workflows: { cafeId: string };
+  'workflow-detail': { cafeId: string; workflowId: string };
+  skills: { cafeId: string };
 };
 
 export type ViewName = keyof ViewParams;
