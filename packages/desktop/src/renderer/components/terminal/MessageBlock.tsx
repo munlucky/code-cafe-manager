@@ -24,6 +24,15 @@ interface CollapsibleContentProps {
   onExpand: () => void;
 }
 
+/**
+ * CollapsibleContent Component
+ * 긴 내용을 요약해서 보여주고, 클릭하면 전체 펼치기
+ */
+interface CollapsibleContentProps {
+  summary?: string;
+  onExpand: () => void;
+}
+
 function CollapsibleContent({ summary, onExpand }: CollapsibleContentProps): JSX.Element {
   return (
     <button
@@ -36,6 +45,73 @@ function CollapsibleContent({ summary, onExpand }: CollapsibleContentProps): JSX
         <span className="text-[10px] text-cafe-600">(Click to expand)</span>
       </div>
     </button>
+  );
+}
+
+/**
+ * CollapsibleEntry Component
+ * 개별 entry의 접기/펼치기 상태를 관리하는 컴포넌트
+ * React Hooks 규칙을 준수하기 위해 분리
+ */
+interface CollapsibleEntryProps {
+  entry: {
+    id: string;
+    content: string;
+    summary?: string;
+    metadata?: { filePath?: string; fileLines?: number };
+  };
+}
+
+function CollapsibleEntry({ entry }: CollapsibleEntryProps): JSX.Element {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+
+  const isJSON = isJSONContent(entry.content);
+  const contentLength = entry.content?.length || 0;
+  const lineCount = entry.content.split('\n').length;
+  const isFileContent = lineCount > 20;
+
+  let displayContent = entry.content;
+  if (isJSON && contentLength <= 2000) {
+    try {
+      const parsed = JSON.parse(entry.content);
+      displayContent = '```json\n' + JSON.stringify(parsed, null, 2) + '\n```';
+    } catch {
+      // JSON 파싱 실패 시 원본 사용
+    }
+  }
+
+  const shouldCollapse = (isJSON && contentLength > 500) ||
+                         (isFileContent && lineCount > 50) ||
+                         (entry.metadata?.fileLines && entry.metadata.fileLines > 50);
+
+  let summary = entry.summary;
+  if (shouldCollapse && !summary) {
+    if (isJSON) {
+      summary = `Large JSON content (${contentLength.toLocaleString()} chars, ~${lineCount} lines)`;
+    } else if (entry.metadata?.filePath) {
+      summary = `${entry.metadata.filePath} (${lineCount} lines)`;
+    } else {
+      summary = `Large content (${contentLength.toLocaleString()} chars, ~${lineCount} lines)`;
+    }
+  }
+
+  const showSummary = shouldCollapse && !!summary;
+
+  return (
+    <div>
+      {showSummary && !isExpanded ? (
+        <CollapsibleContent
+          summary={summary}
+          onExpand={() => setIsExpanded(true)}
+        />
+      ) : (
+        <MarkdownContentRenderer
+          content={displayContent}
+          textSize="text-sm"
+          textColor="text-cafe-100"
+        />
+      )}
+    </div>
   );
 }
 
@@ -99,62 +175,9 @@ export function MessageBlock({ group, className }: MessageBlockProps): JSX.Eleme
 
         {/* 메시지 콘텐츠 */}
         <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg px-4 py-3 w-full space-y-3">
-          {group.entries.map((entry, idx) => {
-            const isJSON = isJSONContent(entry.content);
-            const contentLength = entry.content?.length || 0;
-
-            // 라인 수 계산 (파일 내용 감지)
-            const lineCount = entry.content.split('\n').length;
-            const isFileContent = lineCount > 20; // 20줄 이상이면 파일 콘텐츠로 간주
-
-            // JSON인 경우 - 너무 크면 pretty-print 건너뛰고 요약만
-            let displayContent = entry.content;
-            if (isJSON && contentLength <= 2000) {
-              try {
-                const parsed = JSON.parse(entry.content);
-                displayContent = '```json\n' + JSON.stringify(parsed, null, 2) + '\n```';
-              } catch {
-                // JSON 파싱 실패 시 원본 사용
-              }
-            }
-
-            // 접기 조건: JSON이고 길 때, 또는 파일 콘텐츠이고 길 때
-            const shouldCollapse = (isJSON && contentLength > 500) ||
-                                   (isFileContent && lineCount > 50) ||
-                                   (entry.metadata?.fileLines && entry.metadata.fileLines > 50);
-
-            // 요약이 없으면 자동 생성
-            let summary = entry.summary;
-            if (shouldCollapse && !summary) {
-              if (isJSON) {
-                summary = `Large JSON content (${contentLength.toLocaleString()} chars, ~${lineCount} lines)`;
-              } else if (entry.metadata?.filePath) {
-                summary = `${entry.metadata.filePath} (${lineCount} lines)`;
-              } else {
-                summary = `Large content (${contentLength.toLocaleString()} chars, ~${lineCount} lines)`;
-              }
-            }
-
-            const showSummary = shouldCollapse && !!summary;
-            const [isExpanded, setIsExpanded] = React.useState(false);
-
-            return (
-              <div key={entry.id}>
-                {showSummary && !isExpanded ? (
-                  <CollapsibleContent
-                    summary={summary}
-                    onExpand={() => setIsExpanded(true)}
-                  />
-                ) : (
-                  <MarkdownContentRenderer
-                    content={displayContent}
-                    textSize="text-sm"
-                    textColor="text-cafe-100"
-                  />
-                )}
-              </div>
-            );
-          })}
+          {group.entries.map((entry) => (
+            <CollapsibleEntry key={entry.id} entry={entry} />
+          ))}
         </div>
       </div>
     </div>
