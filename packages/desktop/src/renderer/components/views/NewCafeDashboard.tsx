@@ -8,6 +8,7 @@ import { OrderList } from '../order/OrderList';
 import { OrderDetailHeader } from '../order/OrderDetailHeader';
 import { WorktreeManagementPanel } from '../order/WorktreeManagementPanel';
 import { CreateOrderModal } from '../order/CreateOrderModal';
+import { useOrderStore } from '../../store/useOrderStore';
 
 interface NewCafeDashboardProps {
   cafe: Cafe;
@@ -217,6 +218,13 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
                           // Set worktree as removed if it was a delete operation
                           if (result.worktreeRemoved) {
                             setIsWorktreeRemoved(true);
+                            // Update store to persist the removed state
+                            useOrderStore.getState().updateOrder(activeOrder.id, {
+                              worktreeInfo: {
+                                ...activeOrder.worktreeInfo,
+                                removed: true,
+                              },
+                            });
                           }
                         }}
                       />
