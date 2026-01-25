@@ -46,6 +46,7 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
     const [isFollowupExecuting, setIsFollowupExecuting] = useState(false);
     const [isWorktreeRemoved, setIsWorktreeRemoved] = useState(false);
 
+    const updateOrder = useOrderStore((state) => state.updateOrder);
     const activeOrder = orders.find((o) => o.id === activeOrderId);
 
     const isCompleted = activeOrder?.status === 'COMPLETED';
@@ -219,7 +220,7 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
                           if (result.worktreeRemoved) {
                             setIsWorktreeRemoved(true);
                             // Update store to persist the removed state
-                            useOrderStore.getState().updateOrder(activeOrder.id, {
+                            updateOrder(activeOrder.id, {
                               worktreeInfo: {
                                 ...activeOrder.worktreeInfo,
                                 removed: true,
