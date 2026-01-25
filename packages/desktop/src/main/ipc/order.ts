@@ -249,6 +249,57 @@ function getBaristaEngine() {
 }
 
 /**
+ * Restore session for followup if needed
+ * Helper function to reduce duplication in enterFollowup and executeFollowup handlers
+ *
+ * @returns true if session was restored, false if restore was not needed or failed
+ * @throws Error if order is not found
+ */
+async function ensureSessionForFollowup(
+  orchestrator: Orchestrator,
+  baristaEngine: any,
+  orderId: string
+): Promise<boolean> {
+  // 세션 복원 시도 (handleIpc 외부에서 먼저 실행)
+  const order = orchestrator.getOrder(orderId);
+  if (!order) {
+    throw new Error(`Order not found: ${orderId}`);
+  }
+
+  // 세션이 없고 worktree가 있는 완료된 order인 경우 복원 시도
+  const sessionExists = baristaEngine.canFollowup(orderId);
+  const isCompleted = order.status === 'COMPLETED';
+  const hasWorktree = order.worktreeInfo?.path &&
+    order.worktreeInfo.path.length > 0 &&
+    !order.worktreeInfo.removed;
+
+  if (!sessionExists && isCompleted && hasWorktree) {
+    console.log('[Order IPC] Session not found, attempting to restore for followup');
+
+    try {
+      // Barista 획득 또는 생성
+      let barista = orchestrator.getAllBaristas().find(b => b.provider === order.provider);
+      if (!barista) {
+        barista = orchestrator.createBarista(order.provider);
+        console.log(`[Order IPC] Created barista with provider ${order.provider} for followup restore`);
+      }
+
+      // 세션 복원 (order.cafeId 사용)
+      const cwd = order.worktreeInfo!.path;
+      const cafeId = order.cafeId || order.counter;
+      await baristaEngine.restoreSessionForFollowup(order, barista, cafeId, cwd);
+      console.log(`[Order IPC] Session restored for order ${orderId}`);
+      return true;
+    } catch (restoreError: any) {
+      console.error(`[Order IPC] Failed to restore session for order ${orderId}:`, restoreError);
+      throw new Error(`Failed to restore session: ${restoreError.message}`);
+    }
+  }
+
+  return false;
+}
+
+/**
  * Order Manager (Interval 관리)
  */
 class OrderManager {
@@ -667,6 +718,9 @@ class OrderManager {
     /**
      * Followup 모드 진입
      * completed 상태의 order에서 추가 명령을 받을 수 있도록 함
+     *
+     * 앱 재시작 후 복원되지 않은 세션에 대해 자동 복원을 시도합니다.
+     * worktree가 있는 완료된 order는 언제든지 followup이 가능해야 합니다.
      */
     ipcMain.handle(
       'order:enterFollowup',
@@ -675,6 +729,9 @@ class OrderManager {
           console.log('[Order IPC] Entering followup mode for order:', orderId);
 
           const baristaEngine = getBaristaEngine();
+          // 세션 복원이 필요한 경우 자동 복원
+          await ensureSessionForFollowup(orchestrator, baristaEngine, orderId);
+
           await baristaEngine.enterFollowup(orderId);
           return { success: true };
         }, 'order:enterFollowup')
@@ -690,50 +747,11 @@ class OrderManager {
     ipcMain.handle(
       'order:executeFollowup',
       async (_, orderId: string, prompt: string) => {
-        // Debug logging
         console.log('[Order IPC] executeFollowup called with orderId:', orderId, 'prompt:', prompt);
 
         const baristaEngine = getBaristaEngine();
-
-        // 세션 복원 시도 (handleIpc 외부에서 먼저 실행)
-        // 이렇게 하면 세션이 없어도 복원 후 정상 실행 가능
-        const order = orchestrator.getOrder(orderId);
-        if (!order) {
-          return handleIpc(async () => {
-            throw new Error(`Order not found: ${orderId}`);
-          }, 'order:executeFollowup');
-        }
-
-        // 세션이 없고 worktree가 있는 완료된 order인 경우 복원 시도
-        const sessionExists = baristaEngine.canFollowup(orderId);
-        const isCompleted = order.status === 'COMPLETED';
-        const hasWorktree = order.worktreeInfo?.path &&
-          order.worktreeInfo.path.length > 0 &&
-          !order.worktreeInfo.removed;
-
-        if (!sessionExists && isCompleted && hasWorktree) {
-          console.log('[Order IPC] Session not found, attempting to restore for followup');
-
-          try {
-            // Barista 획득 또는 생성
-            let barista = orchestrator.getAllBaristas().find(b => b.provider === order.provider);
-            if (!barista) {
-              barista = orchestrator.createBarista(order.provider);
-              console.log(`[Order IPC] Created barista with provider ${order.provider} for followup restore`);
-            }
-
-            // 세션 복원 (order.cafeId 사용, counter는 경로이므로 사용하지 않음)
-            const cwd = order.worktreeInfo!.path;
-            const cafeId = order.cafeId || order.counter; // cafeId가 없으면 counter를 fallback으로 사용
-            await baristaEngine.restoreSessionForFollowup(order, barista, cafeId, cwd);
-            console.log(`[Order IPC] Session restored for order ${orderId}`);
-          } catch (restoreError: any) {
-            console.error(`[Order IPC] Failed to restore session for order ${orderId}:`, restoreError);
-            return handleIpc(async () => {
-              throw new Error(`Failed to restore session: ${restoreError.message}`);
-            }, 'order:executeFollowup');
-          }
-        }
+        // 세션 복원이 필요한 경우 자동 복원
+        await ensureSessionForFollowup(orchestrator, baristaEngine, orderId);
 
         // executeFollowup 실행 (세션이 복원되었거나 이미 존재하는 경우)
         return handleIpc(async () => {
