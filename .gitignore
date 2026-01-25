@@ -27,3 +27,4 @@ tmpclaude-*
 .claude/docs/tasks/*
 .claude/skills/*/output.yaml
 .claude/skills/*/output.yaml
+.claude/verification-results-*.txt
