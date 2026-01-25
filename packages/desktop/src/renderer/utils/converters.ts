@@ -38,7 +38,7 @@ export const convertToDesignOrder = (
     : statusMap[order.status] || 'PENDING';
 
   const designLogs: WorkflowLog[] = (order.logs || []).map((log) => ({
-    id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    id: crypto.randomUUID(),
     timestamp: log.timestamp,
     content: log.message,
     type: log.type === 'warning' ? 'system' : log.type,

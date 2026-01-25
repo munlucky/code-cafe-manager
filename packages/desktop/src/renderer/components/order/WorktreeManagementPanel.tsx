@@ -68,7 +68,7 @@ export const WorktreeManagementPanel: React.FC<WorktreeManagementPanelProps> =
 
           const result = {
             success: true,
-            message: 'AI가 merge 작업을 시작했습니다.',
+            message: 'AI is starting the merge operation.',
           };
           setMergeResult(result);
           onMergeComplete(result);
