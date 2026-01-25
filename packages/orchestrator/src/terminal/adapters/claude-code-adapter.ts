@@ -21,7 +21,18 @@ const CONFIG = {
   TERM_COLS: 120,
   TERM_ROWS: 30,
   MAX_TOOL_RESULT_LOG_LENGTH: 500, // Maximum characters to log for tool results
+  LOG_SUMMARY_LENGTH: 200, // Maximum characters for log summaries
 } as const;
+
+/**
+ * Truncate a string to the specified length with a marker
+ * @param str - The string to truncate
+ * @param maxLength - Maximum length (defaults to MAX_TOOL_RESULT_LOG_LENGTH)
+ * @returns Truncated string with '...(truncated)' marker if needed
+ */
+function truncateString(str: string, maxLength: number = CONFIG.MAX_TOOL_RESULT_LOG_LENGTH): string {
+  return str.length > maxLength ? str.substring(0, maxLength) + '...(truncated)' : str;
+}
 
 /**
  * Configuration interface for ClaudeCodeAdapter
@@ -296,11 +307,7 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
         if (block.type === 'tool_result' && block.content) {
           const resultContent =
             typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
-          const truncated =
-            resultContent.length > CONFIG.MAX_TOOL_RESULT_LOG_LENGTH
-              ? resultContent.substring(0, CONFIG.MAX_TOOL_RESULT_LOG_LENGTH) + '...(truncated)'
-              : resultContent;
-          onData(`[TOOL_RESULT] ${truncated}\n`);
+          onData(`[TOOL_RESULT] ${truncateString(resultContent)}\n`);
         }
       }
     }
@@ -734,13 +741,10 @@ export class ClaudeCodeAdapter implements IProviderAdapter {
             if (!contentExtracted && onData) {
               // Truncate large JSON payloads to prevent excessive logging
               const jsonStr = JSON.stringify(parsed);
-              const truncated =
-                jsonStr.length > CONFIG.MAX_TOOL_RESULT_LOG_LENGTH
-                  ? jsonStr.substring(0, CONFIG.MAX_TOOL_RESULT_LOG_LENGTH) + '...(truncated)'
-                  : jsonStr;
-              this.log('unknown-json-format', { summary: truncated.substring(0, 200) });
+              // Log summary from original string with proper truncation marker
+              this.log('unknown-json-format', { summary: truncateString(jsonStr, CONFIG.LOG_SUMMARY_LENGTH) });
               // Forward truncated JSON for visibility
-              onData(`${JSON_MARKER}${truncated}`);
+              onData(`${JSON_MARKER}${truncateString(jsonStr)}`);
             }
           } catch {
             // Not JSON or parsing failed - pass raw chunk as-is
