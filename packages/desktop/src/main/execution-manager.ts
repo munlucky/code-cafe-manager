@@ -324,11 +324,8 @@ export class ExecutionManager {
 
     this.baristaEngine.on('stage:failed', (data: StageFailedEvent) => {
       console.error(`[ExecutionManager] Stage FAILED: ${data.stageId} (Order: ${data.orderId}) | Error: ${data.error || 'Unknown'}`);
-      this.sendToRenderer('order:stage-failed', {
-        orderId: data.orderId,
-        stageId: data.stageId,
-        error: data.error,
-      });
+      // IPC 전송 제거: stage 실패 정보는 Output 스트림([STAGE_END] 마커)을 통해 단일 경로로 전달
+      // 기존: this.sendToRenderer('order:stage-failed', {...})
     });
 
     // order:awaiting-input - 사용자 입력 대기 상태

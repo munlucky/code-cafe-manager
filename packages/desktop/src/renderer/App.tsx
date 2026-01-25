@@ -11,6 +11,20 @@ import { OrderStatus as BackendOrderStatus } from './types/models';
 import type { StageInfo } from './components/order/OrderStageProgress';
 import type { TimelineEvent } from './components/orders/OrderTimelineView';
 
+// Output 이벤트 타입 정의
+interface OrderOutputEvent {
+  orderId: string;
+  type: string;
+  content: string;
+  timestamp: string;
+  stageInfo?: {
+    stageId: string;
+    status?: 'completed' | 'failed';
+    duration?: number;
+    error?: string;
+  };
+}
+
 // Import components
 import { NewSidebar } from './components/layout/NewSidebar';
 import { NewGlobalLobby } from './components/views/NewGlobalLobby';
@@ -203,73 +217,60 @@ export function App(): JSX.Element {
       }));
     });
 
-    // onStageCompleted 리스너 제거: stage 완료 정보는 onOutput의 stage_end 타입으로 처리
-    // (IPC → Output 단일 경로 전환)
-
-    const cleanupStageFailed = window.codecafe.order.onStageFailed((data: { orderId: string; stageId: string; error?: string }) => {
-      const timestamp = new Date().toISOString();
+    // Stage 완료/실패 state 업데이트 헬퍼 함수 (DRY)
+    const updateStageEndState = (
+      orderId: string,
+      stageId: string,
+      status: 'completed' | 'failed',
+      timestamp: string,
+      details?: { duration?: number; error?: string }
+    ) => {
       setStageResults(prev => ({
         ...prev,
-        [data.orderId]: {
-          ...(prev[data.orderId] || {}),
-          [data.stageId]: {
-            ...(prev[data.orderId]?.[data.stageId] || { stageId: data.stageId }),
-            status: 'failed',
+        [orderId]: {
+          ...(prev[orderId] || {}),
+          [stageId]: {
+            ...(prev[orderId]?.[stageId] || { stageId }),
+            status,
             completedAt: timestamp,
-            error: data.error,
+            ...(details?.error && { error: details.error }),
           },
         },
       }));
+
       setTimelineEvents(prev => ({
         ...prev,
-        [data.orderId]: [
-          ...(prev[data.orderId] || []),
+        [orderId]: [
+          ...(prev[orderId] || []),
           {
             id: crypto.randomUUID(),
-            type: 'stage_fail',
+            type: status === 'completed' ? 'stage_complete' : 'stage_fail',
             timestamp,
-            content: data.error || 'Stage failed',
-            stageName: data.stageId,
+            content: status === 'completed'
+              ? `Stage completed${details?.duration ? ` in ${details.duration}ms` : ''}`
+              : details?.error || 'Stage failed',
+            stageName: stageId,
           },
         ],
       }));
-    });
+    };
+
+    // onStageCompleted/onStageFailed IPC 리스너 제거
+    // stage 완료/실패 정보는 onOutput의 stage_end 타입으로 단일 경로 처리
+    // (IPC → Output 단일 경로 전환)
 
     // Subscribe to order output events for log storage and stage completion
-    const cleanupOrderOutput = window.codecafe.order.onOutput((event: any) => {
+    const cleanupOrderOutput = window.codecafe.order.onOutput((event: OrderOutputEvent) => {
       const { orderId, type: outputType, content, timestamp: eventTimestamp, stageInfo } = event;
 
       // Handle stage_end type: update stage results and timeline (단일 경로 통합)
       if (outputType === 'stage_end' && stageInfo) {
         const timestamp = eventTimestamp || new Date().toISOString();
-        const stageId = stageInfo.stageId;
         const status = stageInfo.status === 'completed' ? 'completed' : 'failed';
-
-        setStageResults(prev => ({
-          ...prev,
-          [orderId]: {
-            ...(prev[orderId] || {}),
-            [stageId]: {
-              ...(prev[orderId]?.[stageId] || { stageId }),
-              status,
-              completedAt: timestamp,
-            },
-          },
-        }));
-
-        setTimelineEvents(prev => ({
-          ...prev,
-          [orderId]: [
-            ...(prev[orderId] || []),
-            {
-              id: crypto.randomUUID(),
-              type: status === 'completed' ? 'stage_complete' : 'stage_fail',
-              timestamp,
-              content: `Stage ${status}${stageInfo.duration ? ` in ${stageInfo.duration}ms` : ''}`,
-              stageName: stageId,
-            },
-          ],
-        }));
+        updateStageEndState(orderId, stageInfo.stageId, status, timestamp, {
+          duration: stageInfo.duration,
+          error: stageInfo.error,
+        });
       }
 
       // Log storage (기존 로직)
@@ -295,8 +296,7 @@ export function App(): JSX.Element {
 
     return () => {
       cleanupStageStarted();
-      // cleanupStageCompleted 제거: stage 완료는 onOutput에서 처리
-      cleanupStageFailed();
+      // cleanupStageCompleted/cleanupStageFailed 제거: stage 완료/실패는 onOutput에서 단일 경로 처리
       cleanupOrderOutput();
     };
   }, [appendOrderLog]);
