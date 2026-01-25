@@ -104,33 +104,9 @@ export function useIpcEffect() {
       });
     });
 
-    // Stage Completed
-    const cleanupStageCompleted = window.codecafe.order.onStageCompleted?.((data: { 
-      orderId: string; 
-      stageId: string; 
-      output?: string;
-      duration?: number;
-    }) => {
-      console.log('[IpcEffect] Stage Completed:', data);
-      updateStageResult(data.orderId, data.stageId, { 
-        status: 'completed',
-        completedAt: new Date().toISOString(),
-        duration: data.duration,
-      });
-    });
-
-    // Stage Failed
-    const cleanupStageFailed = window.codecafe.order.onStageFailed?.((data: { 
-      orderId: string; 
-      stageId: string; 
-      error?: string 
-    }) => {
-      console.log('[IpcEffect] Stage Failed:', data);
-      updateStageResult(data.orderId, data.stageId, { 
-        status: 'failed',
-        error: data.error,
-      });
-    });
+    // Stage Completed/Failed: IPC 리스너 제거
+    // stage 완료/실패 정보는 Output 스트림([STAGE_END] 마커)을 통해 App.tsx의 onOutput에서 처리
+    // (IPC → Output 단일 경로 전환)
 
     // Awaiting Input (New Event - requires orchestrator implementation)
     const cleanupAwaitingInput = window.codecafe.order.onAwaitingInput?.((data: { 
@@ -181,8 +157,7 @@ export function useIpcEffect() {
       cleanupSessionCompleted?.();
       cleanupSessionFailed?.();
       cleanupStageStarted?.();
-      cleanupStageCompleted?.();
-      cleanupStageFailed?.();
+      // cleanupStageCompleted/cleanupStageFailed 제거: stage 완료/실패는 Output 스트림에서 처리
       cleanupAwaitingInput?.();
       cleanupOrderCompleted?.();
       cleanupOrderFailed?.();

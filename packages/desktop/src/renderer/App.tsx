@@ -11,6 +11,20 @@ import { OrderStatus as BackendOrderStatus } from './types/models';
 import type { StageInfo } from './components/order/OrderStageProgress';
 import type { TimelineEvent } from './components/orders/OrderTimelineView';
 
+// Output 이벤트 타입 정의
+interface OrderOutputEvent {
+  orderId: string;
+  type: string;
+  content: string;
+  timestamp: string;
+  stageInfo?: {
+    stageId: string;
+    status?: 'completed' | 'failed';
+    duration?: number;
+    error?: string;
+  };
+}
+
 // Import components
 import { NewSidebar } from './components/layout/NewSidebar';
 import { NewGlobalLobby } from './components/views/NewGlobalLobby';
@@ -203,91 +217,86 @@ export function App(): JSX.Element {
       }));
     });
 
-    const cleanupStageCompleted = window.codecafe.order.onStageCompleted((data: { orderId: string; stageId: string; duration?: number }) => {
-      const timestamp = new Date().toISOString();
+    // Stage 완료/실패 state 업데이트 헬퍼 함수 (DRY)
+    const updateStageEndState = (
+      orderId: string,
+      stageId: string,
+      status: 'completed' | 'failed',
+      timestamp: string,
+      details?: { duration?: number; error?: string }
+    ) => {
       setStageResults(prev => ({
         ...prev,
-        [data.orderId]: {
-          ...(prev[data.orderId] || {}),
-          [data.stageId]: {
-            ...(prev[data.orderId]?.[data.stageId] || { stageId: data.stageId }),
-            status: 'completed',
+        [orderId]: {
+          ...(prev[orderId] || {}),
+          [stageId]: {
+            ...(prev[orderId]?.[stageId] || { stageId }),
+            status,
             completedAt: timestamp,
+            ...(details?.error && { error: details.error }),
           },
         },
       }));
+
       setTimelineEvents(prev => ({
         ...prev,
-        [data.orderId]: [
-          ...(prev[data.orderId] || []),
+        [orderId]: [
+          ...(prev[orderId] || []),
           {
             id: crypto.randomUUID(),
-            type: 'stage_complete',
+            type: status === 'completed' ? 'stage_complete' : 'stage_fail',
             timestamp,
-            content: `Stage completed${data.duration ? ` in ${data.duration}ms` : ''}`,
-            stageName: data.stageId,
+            content: status === 'completed'
+              ? `Stage completed${details?.duration ? ` in ${details.duration}ms` : ''}`
+              : details?.error || 'Stage failed',
+            stageName: stageId,
           },
         ],
       }));
-    });
+    };
 
-    const cleanupStageFailed = window.codecafe.order.onStageFailed((data: { orderId: string; stageId: string; error?: string }) => {
-      const timestamp = new Date().toISOString();
-      setStageResults(prev => ({
-        ...prev,
-        [data.orderId]: {
-          ...(prev[data.orderId] || {}),
-          [data.stageId]: {
-            ...(prev[data.orderId]?.[data.stageId] || { stageId: data.stageId }),
-            status: 'failed',
-            completedAt: timestamp,
-            error: data.error,
-          },
-        },
-      }));
-      setTimelineEvents(prev => ({
-        ...prev,
-        [data.orderId]: [
-          ...(prev[data.orderId] || []),
-          {
-            id: crypto.randomUUID(),
-            type: 'stage_fail',
-            timestamp,
-            content: data.error || 'Stage failed',
-            stageName: data.stageId,
-          },
-        ],
-      }));
-    });
+    // onStageCompleted/onStageFailed IPC 리스너 제거
+    // stage 완료/실패 정보는 onOutput의 stage_end 타입으로 단일 경로 처리
+    // (IPC → Output 단일 경로 전환)
 
-    // Subscribe to order output events for log storage
-    const cleanupOrderOutput = window.codecafe.order.onOutput((event: any) => {
-      const { orderId, data } = event;
-      if (data && data.data) {
+    // Subscribe to order output events for log storage and stage completion
+    const cleanupOrderOutput = window.codecafe.order.onOutput((event: OrderOutputEvent) => {
+      const { orderId, type: outputType, content, timestamp: eventTimestamp, stageInfo } = event;
+
+      // Handle stage_end type: update stage results and timeline (단일 경로 통합)
+      if (outputType === 'stage_end' && stageInfo) {
+        const timestamp = eventTimestamp || new Date().toISOString();
+        const status = stageInfo.status === 'completed' ? 'completed' : 'failed';
+        updateStageEndState(orderId, stageInfo.stageId, status, timestamp, {
+          duration: stageInfo.duration,
+          error: stageInfo.error,
+        });
+      }
+
+      // Log storage (기존 로직)
+      if (content) {
         // Determine log type based on content
-        let type: 'info' | 'error' | 'success' | 'warning' = 'info';
-        const message = data.data;
-        if (typeof message === 'string') {
-          if (message.toLowerCase().includes('error') || message.toLowerCase().includes('failed')) {
-            type = 'error';
-          } else if (message.toLowerCase().includes('success') || message.toLowerCase().includes('completed')) {
-            type = 'success';
-          } else if (message.toLowerCase().includes('warning')) {
-            type = 'warning';
+        let logType: 'info' | 'error' | 'success' | 'warning' = 'info';
+        if (typeof content === 'string') {
+          if (content.toLowerCase().includes('error') || content.toLowerCase().includes('failed')) {
+            logType = 'error';
+          } else if (content.toLowerCase().includes('success') || content.toLowerCase().includes('completed')) {
+            logType = 'success';
+          } else if (content.toLowerCase().includes('warning')) {
+            logType = 'warning';
           }
         }
         appendOrderLog(orderId, {
-          timestamp: data.timestamp || new Date().toISOString(),
-          type,
-          message: typeof message === 'string' ? message : JSON.stringify(message),
+          timestamp: eventTimestamp || new Date().toISOString(),
+          type: logType,
+          message: typeof content === 'string' ? content : JSON.stringify(content),
         });
       }
     });
 
     return () => {
       cleanupStageStarted();
-      cleanupStageCompleted();
-      cleanupStageFailed();
+      // cleanupStageCompleted/cleanupStageFailed 제거: stage 완료/실패는 onOutput에서 단일 경로 처리
       cleanupOrderOutput();
     };
   }, [appendOrderLog]);

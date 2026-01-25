@@ -211,6 +211,8 @@ export class ExecutionManager {
         timestamp: new Date().toISOString(),
         type: outputType,
         content: convertAnsiToHtml(parsed.content),
+        // stage_end 타입일 때 stageInfo 포함 (단일 경로 통합용)
+        ...(parsed.stageInfo && { stageInfo: parsed.stageInfo }),
       });
 
       // 2. Todo 진행률이 있으면 별도 이벤트로 전송
@@ -316,21 +318,14 @@ export class ExecutionManager {
     this.baristaEngine.on('stage:completed', (data: StageCompletedEvent) => {
       const duration = data.duration || 0;
       console.log(`[ExecutionManager] Stage COMPLETED: ${data.stageId} (Order: ${data.orderId}) | Duration: ${duration}ms`);
-      this.sendToRenderer('order:stage-completed', {
-        orderId: data.orderId,
-        stageId: data.stageId,
-        output: data.output,
-        duration: data.duration,
-      });
+      // IPC 전송 제거: stage 완료 정보는 Output 스트림([STAGE_END] 마커)을 통해 단일 경로로 전달
+      // 기존: this.sendToRenderer('order:stage-completed', {...})
     });
 
     this.baristaEngine.on('stage:failed', (data: StageFailedEvent) => {
       console.error(`[ExecutionManager] Stage FAILED: ${data.stageId} (Order: ${data.orderId}) | Error: ${data.error || 'Unknown'}`);
-      this.sendToRenderer('order:stage-failed', {
-        orderId: data.orderId,
-        stageId: data.stageId,
-        error: data.error,
-      });
+      // IPC 전송 제거: stage 실패 정보는 Output 스트림([STAGE_END] 마커)을 통해 단일 경로로 전달
+      // 기존: this.sendToRenderer('order:stage-failed', {...})
     });
 
     // order:awaiting-input - 사용자 입력 대기 상태
