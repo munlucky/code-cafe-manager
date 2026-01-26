@@ -648,12 +648,14 @@ export function groupLogs(entries: ParsedLogEntry[]): InteractionGroup[] {
   const groups: InteractionGroup[] = [];
   let currentGroup: InteractionGroup | null = null;
 
-  // stage 시작 패턴 감지 (예: "Stage 1:", "[Stage]", "Phase 1:" 등)
+  // stage 시작 패턴 감지 (예: "Stage 1:", "[Stage]", "Phase 1:", "▶ Stage Started:" 등)
   const isStageStart = (content: string): boolean => {
     const patterns = [
       /^(Stage|Phase|Step)\s*\d+/i,
       /^\[?(Stage|Phase|Step)\]?:/i,
       /^#{1,3}\s*(Stage|Phase|Step)/i,
+      // orchestrator의 실제 Stage Started 패턴
+      /(?:▶\s*)?Stage\s+Started:/i,
     ];
     return patterns.some((p) => p.test(content.trim()));
   };
