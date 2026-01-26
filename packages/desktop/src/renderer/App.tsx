@@ -50,35 +50,19 @@ export function App(): JSX.Element {
   // Order state from store
   const { orders: backendOrders, sessionStatuses } = useOrderStore();
 
-  // Convert backend orders to design orders (memoized)
-  const orders = useMemo(
-    () =>
-      backendOrders.map((order) =>
-        convertToDesignOrder(order, sessionStatuses[order.id])
-      ),
-    [backendOrders, sessionStatuses]
-  );
-
-  // Filter orders by current cafe (memoized for performance)
-  // Also check counter (cafe path) for backward compatibility with old orders
+  // Filter and convert orders for current cafe (memoized)
+  // Also checks counter (cafe path) for backward compatibility with old orders
   const currentCafePath = currentCafeId ? getCurrentCafe()?.path : undefined;
-  const backendOrderMap = useMemo(
-    () => new Map(backendOrders.map((o) => [o.id, o])),
-    [backendOrders]
-  );
   const cafeOrders = useMemo(
     () =>
-      orders.filter((o) => {
-        // Match by cafeId (new orders)
-        if (o.cafeId === currentCafeId) return true;
-        // Fallback: match by counter (old orders without cafeId)
-        const backendOrder = backendOrderMap.get(o.id);
-        if (backendOrder && currentCafePath && backendOrder.counter === currentCafePath) {
-          return true;
-        }
-        return false;
-      }),
-    [orders, currentCafeId, currentCafePath, backendOrderMap]
+      backendOrders
+        .filter(
+          (order) =>
+            order.cafeId === currentCafeId ||
+            (currentCafePath && order.counter === currentCafePath)
+        )
+        .map((order) => convertToDesignOrder(order, sessionStatuses[order.id])),
+    [backendOrders, currentCafeId, currentCafePath, sessionStatuses]
   );
 
   // Initialize IPC effect
