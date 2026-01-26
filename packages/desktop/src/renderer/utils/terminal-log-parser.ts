@@ -655,7 +655,7 @@ export function groupLogs(entries: ParsedLogEntry[]): InteractionGroup[] {
       /^\[?(Stage|Phase|Step)\]?:/i,
       /^#{1,3}\s*(Stage|Phase|Step)/i,
       // orchestrator의 실제 Stage Started 패턴
-      /(?:▶\s*)?Stage\s+Started:/i,
+      /^(?:▶\s*)?Stage\s+Started:/i,
     ];
     return patterns.some((p) => p.test(content.trim()));
   };
