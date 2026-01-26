@@ -4,6 +4,7 @@ import {
   Globe,
   Save,
   CheckCircle2,
+  AlertCircle,
   Loader2,
   Info,
 } from 'lucide-react';
@@ -31,18 +32,25 @@ export const SettingsView: React.FC = () => {
   const { language, setLanguage } = useSettingsStore();
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>(language);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'success'>('idle');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   const hasChanges = selectedLanguage !== language;
 
   const handleSave = useCallback(() => {
     setIsSaving(true);
+    setSaveStatus('idle');
     // Simulate a brief save delay for UX
     setTimeout(() => {
-      setLanguage(selectedLanguage);
-      setSaveStatus('success');
-      setIsSaving(false);
-      setTimeout(() => setSaveStatus('idle'), SAVE_STATUS_DISPLAY_MS);
+      try {
+        setLanguage(selectedLanguage);
+        setSaveStatus('success');
+        setTimeout(() => setSaveStatus('idle'), SAVE_STATUS_DISPLAY_MS);
+      } catch (error) {
+        console.error('Failed to save language setting:', error);
+        setSaveStatus('error');
+      } finally {
+        setIsSaving(false);
+      }
     }, 300);
   }, [selectedLanguage, setLanguage]);
 
@@ -78,6 +86,12 @@ export const SettingsView: React.FC = () => {
               <span className="flex items-center gap-1 text-green-400 text-sm">
                 <CheckCircle2 className="w-4 h-4" />
                 {t('houseRules.saved')}
+              </span>
+            )}
+            {saveStatus === 'error' && (
+              <span className="flex items-center gap-1 text-red-400 text-sm">
+                <AlertCircle className="w-4 h-4" />
+                {t('houseRules.failedToSave')}
               </span>
             )}
           </div>
