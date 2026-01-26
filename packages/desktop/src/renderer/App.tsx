@@ -37,8 +37,16 @@ const VIEW_MAP = {
 };
 
 export function App(): JSX.Element {
-  const { currentView, setView } = useViewStore();
-  const { cafes, currentCafeId, loadCafes, getCurrentCafe } = useCafeStore();
+  const { currentView, viewParams, setView } = useViewStore();
+  const { cafes, loadCafes, getCafe } = useCafeStore((state) => ({
+    cafes: state.cafes,
+    loadCafes: state.loadCafes,
+    getCafe: (id: string) => state.cafes.find((c) => c.id === id),
+  }));
+
+  // Get current cafe ID from viewParams (set when navigating to a cafe view)
+  const currentCafeId = (viewParams as { cafeId?: string } | undefined)?.cafeId;
+  const getCurrentCafe = () => (currentCafeId ? getCafe(currentCafeId) : null);
 
   // Global data state
   const [recipes, setRecipes] = useState<Recipe[]>([]);
