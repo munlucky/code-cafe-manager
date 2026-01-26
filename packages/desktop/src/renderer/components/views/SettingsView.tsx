@@ -1,19 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Settings,
   Globe,
   Save,
   CheckCircle2,
-  AlertCircle,
   Loader2,
   Info,
 } from 'lucide-react';
-import type { Cafe } from '../../types/design';
+import { useSettingsStore, type SupportedLanguage } from '../../store/useSettingsStore';
+import { useTranslation } from '../../i18n';
 
 /** Duration in ms to display save success status */
 const SAVE_STATUS_DISPLAY_MS = 2000;
-
-type SupportedLanguage = 'ko' | 'en' | 'ja' | 'zh';
 
 interface LanguageOption {
   code: SupportedLanguage;
@@ -28,72 +26,34 @@ const LANGUAGES: LanguageOption[] = [
   { code: 'zh', name: 'Chinese', nativeName: '中文' },
 ];
 
-interface SettingsViewProps {
-  cafe: Cafe | null;
-  onUpdateCafe: (id: string, settings: { language?: SupportedLanguage }) => Promise<void>;
-}
-
-export const SettingsView: React.FC<SettingsViewProps> = ({
-  cafe,
-  onUpdateCafe,
-}) => {
-  const [language, setLanguage] = useState<SupportedLanguage>('en');
-  const [originalLanguage, setOriginalLanguage] = useState<SupportedLanguage>('en');
+export const SettingsView: React.FC = () => {
+  const { t } = useTranslation();
+  const { language, setLanguage } = useSettingsStore();
+  const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>(language);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success'>('idle');
 
-  useEffect(() => {
-    const lang = (cafe?.settings?.language as SupportedLanguage) || 'en';
-    setLanguage(lang);
-    setOriginalLanguage(lang);
-  }, [cafe]);
+  const hasChanges = selectedLanguage !== language;
 
-  const hasChanges = language !== originalLanguage;
-
-  const handleSave = useCallback(async () => {
-    if (!cafe) return;
+  const handleSave = useCallback(() => {
     setIsSaving(true);
-    setSaveStatus('idle');
-    try {
-      await onUpdateCafe(cafe.id, { language });
-      setOriginalLanguage(language);
+    // Simulate a brief save delay for UX
+    setTimeout(() => {
+      setLanguage(selectedLanguage);
       setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), SAVE_STATUS_DISPLAY_MS);
-    } catch (error) {
-      console.error('Failed to save settings:', error);
-      setSaveStatus('error');
-    } finally {
       setIsSaving(false);
-    }
-  }, [cafe, language, onUpdateCafe]);
-
-  if (!cafe) {
-    return (
-      <div className="p-10 max-w-4xl mx-auto">
-        <div className="text-center py-24 border-2 border-dashed border-cafe-800 rounded-3xl bg-cafe-900/30">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-cafe-800 mb-6 shadow-inner">
-            <Settings className="w-10 h-10 text-cafe-600" />
-          </div>
-          <h3 className="text-2xl font-bold text-cafe-200 mb-3">
-            No Cafe Selected
-          </h3>
-          <p className="text-cafe-500 max-w-md mx-auto">
-            Select a cafe from the sidebar to configure its settings.
-          </p>
-        </div>
-      </div>
-    );
-  }
+      setTimeout(() => setSaveStatus('idle'), SAVE_STATUS_DISPLAY_MS);
+    }, 300);
+  }, [selectedLanguage, setLanguage]);
 
   return (
     <div className="p-10 max-w-4xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-cafe-100 mb-2 tracking-tight">
-          Settings
+          {t('settings.title')}
         </h1>
         <p className="text-cafe-400">
-          Configure settings for{' '}
-          <span className="text-brand-light font-medium">{cafe.name}</span>
+          {t('settings.subtitle')}
         </p>
       </div>
 
@@ -106,10 +66,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
             <div>
               <h3 className="text-lg font-semibold text-cafe-100">
-                Language Mode
+                {t('settings.language')}
               </h3>
               <p className="text-xs text-cafe-500">
-                AI response language for this cafe
+                {t('settings.languageDesc')}
               </p>
             </div>
           </div>
@@ -117,13 +77,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             {saveStatus === 'success' && (
               <span className="flex items-center gap-1 text-green-400 text-sm">
                 <CheckCircle2 className="w-4 h-4" />
-                Saved
-              </span>
-            )}
-            {saveStatus === 'error' && (
-              <span className="flex items-center gap-1 text-red-400 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                Failed to save
+                {t('houseRules.saved')}
               </span>
             )}
           </div>
@@ -133,9 +87,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           {LANGUAGES.map((lang) => (
             <button
               key={lang.code}
-              onClick={() => setLanguage(lang.code)}
+              onClick={() => setSelectedLanguage(lang.code)}
               className={`p-4 rounded-xl border-2 transition-all text-left ${
-                language === lang.code
+                selectedLanguage === lang.code
                   ? 'border-brand bg-brand/10 text-cafe-100'
                   : 'border-cafe-700 bg-cafe-900/50 text-cafe-400 hover:border-cafe-600 hover:text-cafe-300'
               }`}
@@ -151,10 +105,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="flex items-start gap-3">
             <Info className="w-4 h-4 text-cafe-500 mt-0.5 flex-shrink-0" />
             <div className="text-xs text-cafe-500">
-              <p>
-                The AI will respond in the selected language. System prompts and
-                skills remain in English for token efficiency.
-              </p>
+              <p>{t('settings.languageInfo')}</p>
             </div>
           </div>
         </div>
@@ -170,7 +121,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             ) : (
               <Save className="w-4 h-4" />
             )}
-            Save Changes
+            {t('settings.saveChanges')}
           </button>
         </div>
       </div>
@@ -178,7 +129,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {/* Additional Settings Placeholder */}
       <div className="bg-cafe-800/50 border border-cafe-700/50 border-dashed rounded-2xl p-6">
         <div className="text-center text-cafe-500">
-          <p className="text-sm">More settings coming soon...</p>
+          <p className="text-sm">{t('settings.moreSettings')}</p>
         </div>
       </div>
     </div>

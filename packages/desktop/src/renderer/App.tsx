@@ -23,16 +23,16 @@ import { NewGlobalLobby } from './components/views/NewGlobalLobby';
 import { NewCafeDashboard } from './components/views/NewCafeDashboard';
 import { NewWorkflows } from './components/views/NewWorkflows';
 import { NewSkills } from './components/views/NewSkills';
-import { BlueprintsView } from './components/views/BlueprintsView';
+import { HouseRulesView } from './components/views/HouseRulesView';
 import { SettingsView } from './components/views/SettingsView';
 
 // View mapping
 const VIEW_MAP = {
   cafes: NewGlobalLobby,
-  dashboard: NewCafeDashboard,
+  orders: NewCafeDashboard,
   workflows: NewWorkflows,
   skills: NewSkills,
-  blueprints: BlueprintsView,
+  houseRules: HouseRulesView,
   settings: SettingsView,
 };
 
@@ -164,12 +164,12 @@ export function App(): JSX.Element {
             <NewGlobalLobby
               cafes={designCafes}
               onCreateCafe={handleCreateCafe}
-              onSelectCafe={(id) => handleNavigate('dashboard', id)}
+              onSelectCafe={(id) => handleNavigate('orders', id)}
               onDeleteCafe={handleDeleteCafe}
             />
           )}
 
-          {currentView === 'dashboard' && currentCafeId && getCurrentCafe() && (
+          {currentView === 'orders' && currentCafeId && getCurrentCafe() && (
             <NewCafeDashboard
               cafe={convertToDesignCafe(getCurrentCafe()!)}
               orders={orders}
@@ -203,8 +203,8 @@ export function App(): JSX.Element {
             />
           )}
 
-          {currentView === 'blueprints' && (
-            <BlueprintsView
+          {currentView === 'houseRules' && (
+            <HouseRulesView
               cafe={currentCafeId && getCurrentCafe() ? convertToDesignCafe(getCurrentCafe()!) : null}
               onUpdateCafe={async (id, settings) => {
                 await window.codecafe.cafe.update(id, { settings });
@@ -213,15 +213,7 @@ export function App(): JSX.Element {
             />
           )}
 
-          {currentView === 'settings' && (
-            <SettingsView
-              cafe={currentCafeId && getCurrentCafe() ? convertToDesignCafe(getCurrentCafe()!) : null}
-              onUpdateCafe={async (id, settings) => {
-                await window.codecafe.cafe.update(id, { settings });
-                await loadCafes();
-              }}
-            />
-          )}
+          {currentView === 'settings' && <SettingsView />}
         </div>
       </main>
     </div>
