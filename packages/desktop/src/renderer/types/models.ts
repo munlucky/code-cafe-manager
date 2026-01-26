@@ -47,6 +47,7 @@ export interface Order {
   endedAt: Date | string | null;
   error?: string;
   logs: WorkflowLog[]; // Order execution logs
+  cafeId?: string; // Session-based execution을 위한 cafeId
   worktreeInfo?: (
     | {
         path: string;

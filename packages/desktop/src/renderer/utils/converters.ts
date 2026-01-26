@@ -49,7 +49,7 @@ export const convertToDesignOrder = (
     workflowId: order.workflowId || '',
     workflowName: order.workflowName || 'Unknown',
     status,
-    cafeId: order.counter || '',
+    cafeId: order.cafeId || '',
     vars: order.vars || {},
     worktreeInfo: order.worktreeInfo?.removed
       ? order.worktreeInfo

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useViewStore } from './store/useViewStore';
 import { useCafeStore } from './store/useCafeStore';
 import { useOrderStore } from './store/useOrderStore';
@@ -50,9 +50,19 @@ export function App(): JSX.Element {
   // Order state from store
   const { orders: backendOrders, sessionStatuses } = useOrderStore();
 
-  // Convert backend orders to design orders
-  const orders = backendOrders.map((order) =>
-    convertToDesignOrder(order, sessionStatuses[order.id])
+  // Convert backend orders to design orders (memoized)
+  const orders = useMemo(
+    () =>
+      backendOrders.map((order) =>
+        convertToDesignOrder(order, sessionStatuses[order.id])
+      ),
+    [backendOrders, sessionStatuses]
+  );
+
+  // Filter orders by current cafe (memoized for performance)
+  const cafeOrders = useMemo(
+    () => orders.filter((o) => o.cafeId === currentCafeId),
+    [orders, currentCafeId]
   );
 
   // Initialize IPC effect
@@ -172,7 +182,7 @@ export function App(): JSX.Element {
           {currentView === 'orders' && currentCafeId && getCurrentCafe() && (
             <NewCafeDashboard
               cafe={convertToDesignCafe(getCurrentCafe()!)}
-              orders={orders}
+              orders={cafeOrders}
               workflows={recipes}
               onCreateOrder={handleCreateOrder}
               onDeleteOrder={handleDeleteOrder}
