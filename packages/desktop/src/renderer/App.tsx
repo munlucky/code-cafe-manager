@@ -38,11 +38,12 @@ const VIEW_MAP = {
 
 export function App(): JSX.Element {
   const { currentView, viewParams, setView } = useViewStore();
-  const { cafes, loadCafes, getCafe } = useCafeStore((state) => ({
-    cafes: state.cafes,
-    loadCafes: state.loadCafes,
-    getCafe: (id: string) => state.cafes.find((c) => c.id === id),
-  }));
+  const cafes = useCafeStore((state) => state.cafes);
+  const loadCafes = useCafeStore((state) => state.loadCafes);
+  const getCafe = useCallback(
+    (id: string) => cafes.find((c) => c.id === id),
+    [cafes]
+  );
 
   // Get current cafe ID from viewParams (set when navigating to a cafe view)
   const currentCafeId = (viewParams as { cafeId?: string } | undefined)?.cafeId;
