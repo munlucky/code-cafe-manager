@@ -10,6 +10,9 @@ import {
 } from 'lucide-react';
 import type { Cafe } from '../../types/design';
 
+/** Duration in ms to display save success status */
+const SAVE_STATUS_DISPLAY_MS = 2000;
+
 type SupportedLanguage = 'ko' | 'en' | 'ja' | 'zh';
 
 interface LanguageOption {
@@ -55,7 +58,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       await onUpdateCafe(cafe.id, { language });
       setOriginalLanguage(language);
       setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 2000);
+      setTimeout(() => setSaveStatus('idle'), SAVE_STATUS_DISPLAY_MS);
     } catch (error) {
       console.error('Failed to save settings:', error);
       setSaveStatus('error');

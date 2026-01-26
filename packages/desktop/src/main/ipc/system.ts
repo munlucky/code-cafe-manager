@@ -8,17 +8,9 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import type { IpcResponse } from './types.js';
 
 const execAsync = promisify(exec);
-
-interface IpcResponse<T = void> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-  };
-}
 
 export interface EnvironmentCheckResult {
   git: {
@@ -106,8 +98,8 @@ export function registerSystemHandlers(): void {
       try {
         const { stdout } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: path });
         currentBranch = stdout.trim();
-      } catch {
-        // Ignore error
+      } catch (error) {
+        console.warn('[System] Failed to get current branch:', error);
       }
 
       // Check for remote
@@ -125,8 +117,8 @@ export function registerSystemHandlers(): void {
             remoteUrl = parts[1];
           }
         }
-      } catch {
-        // No remote configured
+      } catch (error) {
+        console.warn('[System] No remote configured or failed to get remote:', error);
       }
 
       return {

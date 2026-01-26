@@ -10,6 +10,9 @@ import {
 } from 'lucide-react';
 import type { Cafe } from '../../types/design';
 
+/** Duration in ms to display save success status */
+const SAVE_STATUS_DISPLAY_MS = 2000;
+
 interface BlueprintsViewProps {
   cafe: Cafe | null;
   onUpdateCafe: (id: string, settings: { systemPrompt?: string }) => Promise<void>;
@@ -44,7 +47,7 @@ export const BlueprintsView: React.FC<BlueprintsViewProps> = ({
       await onUpdateCafe(cafe.id, { systemPrompt });
       setOriginalPrompt(systemPrompt);
       setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 2000);
+      setTimeout(() => setSaveStatus('idle'), SAVE_STATUS_DISPLAY_MS);
     } catch (error) {
       console.error('Failed to save system prompt:', error);
       setSaveStatus('error');

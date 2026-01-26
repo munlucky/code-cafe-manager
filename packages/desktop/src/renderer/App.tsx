@@ -169,7 +169,7 @@ export function App(): JSX.Element {
             />
           )}
 
-          {currentView === 'dashboard' && currentCafeId && (
+          {currentView === 'dashboard' && currentCafeId && getCurrentCafe() && (
             <NewCafeDashboard
               cafe={convertToDesignCafe(getCurrentCafe()!)}
               orders={orders}
@@ -205,7 +205,7 @@ export function App(): JSX.Element {
 
           {currentView === 'blueprints' && (
             <BlueprintsView
-              cafe={currentCafeId ? convertToDesignCafe(getCurrentCafe()!) : null}
+              cafe={currentCafeId && getCurrentCafe() ? convertToDesignCafe(getCurrentCafe()!) : null}
               onUpdateCafe={async (id, settings) => {
                 await window.codecafe.cafe.update(id, { settings });
                 await loadCafes();
@@ -215,7 +215,7 @@ export function App(): JSX.Element {
 
           {currentView === 'settings' && (
             <SettingsView
-              cafe={currentCafeId ? convertToDesignCafe(getCurrentCafe()!) : null}
+              cafe={currentCafeId && getCurrentCafe() ? convertToDesignCafe(getCurrentCafe()!) : null}
               onUpdateCafe={async (id, settings) => {
                 await window.codecafe.cafe.update(id, { settings });
                 await loadCafes();

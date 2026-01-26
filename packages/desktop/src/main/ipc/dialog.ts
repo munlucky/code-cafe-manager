@@ -4,15 +4,7 @@
  */
 
 import { ipcMain, dialog, BrowserWindow } from 'electron';
-
-interface IpcResponse<T = void> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-  };
-}
+import type { IpcResponse } from './types.js';
 
 /**
  * Register Dialog IPC Handlers
@@ -22,7 +14,14 @@ export function registerDialogHandlers(): void {
   ipcMain.handle('dialog:selectFolder', async (): Promise<IpcResponse<string | null>> => {
     try {
       const window = BrowserWindow.getFocusedWindow();
-      const result = await dialog.showOpenDialog(window!, {
+      if (!window) {
+        return {
+          success: false,
+          error: { code: 'NO_FOCUSED_WINDOW', message: 'No focused window available.' },
+        };
+      }
+
+      const result = await dialog.showOpenDialog(window, {
         properties: ['openDirectory', 'createDirectory'],
         title: 'Select Project Folder',
       });
@@ -50,7 +49,14 @@ export function registerDialogHandlers(): void {
     async (_, options?: { filters?: { name: string; extensions: string[] }[] }): Promise<IpcResponse<string | null>> => {
       try {
         const window = BrowserWindow.getFocusedWindow();
-        const result = await dialog.showOpenDialog(window!, {
+        if (!window) {
+          return {
+            success: false,
+            error: { code: 'NO_FOCUSED_WINDOW', message: 'No focused window available.' },
+          };
+        }
+
+        const result = await dialog.showOpenDialog(window, {
           properties: ['openFile'],
           title: 'Select File',
           filters: options?.filters,

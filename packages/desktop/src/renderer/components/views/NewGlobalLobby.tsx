@@ -16,6 +16,9 @@ import {
 } from 'lucide-react';
 import type { Cafe } from '../../types/design';
 
+/** Debounce delay in ms for git status check */
+const GIT_CHECK_DEBOUNCE_MS = 500;
+
 interface EnvironmentStatus {
   git: { installed: boolean; version?: string };
   node: { installed: boolean; version?: string };
@@ -91,7 +94,7 @@ export const NewGlobalLobby: React.FC<NewGlobalLobbyProps> = ({
       }
     };
 
-    const timeoutId = setTimeout(checkGit, 500);
+    const timeoutId = setTimeout(checkGit, GIT_CHECK_DEBOUNCE_MS);
     return () => clearTimeout(timeoutId);
   }, [newPath]);
 
