@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  FileText,
+  ScrollText,
   Save,
   RotateCcw,
   CheckCircle2,
@@ -9,19 +9,21 @@ import {
   Info,
 } from 'lucide-react';
 import type { Cafe } from '../../types/design';
+import { useTranslation } from '../../i18n';
 
 /** Duration in ms to display save success status */
 const SAVE_STATUS_DISPLAY_MS = 2000;
 
-interface BlueprintsViewProps {
+interface HouseRulesViewProps {
   cafe: Cafe | null;
   onUpdateCafe: (id: string, settings: { systemPrompt?: string }) => Promise<void>;
 }
 
-export const BlueprintsView: React.FC<BlueprintsViewProps> = ({
+export const HouseRulesView: React.FC<HouseRulesViewProps> = ({
   cafe,
   onUpdateCafe,
 }) => {
+  const { t } = useTranslation();
   const [systemPrompt, setSystemPrompt] = useState('');
   const [originalPrompt, setOriginalPrompt] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -65,13 +67,13 @@ export const BlueprintsView: React.FC<BlueprintsViewProps> = ({
       <div className="p-10 max-w-4xl mx-auto">
         <div className="text-center py-24 border-2 border-dashed border-cafe-800 rounded-3xl bg-cafe-900/30">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-cafe-800 mb-6 shadow-inner">
-            <FileText className="w-10 h-10 text-cafe-600" />
+            <ScrollText className="w-10 h-10 text-cafe-600" />
           </div>
           <h3 className="text-2xl font-bold text-cafe-200 mb-3">
-            No Cafe Selected
+            {t('houseRules.noSelection')}
           </h3>
           <p className="text-cafe-500 max-w-md mx-auto">
-            Select a cafe from the sidebar to configure its blueprints.
+            {t('houseRules.noSelectionDesc')}
           </p>
         </div>
       </div>
@@ -82,10 +84,10 @@ export const BlueprintsView: React.FC<BlueprintsViewProps> = ({
     <div className="p-10 max-w-4xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-cafe-100 mb-2 tracking-tight">
-          Blueprints
+          {t('houseRules.title')}
         </h1>
         <p className="text-cafe-400">
-          Configure system prompts and guidelines for{' '}
+          {t('houseRules.subtitle')}{' '}
           <span className="text-brand-light font-medium">{cafe.name}</span>
         </p>
       </div>
@@ -95,12 +97,9 @@ export const BlueprintsView: React.FC<BlueprintsViewProps> = ({
         <div className="flex items-start gap-3">
           <Info className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
           <div className="text-sm text-blue-200">
-            <p className="font-medium mb-1">What are Blueprints?</p>
+            <p className="font-medium mb-1">{t('houseRules.whatIs')}</p>
             <p className="text-blue-300/80">
-              Blueprints define the system prompt that will be applied to all
-              orders in this cafe. Use it to set coding standards, project
-              context, architectural patterns, and any guidelines the AI should
-              follow.
+              {t('houseRules.whatIsDesc')}
             </p>
           </div>
         </div>
@@ -111,14 +110,14 @@ export const BlueprintsView: React.FC<BlueprintsViewProps> = ({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-brand/20 rounded-lg">
-              <FileText className="w-5 h-5 text-brand" />
+              <ScrollText className="w-5 h-5 text-brand" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-cafe-100">
-                System Prompt
+                {t('houseRules.systemPrompt')}
               </h3>
               <p className="text-xs text-cafe-500">
-                Instructions applied to all AI interactions
+                {t('houseRules.systemPromptDesc')}
               </p>
             </div>
           </div>
@@ -126,13 +125,13 @@ export const BlueprintsView: React.FC<BlueprintsViewProps> = ({
             {saveStatus === 'success' && (
               <span className="flex items-center gap-1 text-green-400 text-sm">
                 <CheckCircle2 className="w-4 h-4" />
-                Saved
+                {t('houseRules.saved')}
               </span>
             )}
             {saveStatus === 'error' && (
               <span className="flex items-center gap-1 text-red-400 text-sm">
                 <AlertCircle className="w-4 h-4" />
-                Failed to save
+                {t('houseRules.failedToSave')}
               </span>
             )}
           </div>
@@ -161,10 +160,10 @@ This is a React application using Next.js...`}
 
         <div className="flex items-center justify-between mt-4 pt-4 border-t border-cafe-700">
           <div className="text-xs text-cafe-500">
-            {systemPrompt.length} characters
+            {systemPrompt.length} {t('houseRules.characters')}
             {hasChanges && (
               <span className="ml-2 text-amber-400">
-                (unsaved changes)
+                ({t('houseRules.unsavedChanges')})
               </span>
             )}
           </div>
@@ -175,7 +174,7 @@ This is a React application using Next.js...`}
               className="px-4 py-2 text-cafe-400 hover:text-cafe-200 disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center gap-2"
             >
               <RotateCcw className="w-4 h-4" />
-              Reset
+              {t('houseRules.reset')}
             </button>
             <button
               onClick={handleSave}
@@ -187,7 +186,7 @@ This is a React application using Next.js...`}
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              Save
+              {t('houseRules.save')}
             </button>
           </div>
         </div>
@@ -195,20 +194,12 @@ This is a React application using Next.js...`}
 
       {/* Usage Tips */}
       <div className="mt-6 p-4 bg-cafe-900/50 border border-cafe-700/50 rounded-xl">
-        <h4 className="text-sm font-medium text-cafe-300 mb-2">Tips</h4>
+        <h4 className="text-sm font-medium text-cafe-300 mb-2">{t('houseRules.tips')}</h4>
         <ul className="text-xs text-cafe-500 space-y-1">
-          <li>
-            Use Markdown formatting for better organization
-          </li>
-          <li>
-            Include project-specific context like tech stack and conventions
-          </li>
-          <li>
-            Keep prompts concise but comprehensive - they affect token usage
-          </li>
-          <li>
-            System prompts are applied in English for token efficiency
-          </li>
+          <li>{t('houseRules.tip1')}</li>
+          <li>{t('houseRules.tip2')}</li>
+          <li>{t('houseRules.tip3')}</li>
+          <li>{t('houseRules.tip4')}</li>
         </ul>
       </div>
     </div>
