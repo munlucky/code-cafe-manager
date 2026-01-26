@@ -60,9 +60,25 @@ export function App(): JSX.Element {
   );
 
   // Filter orders by current cafe (memoized for performance)
+  // Also check counter (cafe path) for backward compatibility with old orders
+  const currentCafePath = currentCafeId ? getCurrentCafe()?.path : undefined;
+  const backendOrderMap = useMemo(
+    () => new Map(backendOrders.map((o) => [o.id, o])),
+    [backendOrders]
+  );
   const cafeOrders = useMemo(
-    () => orders.filter((o) => o.cafeId === currentCafeId),
-    [orders, currentCafeId]
+    () =>
+      orders.filter((o) => {
+        // Match by cafeId (new orders)
+        if (o.cafeId === currentCafeId) return true;
+        // Fallback: match by counter (old orders without cafeId)
+        const backendOrder = backendOrderMap.get(o.id);
+        if (backendOrder && currentCafePath && backendOrder.counter === currentCafePath) {
+          return true;
+        }
+        return false;
+      }),
+    [orders, currentCafeId, currentCafePath, backendOrderMap]
   );
 
   // Initialize IPC effect
