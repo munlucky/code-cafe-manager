@@ -94,7 +94,7 @@ BaristaManager                    OrderManager
 
 | Handler | 의존하는 외부 모듈 | 주요 역할 |
 |---------|-------------------|----------|
-| `ipc/cafe.ts` | @codecafe/core (CafeSchema) | Cafe 레지스트리 CRUD |
+| `ipc/cafe.ts` | @codecafe/core (CafeSchema, CafeRegistry) | Cafe 레지스트리 CRUD |
 | `ipc/order.ts` | @codecafe/core (Orchestrator), @codecafe/git-worktree | Order CRUD + Worktree 통합 |
 | `ipc/workflow.ts` | @codecafe/orchestrator | Workflow 관리 |
 | `ipc/skill.ts` | @codecafe/orchestrator (SkillManager) | Skill CRUD |
@@ -505,7 +505,7 @@ Main Process sends                  useIpcEffect hooks
 |-------------|-------------|-------------------|----------|
 | `cafe:list` | ipc/cafe.ts | CafeRegistry (JSON) | `IpcResponse<Cafe[]>` |
 | `cafe:create` | ipc/cafe.ts | Git config, CafeSchema | `IpcResponse<Cafe>` |
-| `order:createWithWorktree` | ipc/order.ts | WorktreeManager, Orchestrator | `IpcResponse<{order, worktreeInfo}>` |
+| `order:createWithWorktree` | ipc/order.ts | WorktreeManager, Orchestrator, @codecafe/git-worktree | `IpcResponse<{order, worktreeInfo}>` |
 | `order:execute` | ipc/order.ts | ExecutionManager, BaristaEngineV2 | `IpcResponse<void>` |
 | `order:sendInput` | ipc/order.ts | Orchestrator.sendInput() | `IpcResponse<void>` |
 | `workflow:list` | ipc/workflow.ts | @codecafe/orchestrator | `IpcResponse<Workflow[]>` |
