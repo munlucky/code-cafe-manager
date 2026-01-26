@@ -172,7 +172,7 @@ export function App(): JSX.Element {
           {currentView === 'orders' && currentCafeId && getCurrentCafe() && (
             <NewCafeDashboard
               cafe={convertToDesignCafe(getCurrentCafe()!)}
-              orders={orders}
+              orders={orders.filter((o) => o.cafeId === currentCafeId)}
               workflows={recipes}
               onCreateOrder={handleCreateOrder}
               onDeleteOrder={handleDeleteOrder}
