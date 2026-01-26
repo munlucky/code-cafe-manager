@@ -4,11 +4,18 @@
  */
 
 /**
+ * Supported languages for AI responses
+ */
+export type SupportedLanguage = 'ko' | 'en' | 'ja' | 'zh';
+
+/**
  * Cafe Settings
  */
 export interface CafeSettings {
   baseBranch: string; // Default: 'main'
   worktreeRoot: string; // Default: '../.codecafe-worktrees'
+  systemPrompt?: string; // Custom system prompt for all orders in this cafe
+  language?: SupportedLanguage; // AI response language (default: 'en')
 }
 
 /**

@@ -13,6 +13,8 @@ import { registerOrchestratorHandlers } from './ipc/orchestrator.js';
 import { registerOrderHandlers, cleanupOrderHandlers } from './ipc/order.js';
 import { registerWorkflowHandlers } from './ipc/workflow.js';
 import { registerSkillHandlers } from './ipc/skill.js';
+import { registerDialogHandlers } from './ipc/dialog.js';
+import { registerSystemHandlers } from './ipc/system.js';
 import { initExecutionManager, cleanupExecutionManager, getExecutionManager } from './execution-manager.js';
 import { setupMainProcessLogger } from './file-logger.js';
 
@@ -156,6 +158,8 @@ function setupIpcHandlers(): void {
   registerProviderHandlers();
   registerWorkflowHandlers();
   registerSkillHandlers();
+  registerDialogHandlers();
+  registerSystemHandlers();
 
   if (orchestrator) {
     registerOrchestratorHandlers(orchestrator);

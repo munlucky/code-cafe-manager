@@ -6,9 +6,13 @@ export enum OrderStatus {
   FAILED = 'FAILED',
 }
 
+export type SupportedLanguage = 'ko' | 'en' | 'ja' | 'zh';
+
 export interface CafeSettings {
   baseBranch: string;
   worktreeRoot: string;
+  systemPrompt?: string;
+  language?: SupportedLanguage;
 }
 
 export interface Cafe {

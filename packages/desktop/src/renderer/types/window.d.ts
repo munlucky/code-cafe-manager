@@ -478,6 +478,29 @@ declare global {
         reload: () => Promise<IpcResponse<void>>;
       };
 
+      // Dialog (Native OS dialogs)
+      dialog: {
+        selectFolder: () => Promise<IpcResponse<string | null>>;
+        selectFile: (options?: { filters?: { name: string; extensions: string[] }[] }) => Promise<IpcResponse<string | null>>;
+      };
+
+      // System utilities
+      system: {
+        checkEnvironment: () => Promise<IpcResponse<{
+          git: { installed: boolean; version?: string };
+          node: { installed: boolean; version?: string };
+          pnpm: { installed: boolean; version?: string };
+        }>>;
+        checkGitRepo: (path: string) => Promise<IpcResponse<{
+          isGitRepo: boolean;
+          hasRemote: boolean;
+          remoteName?: string;
+          remoteUrl?: string;
+          currentBranch?: string;
+        }>>;
+        gitInit: (path: string) => Promise<IpcResponse<void>>;
+      };
+
       // Event Listeners - Return cleanup function
       onBaristaEvent: (callback: (event: any) => void) => () => void;
       onOrderEvent: (callback: (event: any) => void) => () => void;
