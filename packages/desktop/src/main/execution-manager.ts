@@ -239,16 +239,12 @@ export class ExecutionManager {
     });
 
     // Session 관련 이벤트들
-    this.baristaEngine.on('order:started', async (data: OrderStartedEvent) => {
+    // NOTE: orchestrator.startOrder()는 orchestrator.executeOrder()에서 이미 호출됨
+    // 여기서 중복 호출하면 "Order started" 로그가 두 번 저장되는 버그 발생
+    this.baristaEngine.on('order:started', (data: OrderStartedEvent) => {
       const now = Date.now();
 
-      // Orchestrator의 Order 상태를 PENDING → RUNNING으로 변경
-      try {
-        await this.orchestrator.startOrder(data.orderId);
-        console.log(`[ExecutionManager] Order status changed to RUNNING: ${data.orderId}`);
-      } catch (err) {
-        console.error(`[ExecutionManager] Failed to update order status:`, err);
-      }
+      console.log(`[ExecutionManager] Order STARTED event received: ${data.orderId}`);
 
       // 메트릭 초기화 및 시작 시각 기록
       let metrics = this.outputMetrics.get(data.orderId);
@@ -266,7 +262,6 @@ export class ExecutionManager {
       }
       this.outputMetrics.set(data.orderId, metrics);
 
-      console.log(`[ExecutionManager] Order STARTED: ${data.orderId} at ${new Date(now).toISOString()}`);
       this.sendToRenderer('order:session-started', data);
     });
 

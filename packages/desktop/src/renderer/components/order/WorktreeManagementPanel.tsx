@@ -2,7 +2,7 @@
  * WorktreeManagementPanel - Panel for managing worktree merge/remove operations
  */
 
-import React, { memo, useState, useCallback } from 'react';
+import React, { memo, useState, useCallback, useEffect, useRef } from 'react';
 import { GitMerge, GitCommit, Trash2 } from 'lucide-react';
 import type { DesignOrder } from '../../types/design';
 
@@ -28,6 +28,62 @@ export const WorktreeManagementPanel: React.FC<WorktreeManagementPanelProps> =
   }) {
     const [isMerging, setIsMerging] = useState(false);
     const [mergeResult, setMergeResult] = useState<MergeResult | null>(null);
+    // Pending cleanup flag for "Merge & Delete" - cleanup after followup completes
+    const pendingCleanupRef = useRef(false);
+
+    // Listen for followup completion to perform pending cleanup
+    useEffect(() => {
+      const cleanup = window.codecafe.order.onFollowupCompleted(
+        async (data: { orderId: string }) => {
+          if (data.orderId === order.id && pendingCleanupRef.current) {
+            pendingCleanupRef.current = false;
+
+            try {
+              const cleanupResponse =
+                await window.codecafe.order.cleanupWorktreeOnly(order.id);
+              if (cleanupResponse.success) {
+                const result = {
+                  success: true,
+                  message:
+                    cleanupResponse.data?.message ||
+                    'Merge completed and worktree removed',
+                  worktreeRemoved: true,
+                };
+                setMergeResult(result);
+                onMergeComplete(result);
+              } else {
+                const result = {
+                  success: false,
+                  message:
+                    cleanupResponse.error?.message ||
+                    'Merge completed but failed to remove worktree',
+                  worktreeRemoved: false,
+                };
+                setMergeResult(result);
+                onMergeComplete(result);
+              }
+            } catch (error) {
+              const result = {
+                success: false,
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : 'Merge completed but failed to remove worktree',
+                worktreeRemoved: false,
+              };
+              setMergeResult(result);
+              onMergeComplete(result);
+            } finally {
+              setIsMerging(false);
+            }
+          }
+        }
+      );
+
+      return () => {
+        cleanup?.();
+      };
+    }, [order.id, onMergeComplete]);
 
     const handleMergeWorktree = useCallback(
       async (deleteAfterMerge: boolean = false) => {
@@ -65,25 +121,18 @@ export const WorktreeManagementPanel: React.FC<WorktreeManagementPanelProps> =
             );
           }
 
-          // If deleteAfterMerge is true, automatically cleanup worktree after AI completes merge
+          // If deleteAfterMerge is true, set pending cleanup flag
+          // Cleanup will happen automatically after followup completes (via onFollowupCompleted)
           if (deleteAfterMerge) {
-            const cleanupResponse = await window.codecafe.order.cleanupWorktreeOnly(
-              order.id
-            );
-            if (!cleanupResponse.success) {
-              throw new Error(
-                cleanupResponse.error?.message ||
-                  'Merge completed but failed to remove worktree'
-              );
-            }
-
+            pendingCleanupRef.current = true;
             const result = {
               success: true,
-              message: cleanupResponse.data?.message || 'Merge completed and worktree removed',
-              worktreeRemoved: true,
+              message: 'AI is merging. Worktree will be removed after completion.',
+              worktreeRemoved: false,
             };
             setMergeResult(result);
-            onMergeComplete(result);
+            // Don't call onMergeComplete yet - followup completion handler will do it
+            // Keep isMerging true until followup completes
           } else {
             const result = {
               success: true,
@@ -92,8 +141,11 @@ export const WorktreeManagementPanel: React.FC<WorktreeManagementPanelProps> =
             };
             setMergeResult(result);
             onMergeComplete(result);
+            setIsMerging(false);
           }
         } catch (error) {
+          // Reset pending cleanup on error
+          pendingCleanupRef.current = false;
           const result = {
             success: false,
             message:
@@ -102,9 +154,10 @@ export const WorktreeManagementPanel: React.FC<WorktreeManagementPanelProps> =
           };
           setMergeResult(result);
           onMergeComplete(result);
-        } finally {
           setIsMerging(false);
         }
+        // Note: setIsMerging(false) is NOT called here for deleteAfterMerge=true
+        // It will be called in the onFollowupCompleted handler
       },
       [order, isFollowupMode, onMergeComplete]
     );
