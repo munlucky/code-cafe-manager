@@ -6,7 +6,9 @@
 import * as path from 'path';
 import { BrowserWindow } from 'electron';
 import { existsSync } from 'fs';
-import { Orchestrator, Order, Barista, OrderStatus } from '@codecafe/core';
+import { Orchestrator, Order, Barista, OrderStatus, createLogger } from '@codecafe/core';
+
+const logger = createLogger({ context: 'ExecutionManager' });
 import { BaristaEngineV2, TerminalPool } from '@codecafe/orchestrator';
 import type {
   OrderStartedEvent,
@@ -64,7 +66,7 @@ export class ExecutionManager {
    * 실행 관리자 시작
    */
   async start(): Promise<void> {
-    console.log('[ExecutionManager] Starting...');
+    logger.info('Starting...');
 
     // 기존 Barista Engine 정리 (이벤트 리스너 중복 등록 방지)
     if (this.baristaEngine) {
@@ -91,14 +93,14 @@ export class ExecutionManager {
     // Worktree가 있는 완료된 Order들의 Session 복원
     await this.restoreSessionsForWorktreeOrders();
 
-    console.log('[ExecutionManager] Started successfully');
+    logger.info('Started successfully');
   }
 
   /**
    * 실행 관리자 중지
    */
   async stop(): Promise<void> {
-    console.log('[ExecutionManager] Stopping...');
+    logger.info('Stopping...');
 
     // 메트릭 샘플링 타이머 정리
     if (this.metricsSamplingTimer) {
@@ -129,7 +131,7 @@ export class ExecutionManager {
     // 플래그 초기화
     this.eventListenersRegistered = false;
 
-    console.log('[ExecutionManager] Stopped');
+    logger.info('Stopped');
   }
 
   /**
@@ -150,7 +152,7 @@ export class ExecutionManager {
       ? path.resolve(appRoot, '..', '..') 
       : appRoot;
 
-    console.log(`[ExecutionManager] Initializing Terminal Pool with CWD: ${projectRoot}`);
+    logger.info(`Initializing Terminal Pool with CWD: ${projectRoot}`);
 
     const poolConfig = {
       ...DEFAULT_TERMINAL_POOL_CONFIG,
@@ -158,7 +160,7 @@ export class ExecutionManager {
     };
 
     this.terminalPool = new TerminalPool(poolConfig);
-    console.log('[ExecutionManager] Terminal pool initialized');
+    logger.info('Terminal pool initialized');
   }
 
   /**
@@ -229,12 +231,12 @@ export class ExecutionManager {
       // 3. 로그 저장 (지속성용) - 원본 그대로 저장 (마커 포함)
       // 3-1. Orchestrator의 Order별 로그 파일 (기존)
       this.orchestrator.appendOrderLog(data.orderId, data.data).catch((err: Error) => {
-        console.error(`[ExecutionManager] Failed to append log for order ${data.orderId}:`, err);
+        logger.error(`Failed to append log for order ${data.orderId}`, { error: err.message });
       });
 
       // 3-2. 통합 터미널 로그 파일 (신규)
       terminalLogger.log(data.orderId, data.data).catch((err: Error) => {
-        console.error(`[ExecutionManager] Failed to write terminal log for order ${data.orderId}:`, err);
+        logger.error(`Failed to write terminal log for order ${data.orderId}`, { error: err.message });
       });
     });
 
@@ -244,7 +246,7 @@ export class ExecutionManager {
     this.baristaEngine.on('order:started', (data: OrderStartedEvent) => {
       const now = Date.now();
 
-      console.log(`[ExecutionManager] Order STARTED event received: ${data.orderId}`);
+      logger.info(`Order STARTED event received: ${data.orderId}`);
 
       // 메트릭 초기화 및 시작 시각 기록
       let metrics = this.outputMetrics.get(data.orderId);
@@ -272,7 +274,7 @@ export class ExecutionManager {
         ? now - metrics.orderStartTime
         : 0;
 
-      console.log(`[ExecutionManager] Order COMPLETED: ${data.orderId} | Duration: ${duration}ms | Total chunks: ${metrics?.totalChunks || 0}`);
+      logger.info(`Order COMPLETED: ${data.orderId}`, { duration: `${duration}ms`, totalChunks: metrics?.totalChunks || 0 });
       this.sendToRenderer('order:session-completed', data);
       // Renderer에서 completed 상태 감지용
       this.sendToRenderer('order:completed', data);
@@ -290,7 +292,7 @@ export class ExecutionManager {
         ? now - metrics.orderStartTime
         : 0;
 
-      console.error(`[ExecutionManager] Order FAILED: ${data.orderId} | Duration: ${duration}ms | Total chunks: ${metrics?.totalChunks || 0} | Error: ${data.error || 'Unknown'}`);
+      logger.error(`Order FAILED: ${data.orderId}`, { duration: `${duration}ms`, totalChunks: metrics?.totalChunks || 0, error: data.error || 'Unknown' });
       this.sendToRenderer('order:session-failed', data);
       // Renderer에서 failed 상태 감지용
       this.sendToRenderer('order:failed', data);
@@ -301,8 +303,8 @@ export class ExecutionManager {
 
     // Stage 이벤트들 (로깅 강화)
     this.baristaEngine.on('stage:started', (data: StageStartedEvent) => {
-      console.log(`[ExecutionManager] Stage STARTED: ${data.stageId} (${data.stageName || data.stageId}) (Order: ${data.orderId}, Provider: ${data.provider})`);
-      console.log(`[ExecutionManager] Stage skills:`, data.skills);
+      logger.info(`Stage STARTED: ${data.stageId} (${data.stageName || data.stageId})`, { orderId: data.orderId, provider: data.provider });
+      logger.debug('Stage skills', { skills: data.skills });
       this.sendToRenderer('order:stage-started', {
         orderId: data.orderId,
         stageId: data.stageId,
@@ -314,46 +316,46 @@ export class ExecutionManager {
 
     this.baristaEngine.on('stage:completed', (data: StageCompletedEvent) => {
       const duration = data.duration || 0;
-      console.log(`[ExecutionManager] Stage COMPLETED: ${data.stageId} (Order: ${data.orderId}) | Duration: ${duration}ms`);
+      logger.info(`Stage COMPLETED: ${data.stageId}`, { orderId: data.orderId, duration: `${duration}ms` });
       // IPC 전송 제거: stage 완료 정보는 Output 스트림([STAGE_END] 마커)을 통해 단일 경로로 전달
       // 기존: this.sendToRenderer('order:stage-completed', {...})
     });
 
     this.baristaEngine.on('stage:failed', (data: StageFailedEvent) => {
-      console.error(`[ExecutionManager] Stage FAILED: ${data.stageId} (Order: ${data.orderId}) | Error: ${data.error || 'Unknown'}`);
+      logger.error(`Stage FAILED: ${data.stageId}`, { orderId: data.orderId, error: data.error || 'Unknown' });
       // IPC 전송 제거: stage 실패 정보는 Output 스트림([STAGE_END] 마커)을 통해 단일 경로로 전달
       // 기존: this.sendToRenderer('order:stage-failed', {...})
     });
 
     // order:awaiting-input - 사용자 입력 대기 상태
     this.baristaEngine.on('order:awaiting-input', (data: { orderId: string }) => {
-      console.log(`[ExecutionManager] Order AWAITING INPUT: ${data.orderId}`);
+      logger.info(`Order AWAITING INPUT: ${data.orderId}`);
       this.sendToRenderer('order:awaiting-input', data);
     });
 
     // Followup 이벤트들
     this.baristaEngine.on('order:followup', (data: { orderId: string }) => {
-      console.log(`[ExecutionManager] Order FOLLOWUP MODE: ${data.orderId}`);
+      logger.info(`Order FOLLOWUP MODE: ${data.orderId}`);
       this.sendToRenderer('order:followup', data);
     });
 
     this.baristaEngine.on('order:followup-started', (data: { orderId: string; prompt: string }) => {
-      console.log(`[ExecutionManager] Order FOLLOWUP STARTED: ${data.orderId}`);
+      logger.info(`Order FOLLOWUP STARTED: ${data.orderId}`);
       this.sendToRenderer('order:followup-started', data);
     });
 
     this.baristaEngine.on('order:followup-completed', (data: { orderId: string; stageId?: string; output?: string }) => {
-      console.log(`[ExecutionManager] Order FOLLOWUP COMPLETED: ${data.orderId}`);
+      logger.info(`Order FOLLOWUP COMPLETED: ${data.orderId}`);
       this.sendToRenderer('order:followup-completed', data);
     });
 
     this.baristaEngine.on('order:followup-failed', (data: { orderId: string; stageId?: string; error?: string }) => {
-      console.error(`[ExecutionManager] Order FOLLOWUP FAILED: ${data.orderId} | Error: ${data.error || 'Unknown'}`);
+      logger.error(`Order FOLLOWUP FAILED: ${data.orderId}`, { error: data.error || 'Unknown' });
       this.sendToRenderer('order:followup-failed', data);
     });
 
     this.baristaEngine.on('order:followup-finished', (data: { orderId: string }) => {
-      console.log(`[ExecutionManager] Order FOLLOWUP FINISHED: ${data.orderId}`);
+      logger.info(`Order FOLLOWUP FINISHED: ${data.orderId}`);
       this.sendToRenderer('order:followup-finished', data);
     });
 
@@ -375,19 +377,19 @@ export class ExecutionManager {
 
     // order:execution-started 이벤트 처리
     this.orchestrator.on('order:execution-started', async (data: { orderId: string; baristaId: string; prompt: string }) => {
-      console.log('[ExecutionManager] Received order:execution-started:', data);
+      logger.info('Received order:execution-started', { orderId: data.orderId, baristaId: data.baristaId });
       await this.handleOrderExecution(data.orderId, data.baristaId, data.prompt);
     });
 
     // order:input 이벤트 처리
     this.orchestrator.on('order:input', async (data: { orderId: string; message: string }) => {
-      console.log('[ExecutionManager] Received order:input:', data);
+      logger.info('Received order:input', { orderId: data.orderId });
       await this.handleOrderInput(data.orderId, data.message);
     });
 
     // order:event 이벤트 처리 (status 변경 등을 renderer에 전파)
     this.orchestrator.on('order:event', (event: { type: string; orderId: string; data: any }) => {
-      console.log('[ExecutionManager] Received order:event:', event);
+      logger.debug('Received order:event', { type: event.type, orderId: event.orderId });
       // Order 상태 변경 이벤트를 renderer에 전송
       if (event.type === 'ORDER_STATUS_CHANGED') {
         this.sendToRenderer('order:status-changed', {
@@ -417,7 +419,7 @@ export class ExecutionManager {
         return; // 활성 Order가 없으면 로그 생략
       }
 
-      console.log('[ExecutionManager] === IPC Performance Metrics ===');
+      logger.debug('=== IPC Performance Metrics ===');
 
       for (const [orderId, metrics] of activeOrders) {
         const elapsedSinceLastSample = now - metrics.lastSampleTime;
@@ -426,14 +428,14 @@ export class ExecutionManager {
           ? (chunksSinceLastSample / (elapsedSinceLastSample / 1000)).toFixed(2)
           : '0';
 
-        console.log(`[ExecutionManager] Order ${orderId}: total=${metrics.totalChunks} chunks, ${chunksPerSec} chunks/sec (last ${elapsedSinceLastSample}ms)`);
+        logger.debug(`Order ${orderId}: performance metrics`, { totalChunks: metrics.totalChunks, chunksPerSec, elapsedMs: elapsedSinceLastSample });
 
         // 샘플링 시점 업데이트
         metrics.lastSampleTime = now;
         metrics.chunksAtLastSample = metrics.totalChunks;
       }
 
-      console.log('[ExecutionManager] === End of Metrics ===');
+      logger.debug('=== End of Metrics ===');
     }, 10000); // 10초
   }
 
@@ -442,7 +444,7 @@ export class ExecutionManager {
    */
   private async handleOrderExecution(orderId: string, baristaId: string, prompt: string): Promise<void> {
     if (!this.baristaEngine) {
-      console.error('[ExecutionManager] Barista engine not initialized');
+      logger.error('Barista engine not initialized');
       await this.orchestrator.completeOrder(orderId, false, 'Execution engine not initialized');
       return;
     }
@@ -451,7 +453,7 @@ export class ExecutionManager {
     const barista = this.orchestrator.getBarista(baristaId);
 
     if (!order || !barista) {
-      console.error('[ExecutionManager] Order or Barista not found:', { orderId, baristaId });
+      logger.error('Order or Barista not found', { orderId, baristaId });
       await this.orchestrator.completeOrder(orderId, false, 'Order or Barista not found');
       return;
     }
@@ -477,7 +479,7 @@ export class ExecutionManager {
 
       // Session 상태 확인 - awaiting_input이면 완료하지 않음
       const sessionStatus = this.baristaEngine.getSessionStatus();
-      console.log(`[ExecutionManager] Session status for order ${orderId}:`, JSON.stringify(sessionStatus, null, 2));
+      logger.debug(`Session status for order ${orderId}`, { sessionStatus });
       
       const isAwaitingInput = sessionStatus && 
         typeof sessionStatus === 'object' &&
@@ -485,10 +487,10 @@ export class ExecutionManager {
         Array.isArray(sessionStatus.sessions) &&
         sessionStatus.sessions.some((s: any) => s.orderId === orderId && s.status === 'awaiting_input');
 
-      console.log(`[ExecutionManager] isAwaitingInput check: ${isAwaitingInput}`);
+      logger.debug(`isAwaitingInput check: ${isAwaitingInput}`);
 
       if (isAwaitingInput) {
-        console.log(`[ExecutionManager] Order ${orderId} is awaiting user input - not completing`);
+        logger.info(`Order ${orderId} is awaiting user input - not completing`);
         // activeExecutions에 유지
         return;
       }
@@ -503,7 +505,7 @@ export class ExecutionManager {
       });
 
     } catch (error: any) {
-      console.error('[ExecutionManager] Execution failed:', error);
+      logger.error('Execution failed', { error: error.message });
 
       // 실패 처리
       await this.orchestrator.completeOrder(orderId, false, error.message || 'Execution failed');
@@ -536,7 +538,7 @@ export class ExecutionManager {
    */
   private async handleOrderInput(orderId: string, message: string): Promise<void> {
     if (!this.baristaEngine) {
-      console.error('[ExecutionManager] Barista engine not initialized');
+      logger.error('Barista engine not initialized');
       return;
     }
 
@@ -548,7 +550,7 @@ export class ExecutionManager {
       const order = this.orchestrator.getOrder(orderId);
       if (order && order.worktreeInfo?.path && !order.worktreeInfo.removed && existsSync(order.worktreeInfo.path)) {
         // Worktree가 있는 완료된 order - 복원 후 followup 실행
-        console.log(`[ExecutionManager] Restoring session for order ${orderId} on-demand (worktree exists)`);
+        logger.info(`Restoring session for order ${orderId} on-demand (worktree exists)`);
 
         try {
           // Barista 확인
@@ -564,7 +566,7 @@ export class ExecutionManager {
           await this.baristaEngine.restoreSessionForFollowup(order, barista, cafeId, cwd);
           this.activeExecutions.set(orderId, { baristaId: barista.id });
 
-          console.log(`[ExecutionManager] Session restored for order ${orderId}, executing followup`);
+          logger.info(`Session restored for order ${orderId}, executing followup`);
 
           // Followup 실행
           await this.baristaEngine.executeFollowup(orderId, message);
@@ -578,13 +580,13 @@ export class ExecutionManager {
 
           return;
         } catch (error: any) {
-          console.error(`[ExecutionManager] Failed to restore and execute followup for order ${orderId}:`, error);
+          logger.error(`Failed to restore and execute followup for order ${orderId}`, { error: error.message });
           return;
         }
       }
 
       // Worktree도 없는 order - 찾을 수 없음
-      console.warn('[ExecutionManager] No active execution for order:', orderId);
+      logger.warn('No active execution for order', { orderId });
       return;
     }
 
@@ -601,7 +603,7 @@ export class ExecutionManager {
 
     if (sessionStatus === 'completed' || sessionStatus === 'followup' ||
         (sessionStatus === null && isCompletedOrder && order.worktreeInfo?.path && existsSync(order.worktreeInfo.path))) {
-      console.log(`[ExecutionManager] Order ${orderId} is in ${sessionStatus || 'restored'} state, executing followup`);
+      logger.info(`Order ${orderId} is in ${sessionStatus || 'restored'} state, executing followup`);
 
       try {
         await this.baristaEngine.executeFollowup(orderId, message);
@@ -613,7 +615,7 @@ export class ExecutionManager {
           message: `Followup request sent: ${message.substring(0, 50)}...`,
         });
       } catch (error: any) {
-        console.error('[ExecutionManager] Failed to execute followup:', error);
+        logger.error('Failed to execute followup', { error: error.message });
       }
       return;
     }
@@ -621,7 +623,7 @@ export class ExecutionManager {
     // 실행 중인 order - 터미널에 직접 입력
     try {
       await this.baristaEngine.sendInput(orderId, message);
-      console.log('[ExecutionManager] Input sent to order:', orderId);
+      logger.info('Input sent to order', { orderId });
 
       // UI에 입력 전송 알림
       this.sendToRenderer('order:execution-progress', {
@@ -630,7 +632,7 @@ export class ExecutionManager {
         message: `Input sent: ${message.substring(0, 50)}...`,
       });
     } catch (error: any) {
-      console.error('[ExecutionManager] Failed to send input:', error);
+      logger.error('Failed to send input', { error: error.message });
     }
   }
 
@@ -666,16 +668,16 @@ export class ExecutionManager {
    */
   private async restoreSessionsForWorktreeOrders(): Promise<void> {
     if (!this.baristaEngine) {
-      console.warn('[ExecutionManager] Barista engine not initialized, skipping session restore');
+      logger.warn('Barista engine not initialized, skipping session restore');
       return;
     }
 
-    console.log('[ExecutionManager] Restoring sessions for worktree orders...');
+    logger.info('Restoring sessions for worktree orders...');
 
     try {
       // 모든 Order 조회
       const allOrders = this.orchestrator.getAllOrders();
-      console.log(`[ExecutionManager] Found ${allOrders.length} total orders`);
+      logger.info(`Found ${allOrders.length} total orders`);
 
       // 복원 대상 Order 필터링:
       // 1. status가 COMPLETED인 (완료된)
@@ -697,7 +699,7 @@ export class ExecutionManager {
         return isCompleted && hasWorktree && pathExists;
       });
 
-      console.log(`[ExecutionManager] Found ${restorableOrders.length} orders with valid worktrees to restore`);
+      logger.info(`Found ${restorableOrders.length} orders with valid worktrees to restore`);
 
       // 각 Order에 대해 Session 복원
       for (const order of restorableOrders) {
@@ -707,7 +709,7 @@ export class ExecutionManager {
           if (!barista) {
             // 일치하는 Barista가 없으면 생성
             barista = this.orchestrator.createBarista(order.provider);
-            console.log(`[ExecutionManager] Created barista with provider ${order.provider} for session restore`);
+            logger.info(`Created barista with provider ${order.provider} for session restore`);
           }
 
           // worktree 경로를 cwd로 사용
@@ -721,16 +723,16 @@ export class ExecutionManager {
           // 복원된 세션은 completed 상태이지만 followup이 가능하므로 activeExecutions에 유지
           this.activeExecutions.set(order.id, { baristaId: barista.id });
 
-          console.log(`[ExecutionManager] Restored session for order ${order.id} with worktree ${cwd} (followup ready)`);
+          logger.info(`Restored session for order ${order.id} with worktree ${cwd} (followup ready)`);
         } catch (err: any) {
-          console.error(`[ExecutionManager] Failed to restore session for order ${order.id}:`, err);
+          logger.error(`Failed to restore session for order ${order.id}`, { error: err.message });
           // 실패해도 다른 order는 계속 시도
         }
       }
 
-      console.log(`[ExecutionManager] Session restore completed. ${restorableOrders.length} orders restored.`);
+      logger.info(`Session restore completed. ${restorableOrders.length} orders restored.`);
     } catch (error: any) {
-      console.error('[ExecutionManager] Error restoring sessions:', error);
+      logger.error('Error restoring sessions', { error: error.message });
     }
   }
 }
