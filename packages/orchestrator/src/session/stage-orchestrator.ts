@@ -7,6 +7,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { createLogger } from '@codecafe/core';
 import {
   StageSignals,
   OrchestratorDecision,
@@ -15,6 +16,8 @@ import {
 } from './stage-signals';
 import { SignalParser, ParseResult } from './signal-parser';
 import { SharedContext } from './shared-context';
+
+const logger = createLogger({ context: 'StageOrchestrator' });
 
 /**
  * 오케스트레이터 설정
@@ -65,7 +68,7 @@ export class StageOrchestrator extends EventEmitter {
     // 1. 시그널 파싱
     const parseResult = this.signalParser.parse(output);
 
-    console.log(`[StageOrchestrator] Stage ${stageId} signals:`, {
+    logger.debug(` Stage ${stageId} signals:`, {
       success: parseResult.success,
       signals: parseResult.signals,
       error: parseResult.error,
@@ -168,7 +171,7 @@ export class StageOrchestrator extends EventEmitter {
     output: string,
     context?: SharedContext
   ): Promise<OrchestratorDecision> {
-    console.log(`[StageOrchestrator] AI evaluation for stage ${stageId} (no signals block found)`);
+    logger.debug(` AI evaluation for stage ${stageId} (no signals block found)`);
 
     // 1. 출력 길이 확인 - 실질적인 출력이 있는가?
     const outputLength = output.length;
@@ -201,7 +204,7 @@ export class StageOrchestrator extends EventEmitter {
     // analyze/plan 스테이지에서는 질문이 많아도 출력이 충분하면 완료로 판단
     // 분석 과정에서 "이 파일을 수정해야 하나?" 같은 질문이 자연스럽게 포함됨
     if ((isAnalyzeStage || isPlanStage) && hasVerySubstantialOutput && hasCompletionIndicators) {
-      console.log(`[StageOrchestrator] Inferring completion for ${stageId}: very substantial output (${outputLength} chars) with completion indicators (ignoring ${questionCount} questions)`);
+      logger.debug(` Inferring completion for ${stageId}: very substantial output (${outputLength} chars) with completion indicators (ignoring ${questionCount} questions)`);
       return {
         action: 'proceed',
         reason: `Inferred completion from substantial ${stageId} output (questions are part of analysis)`,
@@ -212,7 +215,7 @@ export class StageOrchestrator extends EventEmitter {
     // 5. 일반 판단 로직
     if (hasSubstantialOutput && hasCompletionIndicators && !hasExcessiveQuestions) {
       // 실질적인 작업이 수행된 것으로 보임 - proceed
-      console.log(`[StageOrchestrator] Inferring completion: substantial output (${outputLength} chars) with completion indicators`);
+      logger.debug(` Inferring completion: substantial output (${outputLength} chars) with completion indicators`);
       return {
         action: 'proceed',
         reason: 'Inferred completion from output content (no signals block but work appears done)',
@@ -222,7 +225,7 @@ export class StageOrchestrator extends EventEmitter {
 
     if (hasUncertainty || hasExcessiveQuestions) {
       // 명확한 불확실성이 있음 - await_user
-      console.log(`[StageOrchestrator] Inferring uncertainty: ${questionCount} questions (density: ${questionDensity.toFixed(2)}/KB), uncertainty indicators: ${hasUncertainty}`);
+      logger.debug(` Inferring uncertainty: ${questionCount} questions (density: ${questionDensity.toFixed(2)}/KB), uncertainty indicators: ${hasUncertainty}`);
       return {
         action: 'await_user',
         reason: 'No signals block found and output contains uncertainty indicators',
@@ -232,7 +235,7 @@ export class StageOrchestrator extends EventEmitter {
     }
 
     // 6. 기본: signals 블록이 없고 판단하기 어려우면 await_user
-    console.log(`[StageOrchestrator] Cannot infer completion: insufficient indicators (output: ${outputLength} chars)`);
+    logger.debug(` Cannot infer completion: insufficient indicators (output: ${outputLength} chars)`);
     return {
       action: 'await_user',
       reason: 'No signals block found and cannot infer completion',

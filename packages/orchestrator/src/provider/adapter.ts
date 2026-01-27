@@ -1,7 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import { createLogger } from '@codecafe/core';
 import { ProviderConfig, ProviderType } from '../types';
+
+const logger = createLogger({ context: 'ProviderAdapter' });
 
 /**
  * Provider Adapter - Load and manage provider configurations
@@ -21,7 +24,7 @@ export class ProviderAdapter {
    */
   private loadConfigs(): void {
     if (!fs.existsSync(this.configPath)) {
-      console.warn(`Provider config not found: ${this.configPath}`);
+      logger.warn(`Provider config not found: ${this.configPath}`);
       this.loadDefaults();
       return;
     }
@@ -36,7 +39,7 @@ export class ProviderAdapter {
         }
       }
     } catch (error) {
-      console.error('Failed to load provider configs:', error);
+      logger.error('Failed to load provider configs', { error });
       this.loadDefaults();
     }
   }

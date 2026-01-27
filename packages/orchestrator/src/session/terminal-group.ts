@@ -8,10 +8,12 @@
  */
 
 import { EventEmitter } from 'events';
-import { ProviderType } from '@codecafe/core';
+import { ProviderType, createLogger } from '@codecafe/core';
 import { TerminalPool, TerminalLease } from '../terminal/terminal-pool';
 import { ProviderAdapterFactory } from '../terminal/provider-adapter';
 import { SharedContext } from './shared-context';
+
+const logger = createLogger({ context: 'TerminalGroup' });
 
 export interface TerminalInfo {
   id: string;
@@ -86,7 +88,7 @@ export class TerminalGroup extends EventEmitter {
 
     this.terminalsByProvider.set(provider, terminalInfo);
 
-    console.log(`[TerminalGroup] Acquired terminal for provider ${provider}, order ${this.orderId}`);
+    logger.debug(`Acquired terminal for provider ${provider}, order ${this.orderId}`);
     this.emit('terminal:acquired', { terminalId: terminalInfo.id, provider, orderId: this.orderId });
 
     return terminalInfo;
@@ -119,7 +121,7 @@ export class TerminalGroup extends EventEmitter {
 
     this.parallelTerminals.set(parallelKey, terminalInfo);
 
-    console.log(`[TerminalGroup] Acquired parallel terminal for provider ${provider}, stage ${stageId}`);
+    logger.debug(`Acquired parallel terminal for provider ${provider}, stage ${stageId}`);
     this.emit('terminal:acquired', { terminalId: terminalInfo.id, provider, stageId, parallel: true });
 
     return terminalInfo;
@@ -311,7 +313,7 @@ export class TerminalGroup extends EventEmitter {
     if (terminalInfo) {
       await terminalInfo.lease.release();
       this.parallelTerminals.delete(parallelKey);
-      console.log(`[TerminalGroup] Released parallel terminal for ${parallelKey}`);
+      logger.debug(`Released parallel terminal for ${parallelKey}`);
     }
   }
 
@@ -370,7 +372,7 @@ export class TerminalGroup extends EventEmitter {
       try {
         await terminalInfo.lease.release();
       } catch (error) {
-        console.error(`[TerminalGroup] Failed to release parallel terminal ${key}:`, error);
+        logger.error(`Failed to release parallel terminal ${key}`, { error });
       }
     }
     this.parallelTerminals.clear();
@@ -380,12 +382,12 @@ export class TerminalGroup extends EventEmitter {
       try {
         await terminalInfo.lease.release();
       } catch (error) {
-        console.error(`[TerminalGroup] Failed to release terminal for ${provider}:`, error);
+        logger.error(`Failed to release terminal for ${provider}`, { error });
       }
     }
     this.terminalsByProvider.clear();
 
     this.removeAllListeners();
-    console.log(`[TerminalGroup] Disposed for order ${this.orderId}`);
+    logger.debug(`Disposed for order ${this.orderId}`);
   }
 }

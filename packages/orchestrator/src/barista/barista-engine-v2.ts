@@ -4,7 +4,9 @@
  * Phase 3: Session-based multi-terminal orchestration
  */
 
-import { Barista, Order } from '@codecafe/core';
+import { Barista, Order, createLogger } from '@codecafe/core';
+
+const logger = createLogger({ context: 'BaristaEngineV2' });
 import { TerminalPool } from '../terminal/terminal-pool';
 import * as path from 'path';
 import {
@@ -85,7 +87,7 @@ export class BaristaEngineV2 extends EventEmitter {
    * Execute an order using Session (all orders go through session-based execution)
    */
   async executeOrder(order: Order, barista: Barista): Promise<void> {
-    console.log(`BaristaEngineV2: Executing order ${order.id} with barista ${barista.id}`);
+    logger.info(`Executing order ${order.id} with barista ${barista.id}`);
 
     const cwd = order.vars?.['PROJECT_ROOT'] || process.cwd();
     const cafeId = order.cafeId || 'default';
@@ -114,13 +116,13 @@ export class BaristaEngineV2 extends EventEmitter {
       const sessionStatus = session.getStatus().status;
 
       if (sessionStatus === 'awaiting_input') {
-        console.log(`BaristaEngineV2: Order ${order.id} awaiting user input`);
+        logger.debug(`Order ${order.id} awaiting user input`);
         return; // Keep in activeExecutions
       }
 
-      console.log(`BaristaEngineV2: Order ${order.id} completed via Session`);
+      logger.info(`Order ${order.id} completed via Session`);
     } catch (error) {
-      console.error(`BaristaEngineV2: Order ${order.id} failed via Session:`, error);
+      logger.error(`Order ${order.id} failed via Session`, { error });
       throw error;
     } finally {
       // Clean up only if the session is not waiting for input
@@ -140,7 +142,7 @@ export class BaristaEngineV2 extends EventEmitter {
     cwd: string,
     workflowConfig: WorkflowConfig
   ): Promise<void> {
-    console.log(`BaristaEngineV2: Executing order ${order.id} with Session (workflow mode)`);
+    logger.info(`Executing order ${order.id} with Session (workflow mode)`);
 
     // Session 생성
     const session = this.sessionManager.createSessionWithWorkflow(
@@ -168,7 +170,7 @@ export class BaristaEngineV2 extends EventEmitter {
   ): Promise<void> {
     const cwd = order.vars?.['PROJECT_ROOT'] || process.cwd();
 
-    console.log(`BaristaEngineV2: Executing order ${order.id} with Session (prompt mode)`);
+    logger.info(`Executing order ${order.id} with Session (prompt mode)`);
 
     // Session 생성
     const session = this.sessionManager.createSession(order, barista, cafeId, cwd);
@@ -210,20 +212,20 @@ export class BaristaEngineV2 extends EventEmitter {
         const content = await fs.readFile(skillPath, 'utf-8');
         const skillData = JSON.parse(content) as { instructions?: string };
         if (skillData.instructions) {
-          console.log(`[BaristaEngineV2] Loaded skill instructions: ${skillName} from ${skillPath}`);
+          logger.debug(`Loaded skill instructions: ${skillName}`, { skillPath });
           return skillData.instructions;
         }
       } catch (error: unknown) {
         // Log errors other than file not found to aid in debugging
         const err = error as { code?: string };
         if (err.code !== 'ENOENT') {
-          console.warn(`[BaristaEngineV2] Error loading skill "${skillName}" from ${skillPath}:`, error);
+          logger.warn(`Error loading skill "${skillName}"`, { skillPath, error });
         }
         // Try next path
       }
     }
 
-    console.warn(`[BaristaEngineV2] Skill not found or no instructions: ${skillName}`);
+    logger.warn(`Skill not found or no instructions: ${skillName}`);
     return null;
   }
 
@@ -323,7 +325,7 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
       'desktop/workflows/moonshot-lite.workflow.yml'
     );
 
-    console.log('[BaristaEngineV2.loadDefaultWorkflow] Loading workflow from:', workflowPath);
+    logger.debug('Loading workflow', { workflowPath });
 
     try {
       const content = await fs.readFile(workflowPath, 'utf-8');
@@ -331,7 +333,7 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
         workflow: { stages: string[] };
       } & Record<string, { provider?: string; role?: string; mode?: string; on_failure?: string; skills?: string[] }>;
 
-      console.log('[BaristaEngineV2.loadDefaultWorkflow] Parsed workflow stages:', parsed.workflow.stages);
+      logger.debug('Parsed workflow stages', { stages: parsed.workflow.stages });
 
       // Convert YAML structure to WorkflowConfig with skill loading
       const stages: StageConfig[] = await Promise.all(
@@ -343,12 +345,7 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
             skills?: string[];
           };
 
-          console.log('[BaristaEngineV2.loadDefaultWorkflow] Stage config:', {
-            stageId,
-            skills: stageConfig.skills,
-            provider: stageConfig.provider,
-            role: stageConfig.role,
-          });
+          logger.debug('Stage config', { stageId, skills: stageConfig.skills, provider: stageConfig.provider, role: stageConfig.role });
 
           // Load skill contents for this stage
           const skillContents: string[] = [];
@@ -381,10 +378,10 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
         })
       );
 
-      console.log(`[BaristaEngineV2] Loaded workflow with ${stages.length} stages:`, stages.map(s => ({ id: s.id, name: s.name, skills: s.skills })));
+      logger.info(`Loaded workflow with ${stages.length} stages`, { stages: stages.map(s => ({ id: s.id, name: s.name, skills: s.skills })) });
       return { stages, vars: {} };
     } catch (error) {
-      console.warn('[BaristaEngineV2] Failed to load default workflow:', error);
+      logger.warn('Failed to load default workflow', { error });
       // Fallback to single-stage workflow with order prompt
       return {
         stages: [{
@@ -412,10 +409,10 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
     try {
       await execution.session.cancel();
       this.activeExecutions.delete(orderId);
-      console.log(`BaristaEngineV2: Order ${orderId} cancelled`);
+      logger.info(`Order ${orderId} cancelled`);
       return true;
     } catch (error) {
-      console.error(`BaristaEngineV2: Failed to cancel order ${orderId}:`, error);
+      logger.error(`Failed to cancel order ${orderId}`, { error });
       return false;
     }
   }
@@ -433,14 +430,14 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
   public async sendInput(orderId: string, message: string): Promise<void> {
     const execution = this.activeExecutions.get(orderId);
     if (!execution?.session) {
-      console.warn(`[BaristaEngineV2] No active session for order: ${orderId}`);
+      logger.warn(`No active session for order: ${orderId}`);
       return;
     }
 
     try {
       await execution.session.sendInput(message);
     } catch (error) {
-      console.error(`[BaristaEngineV2] Failed to send input to order ${orderId}:`, error);
+      logger.error(`Failed to send input to order ${orderId}`, { error });
       throw error;
     }
   }
@@ -453,17 +450,17 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
   public async retryFromStage(orderId: string, fromStageId?: string): Promise<void> {
     const execution = this.activeExecutions.get(orderId);
     if (!execution?.session) {
-      console.warn(`[BaristaEngineV2] No session found for order: ${orderId}`);
+      logger.warn(`No session found for order: ${orderId}`);
       throw new Error(`No session found for order: ${orderId}`);
     }
 
-    console.log(`[BaristaEngineV2] Retrying order ${orderId} from stage ${fromStageId || 'failed stage'}`);
+    logger.info(`Retrying order ${orderId} from stage ${fromStageId || 'failed stage'}`);
 
     try {
       await execution.session.retryFromStage(fromStageId);
-      console.log(`[BaristaEngineV2] Order ${orderId} retry completed`);
+      logger.info(`Order ${orderId} retry completed`);
     } catch (error) {
-      console.error(`[BaristaEngineV2] Failed to retry order ${orderId}:`, error);
+      logger.error(`Failed to retry order ${orderId}`, { error });
       throw error;
     }
   }
@@ -489,17 +486,17 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
   public async retryFromBeginning(orderId: string, preserveContext: boolean = true): Promise<void> {
     const execution = this.activeExecutions.get(orderId);
     if (!execution?.session) {
-      console.warn(`[BaristaEngineV2] No session found for order: ${orderId}`);
+      logger.warn(`No session found for order: ${orderId}`);
       throw new Error(`No session found for order: ${orderId}`);
     }
 
-    console.log(`[BaristaEngineV2] Retrying order ${orderId} from beginning (preserveContext: ${preserveContext})`);
+    logger.info(`Retrying order ${orderId} from beginning`, { preserveContext });
 
     try {
       await execution.session.retryFromBeginning(preserveContext);
-      console.log(`[BaristaEngineV2] Order ${orderId} retry from beginning completed`);
+      logger.info(`Order ${orderId} retry from beginning completed`);
     } catch (error) {
-      console.error(`[BaristaEngineV2] Failed to retry order ${orderId} from beginning:`, error);
+      logger.error(`Failed to retry order ${orderId} from beginning`, { error });
       throw error;
     }
   }
@@ -577,7 +574,7 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
   public async executeFollowup(orderId: string, prompt: string): Promise<void> {
     const session = this._getSession(orderId);
 
-    console.log(`[BaristaEngineV2] Executing followup for order ${orderId}`);
+    logger.info(`Executing followup for order ${orderId}`);
 
     // Forward session events
     session.once('session:followup-started', (data) => {
@@ -636,11 +633,11 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
     cafeId: string,
     cwd: string
   ): Promise<void> {
-    console.log(`[BaristaEngineV2] Restoring session for order ${order.id} in followup mode`);
+    logger.info(`Restoring session for order ${order.id} in followup mode`);
 
     // Check if session already exists
     if (this.activeExecutions.has(order.id)) {
-      console.log(`[BaristaEngineV2] Session already exists for order ${order.id}, skipping restore`);
+      logger.debug(`Session already exists for order ${order.id}, skipping restore`);
       return;
     }
 
@@ -670,6 +667,6 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
       this.emit('order:followup-failed', data);
     });
 
-    console.log(`[BaristaEngineV2] Session restored for order ${order.id} with terminalGroup initialized`);
+    logger.info(`Session restored for order ${order.id} with terminalGroup initialized`);
   }
 }

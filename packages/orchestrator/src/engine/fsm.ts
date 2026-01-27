@@ -1,5 +1,8 @@
 import { Workflow, StageType, StageConfig } from '../types';
 import { JSONPath } from 'jsonpath-plus';
+import { createLogger } from '@codecafe/core';
+
+const logger = createLogger({ context: 'FSMEngine' });
 
 /**
  * FSM Engine - Finite State Machine for stage transitions
@@ -192,7 +195,7 @@ export class FSMEngine {
       nextStage = checkResult.recommended_next_stage as StageType;
 
       if (!this.workflow.stages.includes(nextStage)) {
-        console.warn(
+        logger.warn(
           `Invalid recommended_next_stage: ${checkResult.recommended_next_stage}, restarting from beginning`
         );
         nextStage = this.workflow.stages[0]; // Restart from first stage

@@ -3,7 +3,9 @@
  * Gap 2 해결: Enhanced concurrency model with proper lease management
  */
 
-import { ProviderType } from '@codecafe/core';
+import { ProviderType, createLogger } from '@codecafe/core';
+
+const logger = createLogger({ context: 'TerminalPool', json: true });
 import {
   Terminal,
   TerminalPoolConfig,
@@ -70,12 +72,7 @@ export class TerminalPool {
    * C3: Structured log helper for diagnostics
    */
   private log(step: string, details: Record<string, unknown> = {}): void {
-    console.log(JSON.stringify({
-      scope: 'terminal-pool',
-      step,
-      timestamp: new Date().toISOString(),
-      ...details,
-    }));
+    logger.debug(step, { scope: 'terminal-pool', ...details });
   }
 
   /**
@@ -309,11 +306,11 @@ export class TerminalPool {
       // Find an idle terminal to recycle (even if CWD didn't match above)
       const victim = providerTerminals.find(t => t.status === 'idle');
       if (victim) {
-        console.log(`[TerminalPool] Recycling terminal ${victim.id} (CWD mismatch: ${victim.cwd} != ${effectiveCwd})`);
+        logger.info(` Recycling terminal ${victim.id} (CWD mismatch: ${victim.cwd} != ${effectiveCwd})`);
         await this.killTerminal(victim);
       } else {
         // Should not happen if Semaphore logic is correct (permits <= size)
-        console.warn('[TerminalPool] Semaphore acquired but no idle terminals to recycle?');
+        logger.warn(' Semaphore acquired but no idle terminals to recycle?');
       }
     }
 
@@ -348,7 +345,7 @@ export class TerminalPool {
     const adapter = ProviderAdapterFactory.get(terminal.provider);
 
     adapter.onExit(terminal.process, ({ exitCode }) => {
-      console.log(`Terminal ${terminal.id} exited with code ${exitCode}`);
+      logger.info(`Terminal ${terminal.id} exited with code ${exitCode}`);
       this.handleTerminalExit(terminal, exitCode);
     });
   }
@@ -379,7 +376,7 @@ export class TerminalPool {
 
   private recoverCrashedLease(terminal: Terminal): void {
     this.handleCrashDuringLease(terminal).catch((error) => {
-      console.error(`Crash recovery failed for terminal ${terminal.id}:`, error);
+      logger.error(`Crash recovery failed for terminal ${terminal.id}`, { error });
       this.releaseSemaphoreOnCrashFailure(terminal);
     });
   }
@@ -391,12 +388,12 @@ export class TerminalPool {
     const provider = crashedTerminal.provider;
     const maxRetries = this.config.perProvider[provider].maxRetries;
 
-    console.warn(`Attempting auto-restart for crashed terminal ${crashedTerminal.id}`);
+    logger.warn(`Attempting auto-restart for crashed terminal ${crashedTerminal.id}`);
 
     try {
       await this.retryTerminalCreation(crashedTerminal, maxRetries);
     } catch (error) {
-      console.error(`All restart attempts failed for terminal ${crashedTerminal.id}`);
+      logger.error(`All restart attempts failed for terminal ${crashedTerminal.id}`);
       throw error;
     }
   }
@@ -409,7 +406,7 @@ export class TerminalPool {
       } catch (error) {
         if (attempt === maxRetries - 1) throw error;
 
-        console.error(`Restart attempt ${attempt + 1} failed:`, error);
+        logger.error(`Restart attempt ${attempt + 1} failed`, { error });
         await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
       }
     }
@@ -430,7 +427,7 @@ export class TerminalPool {
     this.terminals.delete(crashedTerminal.id);
     this.updateMetrics();
 
-    console.log(`Terminal ${crashedTerminal.id} restarted as ${newTerminal.id}`);
+    logger.info(`Terminal ${crashedTerminal.id} restarted as ${newTerminal.id}`);
   }
 
   /**
@@ -440,7 +437,7 @@ export class TerminalPool {
     const semaphore = this.semaphores.get(terminal.provider);
     if (semaphore && terminal.leaseToken) {
       semaphore.release(terminal.id);
-      console.warn(`Semaphore released for crashed terminal ${terminal.id}`);
+      logger.warn(`Semaphore released for crashed terminal ${terminal.id}`);
     }
   }
 

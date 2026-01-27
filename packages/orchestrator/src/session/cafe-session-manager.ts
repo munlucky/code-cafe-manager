@@ -6,7 +6,9 @@
  */
 
 import { EventEmitter } from 'events';
-import { Order, Barista } from '@codecafe/core';
+import { Order, Barista, createLogger } from '@codecafe/core';
+
+const logger = createLogger({ context: 'CafeSessionManager' });
 import { TerminalPool } from '../terminal/terminal-pool';
 import { OrderSession, WorkflowConfig, SessionStatus } from './order-session';
 
@@ -66,7 +68,7 @@ export class CafeSessionManager extends EventEmitter {
         maxConcurrentOrders: this.maxConcurrentOrdersPerCafe,
       };
       this.cafes.set(cafeId, cafe);
-      console.log(`[CafeSessionManager] Registered cafe: ${cafeId}`);
+      logger.info(` Registered cafe: ${cafeId}`);
     }
 
     return cafe;
@@ -120,9 +122,7 @@ export class CafeSessionManager extends EventEmitter {
 
     cafe.sessions.set(order.id, session);
 
-    console.log(
-      `[CafeSessionManager] Created session for order ${order.id} in cafe ${cafeId}`
-    );
+    logger.debug(`Created session for order ${order.id} in cafe ${cafeId}`);
 
     return session;
   }
@@ -302,7 +302,7 @@ export class CafeSessionManager extends EventEmitter {
       }
     }
 
-    console.log(`[CafeSessionManager] Cleaned up ${cleanedCount} completed sessions`);
+    logger.info(` Cleaned up ${cleanedCount} completed sessions`);
     return cleanedCount;
   }
 
@@ -320,6 +320,6 @@ export class CafeSessionManager extends EventEmitter {
     this.cafes.clear();
     this.removeAllListeners();
 
-    console.log('[CafeSessionManager] Disposed all sessions');
+    logger.debug('Disposed all sessions');
   }
 }

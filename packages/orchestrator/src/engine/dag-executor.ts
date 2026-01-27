@@ -1,4 +1,7 @@
 import { Node, StageProfile } from '../types';
+import { createLogger } from '@codecafe/core';
+
+const logger = createLogger({ context: 'DAGExecutor' });
 
 /**
  * Node execution context
@@ -205,9 +208,7 @@ export class DAGExecutor {
     }
 
     // Placeholder for now - will be implemented with provider integration
-    console.log(`[DAG] Executing run node: ${node.id}`);
-    console.log(`  Provider: ${node.provider}`);
-    console.log(`  Role: ${node.role}`);
+    logger.debug(`Executing run node: ${node.id}`, { provider: node.provider, role: node.role });
 
     return {
       type: 'run',
@@ -234,16 +235,14 @@ export class DAGExecutor {
       throw new Error(`foreach items must be an array: ${node.items}`);
     }
 
-    console.log(`[DAG] Executing foreach node: ${node.id}`);
-    console.log(`  Items count: ${items.length}`);
-    console.log(`  Mode: ${node.mode || 'sequential'}`);
+    logger.debug(`Executing foreach node: ${node.id}`, { itemsCount: items.length, mode: node.mode || 'sequential' });
 
     const results: any[] = [];
 
     if (node.mode === 'parallel') {
       // Execute in parallel
       const promises = items.map(async (item, index) => {
-        console.log(`  [${index}] Executing with item:`, item);
+        logger.debug(`[${index}] Executing with item`, { item });
         // Create a mock result for now
         return {
           index,
@@ -257,7 +256,7 @@ export class DAGExecutor {
     } else {
       // Execute sequentially
       for (let i = 0; i < items.length; i++) {
-        console.log(`  [${i}] Executing with item:`, items[i]);
+        logger.debug(`[${i}] Executing with item`, { item: items[i] });
         results.push({
           index: i,
           item: items[i],
@@ -282,9 +281,7 @@ export class DAGExecutor {
       throw new Error(`reduce node ${node.id} missing from`);
     }
 
-    console.log(`[DAG] Executing reduce node: ${node.id}`);
-    console.log(`  From: ${node.from}`);
-    console.log(`  Strategy: ${node.strategy || 'summarize'}`);
+    logger.debug(`Executing reduce node: ${node.id}`, { from: node.from, strategy: node.strategy || 'summarize' });
 
     // Get results from source node
     const sourceResults = this.context.results.get(node.from);
@@ -316,7 +313,7 @@ export class DAGExecutor {
    * Execute branch node (conditional execution)
    */
   private async executeBranchNode(node: Node): Promise<any> {
-    console.log(`[DAG] Executing branch node: ${node.id}`);
+    logger.debug(`Executing branch node: ${node.id}`);
 
     if (!node.when || node.when.length === 0) {
       throw new Error(`branch node ${node.id} missing conditions`);
@@ -325,12 +322,12 @@ export class DAGExecutor {
     // Evaluate conditions
     for (const condition of node.when) {
       // Simple condition evaluation (placeholder)
-      console.log(`  Evaluating: ${condition.condition}`);
+      logger.debug(`Evaluating condition: ${condition.condition}`);
       // In real implementation, use JSONPath or expression evaluator
       const conditionMet = true; // Placeholder
 
       if (conditionMet) {
-        console.log(`  Condition met, next: ${condition.then}`);
+        logger.debug(`Condition met, next: ${condition.then}`);
         return {
           type: 'branch',
           taken: condition.then,
@@ -352,9 +349,7 @@ export class DAGExecutor {
       throw new Error(`export node ${node.id} missing from`);
     }
 
-    console.log(`[DAG] Executing export node: ${node.id}`);
-    console.log(`  From: ${node.from}`);
-    console.log(`  Schema: ${node.output_schema}`);
+    logger.debug(`Executing export node: ${node.id}`, { from: node.from, schema: node.output_schema });
 
     // Get result from source node
     const sourceResult = this.context.results.get(node.from);

@@ -9,7 +9,9 @@
  */
 
 import { EventEmitter } from 'events';
-import { Order, Barista, ProviderType } from '@codecafe/core';
+import { Order, Barista, ProviderType, createLogger } from '@codecafe/core';
+
+const logger = createLogger({ context: 'OrderSession' });
 import { TerminalPool } from '../terminal/terminal-pool';
 import { SharedContext } from './shared-context';
 import { TerminalGroup } from './terminal-group';
@@ -126,7 +128,7 @@ export class OrderSession extends EventEmitter {
    * 워크플로우 설정
    */
   setWorkflow(config: WorkflowConfig): void {
-    console.log('[OrderSession.setWorkflow] Workflow config received:', {
+    logger.debug('[OrderSession.setWorkflow] Workflow config received:', {
       orderId: this.orderId,
       stagesCount: config.stages.length,
       stages: config.stages.map(s => ({
@@ -297,7 +299,7 @@ export class OrderSession extends EventEmitter {
         !this.skipStages.has(stage.id) && !this.completedStages.has(stage.id)
       );
       if (filteredBatch.length === 0) {
-        console.log(`[OrderSession] Skipping batch ${batchIndex} - all stages skipped or completed`);
+        logger.debug(`Skipping batch ${batchIndex} - all stages skipped or completed`);
         continue;
       }
 
@@ -319,7 +321,7 @@ export class OrderSession extends EventEmitter {
 
           if (result === 'retry') {
             retries++;
-            console.log(`[OrderSession] Retrying stage ${stage.id} (${retries}/${MAX_RETRIES})...`);
+            logger.debug(`Retrying stage ${stage.id} (${retries}/${MAX_RETRIES})...`);
           }
         } while (result === 'retry' && retries < MAX_RETRIES);
 
@@ -448,7 +450,7 @@ export class OrderSession extends EventEmitter {
       retryOptions,
     };
 
-    console.log(`[OrderSession] Built failedState for stage ${failedStageId}:`, {
+    logger.debug(`Built failedState for stage ${failedStageId}`, {
       failedStageId,
       error,
       completedStages: Array.from(this.completedStages),
@@ -485,7 +487,7 @@ export class OrderSession extends EventEmitter {
       this.sharedContext
     );
 
-    console.log(`[OrderSession] Orchestrator decision for ${stage.id}:`, decision);
+    logger.debug(`Orchestrator decision for ${stage.id}`, { decision });
 
     return this.handleOrchestratorDecision(
       decision,
@@ -530,12 +532,12 @@ export class OrderSession extends EventEmitter {
           for (const skipId of decision.skipStages) {
             this.skipStages.add(skipId);
           }
-          console.log(`[OrderSession] Skipping stages: ${decision.skipStages.join(', ')}`);
+          logger.debug(`Skipping stages: ${decision.skipStages.join(', ')}`);
         }
         return 'proceed';
 
       case 'retry':
-        console.log(`[OrderSession] Retry requested for stage ${stageId}: ${decision.reason}`);
+        logger.debug(`Retry requested for stage ${stageId}: ${decision.reason}`);
         // 재시도는 orchestrator 내부에서 카운트 관리
         return 'retry';
 
@@ -553,7 +555,7 @@ export class OrderSession extends EventEmitter {
       throw new Error(`Session ${this.orderId} is not awaiting input`);
     }
 
-    console.log(`[OrderSession] Resuming session with user input`);
+    logger.debug(`Resuming session with user input`);
 
     // 사용자 입력을 SharedContext에 저장
     this.sharedContext.setVar('userInput', userInput);
@@ -610,7 +612,7 @@ export class OrderSession extends EventEmitter {
    * 순차 모드에서는 원본 배열 순서를 유지
    */
   private buildExecutionPlan(stages: StageConfig[]): StageConfig[][] {
-    console.log('[OrderSession.buildExecutionPlan] Input stages:', {
+    logger.debug('[OrderSession.buildExecutionPlan] Input stages:', {
       count: stages.length,
       stages: stages.map(s => ({
         id: s.id,
@@ -670,7 +672,7 @@ export class OrderSession extends EventEmitter {
       }
     }
 
-    console.log('[OrderSession.buildExecutionPlan] Execution plan:', {
+    logger.debug('[OrderSession.buildExecutionPlan] Execution plan:', {
       batches: plan.length,
       plan: plan.map((batch, idx) => ({
         batch: idx,
@@ -810,7 +812,7 @@ export class OrderSession extends EventEmitter {
       this.completedStages.delete(this.failedState.failedStageId);
     }
 
-    console.log(`[OrderSession] Retrying from stage ${fromStageId || this.failedState.failedStageId} (batch ${startBatchIndex})`);
+    logger.debug(`Retrying from stage ${fromStageId || this.failedState.failedStageId} (batch ${startBatchIndex})`);
 
     // 상태 초기화 전에 failedStageId 저장
     const originalFailedStageId = this.failedState.failedStageId;
@@ -877,7 +879,7 @@ export class OrderSession extends EventEmitter {
 
     const { executionPlan, cwd } = this.failedState;
 
-    console.log(`[OrderSession] Retrying from beginning (preserveContext: ${preserveContext})`);
+    logger.debug(`Retrying from beginning (preserveContext: ${preserveContext})`);
 
     // 이전 시도 정보 저장
     if (preserveContext) {
@@ -957,7 +959,7 @@ export class OrderSession extends EventEmitter {
       throw new Error(`Session ${this.orderId} is not in completed state. Current: ${this.status}`);
     }
 
-    console.log(`[OrderSession] Entering followup mode for order ${this.orderId}`);
+    logger.debug(`Entering followup mode for order ${this.orderId}`);
     this.status = 'followup';
     this.emit('session:followup', { orderId: this.orderId });
   }
@@ -976,7 +978,7 @@ export class OrderSession extends EventEmitter {
       throw new Error(`No working directory set for session ${this.orderId}`);
     }
 
-    console.log(`[OrderSession] Executing followup prompt for order ${this.orderId}`);
+    logger.debug(`Executing followup prompt for order ${this.orderId}`);
 
     // Followup 상태로 전환
     this.status = 'followup';
@@ -1046,7 +1048,7 @@ export class OrderSession extends EventEmitter {
       throw new Error(`Session ${this.orderId} is not in followup or completed state`);
     }
 
-    console.log(`[OrderSession] Finishing followup mode for order ${this.orderId}`);
+    logger.debug(`Finishing followup mode for order ${this.orderId}`);
     this.status = 'completed';
     this.completedAt = new Date();
     this.emit('session:followup-finished', { orderId: this.orderId });
@@ -1059,7 +1061,7 @@ export class OrderSession extends EventEmitter {
    * @param cwd 작업 디렉터리 (보통 worktree 경로)
    */
   restoreForFollowup(cwd: string): void {
-    console.log(`[OrderSession] Restoring session ${this.orderId} for followup with cwd: ${cwd}`);
+    logger.debug(`Restoring session ${this.orderId} for followup with cwd: ${cwd}`);
 
     // 상태를 completed로 설정 (followup 가능 상태)
     this.status = 'completed';
@@ -1083,10 +1085,10 @@ export class OrderSession extends EventEmitter {
         this.emit('output', { orderId: this.orderId, stageId: eventData.stageId, data: eventData.data });
       });
 
-      console.log(`[OrderSession] Created terminalGroup for restored session ${this.orderId}`);
+      logger.debug(`Created terminalGroup for restored session ${this.orderId}`);
     }
 
-    console.log(`[OrderSession] Session ${this.orderId} restored to completed state, ready for followup`);
+    logger.debug(`Session ${this.orderId} restored to completed state, ready for followup`);
   }
 
   /**
@@ -1108,6 +1110,6 @@ export class OrderSession extends EventEmitter {
     this.sharedContext.dispose();
     this.removeAllListeners();
 
-    console.log(`[OrderSession] Disposed session for order ${this.orderId}`);
+    logger.debug(`Disposed session for order ${this.orderId}`);
   }
 }

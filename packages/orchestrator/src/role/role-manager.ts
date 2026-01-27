@@ -1,7 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import matter from 'gray-matter';
+import { createLogger } from '@codecafe/core';
 import { Role } from '../types';
+
+const logger = createLogger({ context: 'RoleManager' });
 
 const createDefaultRoleTemplate = (roleId: string): Role => ({
   id: roleId,
@@ -42,7 +45,7 @@ export class RoleManager {
    */
   loadRole(roleId: string): Role | null {
     if (!this.validateRoleId(roleId)) {
-      console.error(`Invalid role ID provided: ${roleId}`);
+      logger.error(`Invalid role ID provided: ${roleId}`);
       return null;
     }
 
@@ -52,7 +55,7 @@ export class RoleManager {
       const resolvedPath = path.resolve(rolePath);
       const resolvedDir = path.resolve(rolesDir);
       if (!resolvedPath.startsWith(resolvedDir + path.sep)) {
-        console.error(`Path traversal attempt detected for role "${roleId}".`);
+        logger.error(`Path traversal attempt detected for role "${roleId}".`);
         continue;
       }
 
@@ -60,7 +63,7 @@ export class RoleManager {
         try {
           return this._parseRoleFile(rolePath, roleId);
         } catch (error) {
-          console.error(`Failed to load role ${roleId} from ${rolePath}:`, error);
+          logger.error(`Failed to load role ${roleId} from ${rolePath}`, { error });
         }
       }
     }
@@ -94,7 +97,7 @@ export class RoleManager {
    */
   deleteRole(roleId: string): boolean {
     if (!this.validateRoleId(roleId)) {
-      console.error(`Invalid role ID provided: ${roleId}`);
+      logger.error(`Invalid role ID provided: ${roleId}`);
       return false;
     }
 
@@ -235,7 +238,7 @@ export class RoleManager {
         .filter((file) => file.endsWith('.md'))
         .map((file) => path.basename(file, '.md'));
     } catch (error) {
-      console.warn(`Failed to read roles directory: ${dir}`, error);
+      logger.warn(`Failed to read roles directory: ${dir}`, { error });
       return [];
     }
   }
