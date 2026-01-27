@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "memory": {
+      "type": "stdio",
+      "command": "server-memory",
+      "args": [],
+      "env": {
+        "MEMORY_PATH": "C:\\dev\\code-cafe-manager\\.claude\\memory.json"
+      }
+    }
+  }
+}

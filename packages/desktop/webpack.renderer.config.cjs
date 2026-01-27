@@ -18,10 +18,14 @@ module.exports = {
   },
   resolve: {
     extensions: ['.tsx', '.ts', '.js', '.jsx'],
+    alias: {
+      'process/browser': require.resolve('process/browser'),
+    },
     fallback: {
       events: require.resolve('events/'),
       stream: require.resolve('stream-browserify'),
       buffer: require.resolve('buffer/'),
+      process: require.resolve('process/browser'),
       path: require.resolve('path-browserify'),
       util: require.resolve('util/'),
       fs: false,

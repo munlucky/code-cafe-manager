@@ -8,24 +8,29 @@
   "exports": {
     ".": {
       "import": "./dist/index.js",
+      "require": "./dist/cjs/index.js",
       "types": "./dist/index.d.ts"
     },
     "./types": {
       "import": "./dist/types.js",
+      "require": "./dist/cjs/types.js",
       "types": "./dist/types.d.ts"
     },
     "./types/terminal": {
       "import": "./dist/types/terminal.js",
+      "require": "./dist/cjs/types/terminal.js",
       "types": "./dist/types/terminal.d.ts"
     },
     "./types/role": {
       "import": "./dist/types/role.js",
+      "require": "./dist/cjs/types/role.js",
       "types": "./dist/types/role.d.ts"
     }
   },
   "scripts": {
-    "build": "tsc -b",
-    "dev": "tsc -b --watch",
+    "build": "tsc -b && pnpm run build:cjs",
+    "build:cjs": "tsc -p tsconfig.cjs.json && node -e \"require('fs').mkdirSync('dist/cjs', { recursive: true }); require('fs').writeFileSync('dist/cjs/package.json', '{\\\"type\\\": \\\"commonjs\\\"}\\n')\"",
+    "dev": "tsc -p tsconfig.cjs.json && tsc -b --watch",
     "clean": "powershell -Command \"Remove-Item -Recurse -Force dist, *.tsbuildinfo -ErrorAction SilentlyContinue\"",
     "typecheck": "tsc --noEmit"
   },
