@@ -75,14 +75,21 @@ grep -r "catch (error: any)" packages/*/src | wc -l
   - [ ] 제네릭 이벤트 맵 지원
 
 ```typescript
-// 구현할 인터페이스
-type EventMap = Record<string, (...args: any[]) => void>;
+// 구현할 인터페이스 (any 대신 unknown 사용)
+type EventMap = Record<string, (...args: unknown[]) => void>;
 
 export class TypedEventEmitter<T extends EventMap> {
   on<K extends keyof T>(event: K, listener: T[K]): this;
   emit<K extends keyof T>(event: K, ...args: Parameters<T[K]>): boolean;
   off<K extends keyof T>(event: K, listener: T[K]): this;
 }
+
+// 사용 시 구체적인 타입으로 오버라이드
+interface SessionEvents {
+  'stage:started': (data: StageStartedData) => void;  // 구체적 타입
+  'stage:completed': (data: StageCompletedData) => void;
+}
+class OrderSession extends TypedEventEmitter<SessionEvents> { }
 ```
 
 - [ ] **Session 이벤트 타입 정의**

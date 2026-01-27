@@ -7,7 +7,8 @@
 | 카테고리 | 심각도 | 이슈 수 | 우선순위 |
 |---------|--------|---------|----------|
 | Console.log in Production | CRITICAL | 516+ | P0 |
-| God Classes (>800 lines) | CRITICAL | 6 | P0 |
+| God Classes (>800 lines) | CRITICAL | 5 | P0 |
+| Large Files (>400 lines) | HIGH | 60+ | P1 |
 | Memory Leaks (Event Listeners) | HIGH | 12+ | P1 |
 | Type Safety (`any` types) | HIGH | 68+ | P1 |
 | Waterfall Async Calls | HIGH | 5+ | P1 |
@@ -52,6 +53,11 @@ logger.error('Execution failed', { error });          // console.error 대체
 | `desktop/src/main/ipc/order.ts` | **907** | 3+ | OrderService, EventBridge 분리 |
 | `orchestrator/src/terminal/adapters/claude-code-adapter.ts` | **865** | 4+ | ProcessManager, OutputParser, SessionHandler |
 | `desktop/src/renderer/utils/terminal-log-parser.ts` | **844** | 5+ | ContentDetector, Summarizer, Formatter |
+
+**HIGH 우선순위 (400-800 lines)**:
+
+| 파일 | 라인 수 | 책임 수 | 분할 대상 |
+|------|--------|--------|----------|
 | `desktop/src/main/execution-manager.ts` | **775** | 3+ | BaristaWrapper, TerminalAdapter |
 
 **order-session.ts 분할 예시**:
@@ -413,7 +419,7 @@ npx eslint --max-warnings=0 packages/*/src/**/*.ts
 quality-gate:
   - console.log count < previous
   - any type count < previous
-  - max file lines < 800
+  - max file lines < 400  # ESLint max-lines 규칙과 일치
   - test coverage > 80%
 ```
 

@@ -192,8 +192,8 @@ jobs:
         run: |
           for file in $(find packages/*/src -name "*.ts" -o -name "*.tsx"); do
             lines=$(wc -l < "$file")
-            if [ "$lines" -gt 800 ]; then
-              echo "::error::$file has $lines lines (max: 800)"
+            if [ "$lines" -gt 400 ]; then
+              echo "::error::$file has $lines lines (max: 400, aligned with ESLint max-lines)"
               exit 1
             fi
           done
