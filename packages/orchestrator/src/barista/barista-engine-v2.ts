@@ -4,7 +4,7 @@
  * Phase 3: Session-based multi-terminal orchestration
  */
 
-import { Barista, Order, createLogger } from '@codecafe/core';
+import { Barista, Order, createLogger, EventListenerManager } from '@codecafe/core';
 
 const logger = createLogger({ context: 'BaristaEngineV2' });
 import { TerminalPool } from '../terminal/terminal-pool';
@@ -45,6 +45,7 @@ export class BaristaEngineV2 extends EventEmitter {
   private readonly terminalPool: TerminalPool;
   private readonly sessionManager: CafeSessionManager;
   private readonly activeExecutions = new Map<string, ActiveExecution>();
+  private readonly listenerManager = new EventListenerManager();
 
   constructor(terminalPool: TerminalPool) {
     super();
@@ -57,28 +58,28 @@ export class BaristaEngineV2 extends EventEmitter {
     });
 
     // Session Manager 이벤트 전파
-    this.sessionManager.on('output', (data) => {
+    this.listenerManager.attach(this.sessionManager, 'output', (data: { orderId: string; data: unknown }) => {
       this.emit('order:output', { orderId: data.orderId, data: data.data });
     });
-    this.sessionManager.on('session:started', (data) => {
+    this.listenerManager.attach(this.sessionManager, 'session:started', (data: unknown) => {
       this.emit('order:started', data);
     });
-    this.sessionManager.on('session:completed', (data) => {
+    this.listenerManager.attach(this.sessionManager, 'session:completed', (data: unknown) => {
       this.emit('order:completed', data);
     });
-    this.sessionManager.on('session:failed', (data) => {
+    this.listenerManager.attach(this.sessionManager, 'session:failed', (data: unknown) => {
       this.emit('order:failed', data);
     });
-    this.sessionManager.on('session:awaiting', (data) => {
+    this.listenerManager.attach(this.sessionManager, 'session:awaiting', (data: unknown) => {
       this.emit('order:awaiting-input', data);
     });
-    this.sessionManager.on('stage:started', (data) => {
+    this.listenerManager.attach(this.sessionManager, 'stage:started', (data: unknown) => {
       this.emit('stage:started', data);
     });
-    this.sessionManager.on('stage:completed', (data) => {
+    this.listenerManager.attach(this.sessionManager, 'stage:completed', (data: unknown) => {
       this.emit('stage:completed', data);
     });
-    this.sessionManager.on('stage:failed', (data) => {
+    this.listenerManager.attach(this.sessionManager, 'stage:failed', (data: unknown) => {
       this.emit('stage:failed', data);
     });
   }
@@ -521,6 +522,9 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
     const cancellations = Array.from(this.activeExecutions.keys()).map(id => this.cancelOrder(id));
     await Promise.all(cancellations);
     this.activeExecutions.clear();
+
+    // 이벤트 리스너 정리
+    this.listenerManager.detachAll();
 
     // Session Manager 정리
     await this.sessionManager.dispose();

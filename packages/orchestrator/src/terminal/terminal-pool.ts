@@ -29,12 +29,19 @@ export interface TerminalLease {
   release: () => Promise<void>;
 }
 
+// Exit handler tracking for cleanup
+interface ExitHandlerEntry {
+  handler: (event: { exitCode: number }) => void;
+}
+
 export class TerminalPool {
   private terminals: Map<string, Terminal> = new Map();
   private semaphores: Map<ProviderType, PoolSemaphore> = new Map();
   private config: TerminalPoolConfig;
   private activeLeases: Map<string, LeaseToken> = new Map();
   private metrics: PoolMetrics = { providers: {} };
+  // Exit handler tracking for memory leak prevention
+  private exitHandlers: Map<string, ExitHandlerEntry> = new Map();
 
   constructor(config: TerminalPoolConfig) {
     this.config = config;
@@ -261,6 +268,15 @@ export class TerminalPool {
       semaphore.dispose();
     }
 
+    // Remove all exit handlers before killing terminals
+    for (const [terminalId, handlerEntry] of this.exitHandlers) {
+      const terminal = this.terminals.get(terminalId);
+      if (terminal?.process) {
+        terminal.process.removeListener('exit', handlerEntry.handler as (...args: unknown[]) => void);
+      }
+    }
+    this.exitHandlers.clear();
+
     const killPromises = Array.from(this.terminals.values()).map(terminal => {
       if (terminal.process) {
         const adapter = ProviderAdapterFactory.get(terminal.provider);
@@ -280,6 +296,13 @@ export class TerminalPool {
    * Helper to kill a specific terminal
    */
   private async killTerminal(terminal: Terminal): Promise<void> {
+    // Remove exit handler before killing to prevent double handling
+    const handlerEntry = this.exitHandlers.get(terminal.id);
+    if (handlerEntry && terminal.process) {
+      terminal.process.removeListener('exit', handlerEntry.handler as (...args: unknown[]) => void);
+      this.exitHandlers.delete(terminal.id);
+    }
+
     if (terminal.process) {
       const adapter = ProviderAdapterFactory.get(terminal.provider);
       await adapter.kill(terminal.process);
@@ -344,10 +367,17 @@ export class TerminalPool {
   private setupProcessHandlers(terminal: Terminal): void {
     const adapter = ProviderAdapterFactory.get(terminal.provider);
 
-    adapter.onExit(terminal.process, ({ exitCode }) => {
+    const exitHandler = ({ exitCode }: { exitCode: number }) => {
       logger.info(`Terminal ${terminal.id} exited with code ${exitCode}`);
       this.handleTerminalExit(terminal, exitCode);
-    });
+      // Remove from tracking after exit
+      this.exitHandlers.delete(terminal.id);
+    };
+
+    adapter.onExit(terminal.process, exitHandler);
+
+    // Track for cleanup
+    this.exitHandlers.set(terminal.id, { handler: exitHandler });
   }
 
   private handleTerminalExit(terminal: Terminal, exitCode: number): void {

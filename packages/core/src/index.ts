@@ -24,3 +24,6 @@ export * from './schema/role.js';
 
 // Logging utilities
 export * from './logging/index.js';
+
+// Utility modules
+export * from './utils/index.js';

@@ -16,7 +16,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { Order, Barista, ProviderType, createLogger } from '@codecafe/core';
+import { Order, Barista, ProviderType, createLogger, EventListenerManager } from '@codecafe/core';
 
 import { TerminalPool } from '../terminal/terminal-pool';
 import { SharedContext } from './shared-context';
@@ -100,6 +100,10 @@ export class OrderSession extends EventEmitter {
   private currentExecutionPlan: StageConfig[][] | null = null;
   private currentCwd: string | null = null;
 
+  // Event listener management
+  private readonly listenerManager = new EventListenerManager();
+  private terminalGroupListenerManager: EventListenerManager | null = null;
+
   constructor(
     order: Order,
     barista: Barista,
@@ -127,9 +131,9 @@ export class OrderSession extends EventEmitter {
     this.setupEventPropagation();
 
     // SharedContext event propagation
-    this.sharedContext.on('stage:started', (data) => this.emit('stage:started', data));
-    this.sharedContext.on('stage:completed', (data) => this.emit('stage:completed', data));
-    this.sharedContext.on('stage:failed', (data) => this.emit('stage:failed', data));
+    this.listenerManager.attach(this.sharedContext, 'stage:started', (data: unknown) => this.emit('stage:started', data));
+    this.listenerManager.attach(this.sharedContext, 'stage:completed', (data: unknown) => this.emit('stage:completed', data));
+    this.listenerManager.attach(this.sharedContext, 'stage:failed', (data: unknown) => this.emit('stage:failed', data));
   }
 
   /**
@@ -179,9 +183,7 @@ export class OrderSession extends EventEmitter {
         this.sharedContext
       );
 
-      this.terminalGroup.on('stage:output', (data) => {
-        this.emit('output', { orderId: this.orderId, data: data.data });
-      });
+      this.setupTerminalGroupListeners();
 
       const result = await this.terminalGroup.executeStage(
         'main',
@@ -247,9 +249,7 @@ export class OrderSession extends EventEmitter {
         this.sharedContext
       );
 
-      this.terminalGroup.on('stage:output', (eventData) => {
-        this.emit('output', { orderId: this.orderId, stageId: eventData.stageId, data: eventData.data });
-      });
+      this.setupTerminalGroupListeners();
 
       const executionPlan = this.planner.buildPlan(this.workflowConfig.stages);
       this.currentExecutionPlan = executionPlan;
@@ -522,9 +522,7 @@ export class OrderSession extends EventEmitter {
           this.sharedContext
         );
 
-        this.terminalGroup.on('stage:output', (eventData) => {
-          this.emit('output', { orderId: this.orderId, stageId: eventData.stageId, data: eventData.data });
-        });
+        this.setupTerminalGroupListeners();
       }
 
       await this.executeWithOrchestrator(executionPlan, cwd, startBatchIndex);
@@ -599,9 +597,7 @@ export class OrderSession extends EventEmitter {
         this.sharedContext
       );
 
-      this.terminalGroup.on('stage:output', (eventData) => {
-        this.emit('output', { orderId: this.orderId, stageId: eventData.stageId, data: eventData.data });
-      });
+      this.setupTerminalGroupListeners();
 
       await this.executeWithOrchestrator(executionPlan, cwd, 0);
 
@@ -668,9 +664,7 @@ export class OrderSession extends EventEmitter {
           this.sharedContext
         );
 
-        this.terminalGroup.on('stage:output', (eventData) => {
-          this.emit('output', { orderId: this.orderId, stageId: eventData.stageId, data: eventData.data });
-        });
+        this.setupTerminalGroupListeners();
       }
 
       const followupStageId = `followup-${Date.now()}`;
@@ -744,9 +738,7 @@ export class OrderSession extends EventEmitter {
         this.sharedContext
       );
 
-      this.terminalGroup.on('stage:output', (eventData) => {
-        this.emit('output', { orderId: this.orderId, stageId: eventData.stageId, data: eventData.data });
-      });
+      this.setupTerminalGroupListeners();
 
       logger.debug(`Created terminalGroup for restored session ${this.orderId}`);
     }
@@ -762,13 +754,43 @@ export class OrderSession extends EventEmitter {
   }
 
   /**
+   * terminalGroup 리스너 설정 (중앙화된 헬퍼)
+   */
+  private setupTerminalGroupListeners(): void {
+    if (!this.terminalGroup) {
+      return;
+    }
+
+    // 이전 terminalGroup 리스너 정리
+    if (this.terminalGroupListenerManager) {
+      this.terminalGroupListenerManager.detachAll();
+    }
+
+    // 새 리스너 관리자 생성
+    this.terminalGroupListenerManager = new EventListenerManager();
+
+    this.terminalGroupListenerManager.attach(this.terminalGroup, 'stage:output', (eventData: { stageId?: string; data: unknown }) => {
+      this.emit('output', { orderId: this.orderId, stageId: eventData.stageId, data: eventData.data });
+    });
+  }
+
+  /**
    * 세션 정리
    */
   async dispose(): Promise<void> {
+    // terminalGroup 리스너 정리
+    if (this.terminalGroupListenerManager) {
+      this.terminalGroupListenerManager.detachAll();
+      this.terminalGroupListenerManager = null;
+    }
+
     if (this.terminalGroup) {
       await this.terminalGroup.dispose();
       this.terminalGroup = null;
     }
+
+    // 기타 리스너 정리
+    this.listenerManager.detachAll();
 
     this.sharedContext.dispose();
     this.removeAllListeners();
@@ -796,7 +818,7 @@ export class OrderSession extends EventEmitter {
     ];
 
     for (const event of events) {
-      this.eventPropagator.on(event, (data) => this.emit(event, data));
+      this.listenerManager.attach(this.eventPropagator, event, (data: unknown) => this.emit(event, data));
     }
   }
 }
