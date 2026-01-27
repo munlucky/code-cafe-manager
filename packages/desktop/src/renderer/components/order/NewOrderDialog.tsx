@@ -74,9 +74,10 @@ export function NewOrderDialog({
       } else {
         alert(`Failed to create order: ${result.error?.message || 'Unknown error'}`);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('[NewOrderDialog] Failed to create order:', error);
-      alert(`Failed to create order: ${error.message}`);
+      alert(`Failed to create order: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

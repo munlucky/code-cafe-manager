@@ -11,8 +11,15 @@ import {
   WorktreeMergeOptions,
   MergeResult,
 } from './types.js';
+import {
+  WorktreeError,
+  ErrorCode,
+  getErrorMessage,
+  createLogger,
+} from '@codecafe/core';
 
 const execFileAsync = promisify(execFile);
+const logger = createLogger({ context: 'WorktreeManager' });
 
 /**
  * 경로를 슬래시 형식으로 정규화 (Windows 호환)
@@ -59,8 +66,12 @@ export class WorktreeManager {
       const info = await this.getWorktreeInfo(repoPath, finalWorktreePath);
 
       return info;
-    } catch (error: any) {
-      throw new Error(`Failed to create worktree: ${error.message}`);
+    } catch (error: unknown) {
+      throw new WorktreeError(ErrorCode.WORKTREE_CREATE_FAILED, {
+        message: `Failed to create worktree: ${getErrorMessage(error)}`,
+        worktreePath: finalWorktreePath,
+        cause: error instanceof Error ? error : undefined,
+      });
     }
   }
 
@@ -74,8 +85,11 @@ export class WorktreeManager {
       });
 
       return this.parseWorktreeList(stdout);
-    } catch (error: any) {
-      throw new Error(`Failed to list worktrees: ${error.message}`);
+    } catch (error: unknown) {
+      throw new WorktreeError(ErrorCode.WORKTREE_ERROR, {
+        message: `Failed to list worktrees: ${getErrorMessage(error)}`,
+        cause: error instanceof Error ? error : undefined,
+      });
     }
   }
 
@@ -92,7 +106,10 @@ export class WorktreeManager {
     const info = worktrees.find((wt) => normalizePath(wt.path) === normalizedWorktreePath);
 
     if (!info) {
-      throw new Error(`Worktree not found: ${worktreePath}`);
+      throw new WorktreeError(ErrorCode.WORKTREE_NOT_FOUND, {
+        message: `Worktree not found: ${worktreePath}`,
+        worktreePath,
+      });
     }
 
     return info;
@@ -120,10 +137,13 @@ export class WorktreeManager {
         // 상대 경로인 경우 worktreePath 기준으로 계산
         return path.resolve(worktreePath, gitdir);
       }
-    } catch {
+    } catch (_error: unknown) {
       // .git 파일을 읽을 수 없으면 fallback
     }
-    throw new Error('Cannot determine repository path from worktree');
+    throw new WorktreeError(ErrorCode.WORKTREE_ERROR, {
+      message: 'Cannot determine repository path from worktree',
+      worktreePath,
+    });
   }
 
   /**
@@ -137,7 +157,7 @@ export class WorktreeManager {
     if (!effectiveRepoPath) {
       try {
         effectiveRepoPath = await this.getRepoPathFromWorktree(worktreePath);
-      } catch {
+      } catch (_error: unknown) {
         // fallback: path.dirname(worktreePath) 사용 (거의 작동하지 않음)
         effectiveRepoPath = path.dirname(worktreePath);
       }
@@ -146,7 +166,7 @@ export class WorktreeManager {
     // Windows 파일 잠금(Permission denied) 대응을 위한 재시도 로직
     const maxRetries = 5;
     const retryDelay = 1000;
-    let lastError: any;
+    let lastError: unknown;
 
     for (let i = 0; i < maxRetries; i++) {
       try {
@@ -154,9 +174,10 @@ export class WorktreeManager {
         if (!force && i === 0) {
           const hasChanges = await this.hasUncommittedChanges(worktreePath);
           if (hasChanges) {
-            throw new Error(
-              'Worktree has uncommitted changes. Use force=true to delete anyway.'
-            );
+            throw new WorktreeError(ErrorCode.WORKTREE_DELETE_FAILED, {
+              message: 'Worktree has uncommitted changes. Use force=true to delete anyway.',
+              worktreePath,
+            });
           }
         }
 
@@ -171,23 +192,31 @@ export class WorktreeManager {
         await execFileAsync('git', args);
         return; // 성공 시 종료
 
-      } catch (error: any) {
+      } catch (error: unknown) {
         lastError = error;
-        const msg = error.message || '';
-        
+        const msg = getErrorMessage(error);
+
         // 권한 문제나 잠금 문제인 경우 재시도
         if (msg.includes('Permission denied') || msg.includes('locked') || msg.includes('unlink')) {
-          console.warn(`[WorktreeManager] Remove failed (attempt ${i + 1}/${maxRetries}): ${msg}. Retrying in ${retryDelay}ms...`);
+          logger.warn(`Remove failed (attempt ${i + 1}/${maxRetries}): ${msg}. Retrying in ${retryDelay}ms...`);
           await new Promise(resolve => setTimeout(resolve, retryDelay));
           continue;
         }
 
         // 그 외 에러는 즉시 throw
-        throw new Error(`Failed to remove worktree: ${msg}`);
+        throw new WorktreeError(ErrorCode.WORKTREE_DELETE_FAILED, {
+          message: `Failed to remove worktree: ${msg}`,
+          worktreePath,
+          cause: error instanceof Error ? error : undefined,
+        });
       }
     }
 
-    throw new Error(`Failed to remove worktree after ${maxRetries} attempts: ${lastError?.message}`);
+    throw new WorktreeError(ErrorCode.WORKTREE_DELETE_FAILED, {
+      message: `Failed to remove worktree after ${maxRetries} attempts: ${getErrorMessage(lastError)}`,
+      worktreePath,
+      cause: lastError instanceof Error ? lastError : undefined,
+    });
   }
 
   /**
@@ -209,28 +238,32 @@ export class WorktreeManager {
       const branchToMerge = currentBranch.trim();
 
       if (!branchToMerge) {
-        throw new Error('Cannot determine current branch in worktree');
+        throw new WorktreeError(ErrorCode.WORKTREE_ERROR, {
+          message: 'Cannot determine current branch in worktree',
+          worktreePath,
+        });
       }
 
-      console.log(`[WorktreeManager] Merging ${branchToMerge} into ${targetBranch}`);
+      logger.info(`Merging ${branchToMerge} into ${targetBranch}`);
 
       // 2. 미커밋 변경사항 확인 및 처리
       const hasChanges = await this.hasUncommittedChanges(worktreePath);
       if (hasChanges) {
         if (autoCommit) {
           // autoCommit이 활성화되면 모든 변경사항을 자동 커밋
-          console.log('[WorktreeManager] Auto-committing uncommitted changes...');
+          logger.info('Auto-committing uncommitted changes...');
           await execFileAsync('git', ['add', '-A'], { cwd: worktreePath });
           await execFileAsync(
             'git',
             ['commit', '-m', `Auto-commit before merge to ${targetBranch}`],
             { cwd: worktreePath }
           );
-          console.log('[WorktreeManager] Auto-commit completed');
+          logger.info('Auto-commit completed');
         } else {
-          throw new Error(
-            'Worktree has uncommitted changes. Please commit or stash changes before merging.'
-          );
+          throw new WorktreeError(ErrorCode.WORKTREE_ERROR, {
+            message: 'Worktree has uncommitted changes. Please commit or stash changes before merging.',
+            worktreePath,
+          });
         }
       }
 
@@ -240,9 +273,9 @@ export class WorktreeManager {
       // 4. 최신 상태로 pull (선택적 - 로컬 병합만 수행)
       try {
         await execFileAsync('git', ['pull', '--ff-only'], { cwd: repoPath });
-      } catch {
+      } catch (_error: unknown) {
         // pull 실패해도 로컬 병합은 진행 (원격이 없을 수 있음)
-        console.log('[WorktreeManager] Pull failed, continuing with local merge');
+        logger.info('Pull failed, continuing with local merge');
       }
 
       // 5. 병합 실행
@@ -270,7 +303,7 @@ export class WorktreeManager {
       );
       commitHash = hash.trim();
 
-      console.log(`[WorktreeManager] Merge successful. Commit: ${commitHash}`);
+      logger.info(`Merge successful. Commit: ${commitHash}`);
 
       // 7. Worktree 삭제 (옵션)
       let worktreeRemoved = false;
@@ -281,9 +314,9 @@ export class WorktreeManager {
         // 8. 브랜치 삭제 (worktree 삭제 후)
         try {
           await execFileAsync('git', ['branch', '-d', branchToMerge], { cwd: repoPath });
-          console.log(`[WorktreeManager] Deleted branch: ${branchToMerge}`);
-        } catch (branchError: any) {
-          console.warn(`[WorktreeManager] Failed to delete branch: ${branchError.message}`);
+          logger.info(`Deleted branch: ${branchToMerge}`);
+        } catch (branchError: unknown) {
+          logger.warn(`Failed to delete branch: ${getErrorMessage(branchError)}`);
         }
       }
 
@@ -294,13 +327,13 @@ export class WorktreeManager {
         commitHash,
         worktreeRemoved,
       };
-    } catch (error: any) {
-      console.error(`[WorktreeManager] Merge failed:`, error);
+    } catch (error: unknown) {
+      logger.error('Merge failed:', { error: getErrorMessage(error) });
       return {
         success: false,
         mergedBranch: '',
         targetBranch,
-        error: error.message,
+        error: getErrorMessage(error),
       };
     }
   }
@@ -321,11 +354,11 @@ export class WorktreeManager {
       // 2. Worktree 삭제 (브랜치는 삭제하지 않음)
       await this.removeWorktree({ worktreePath, repoPath, force: true });
 
-      console.log(`[WorktreeManager] Removed worktree only, branch preserved: ${branch}`);
+      logger.info(`Removed worktree only, branch preserved: ${branch}`);
 
       return { success: true, branch };
-    } catch (error: any) {
-      return { success: false, branch: '', error: error.message };
+    } catch (error: unknown) {
+      return { success: false, branch: '', error: getErrorMessage(error) };
     }
   }
 
@@ -358,8 +391,12 @@ export class WorktreeManager {
       fs.writeFileSync(patchPath, diffOutput, 'utf-8');
 
       return patchPath;
-    } catch (error: any) {
-      throw new Error(`Failed to export patch: ${error.message}`);
+    } catch (error: unknown) {
+      throw new WorktreeError(ErrorCode.WORKTREE_ERROR, {
+        message: `Failed to export patch: ${getErrorMessage(error)}`,
+        worktreePath,
+        cause: error instanceof Error ? error : undefined,
+      });
     }
   }
 
@@ -373,7 +410,7 @@ export class WorktreeManager {
       });
 
       return stdout.trim().length > 0;
-    } catch (error) {
+    } catch (_error: unknown) {
       return false;
     }
   }
@@ -440,7 +477,7 @@ export class WorktreeManager {
         { cwd: repoPath }
       );
       return stdout.trim().split('\n').filter(Boolean);
-    } catch (error: any) {
+    } catch (_error: unknown) {
       // 브랜치가 없는 경우 빈 배열 반환
       return [];
     }
@@ -465,7 +502,7 @@ export class WorktreeManager {
         ['config', '--global', '--get-all', 'safe.directory']
       );
       safeDirectories = stdout.trim().split('\n').filter(Boolean);
-    } catch {
+    } catch (_error: unknown) {
       // safe.directory 설정이 없으면 git-config는 exit code 1을 반환
       // 정상적인 경우이므로 빈 배열로 진행
     }
@@ -485,9 +522,9 @@ export class WorktreeManager {
         'git',
         ['config', '--global', '--add', 'safe.directory', absolutePath]
       );
-      console.log(`[WorktreeManager] Added safe.directory: ${absolutePath}`);
-    } catch (error: any) {
-      console.error(`[WorktreeManager] Failed to add safe.directory '${absolutePath}': ${error.message}`);
+      logger.info(`Added safe.directory: ${absolutePath}`);
+    } catch (error: unknown) {
+      logger.error(`Failed to add safe.directory '${absolutePath}': ${getErrorMessage(error)}`);
       // 설정 실패해도 worktree 생성 시도는 계속 진행
     }
   }

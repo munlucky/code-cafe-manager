@@ -5,7 +5,7 @@
 
 import { ipcMain } from 'electron';
 import { join } from 'path';
-import { Orchestrator } from '@codecafe/core';
+import { Orchestrator, createLogger, toCodeCafeError, getErrorMessage } from '@codecafe/core';
 import { WorktreeManager } from '@codecafe/git-worktree';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
@@ -13,6 +13,8 @@ import { promises as fs } from 'fs';
 import { getExecutionManager } from '../execution-manager.js';
 import { convertAnsiToHtml } from '../../common/output-utils.js';
 import { parseOutputType } from '../../common/output-markers.js';
+
+const logger = createLogger({ context: 'IPC:Order' });
 
 /**
  * Cafe Registry 타입 (간소화)
@@ -216,15 +218,16 @@ async function handleIpc<T>(
       success: true,
       data,
     };
-  } catch (error: any) {
-    console.error(`[IPC] Error in ${context}:`, error);
+  } catch (error: unknown) {
+    const cafeError = toCodeCafeError(error);
+    logger.error(`Error in ${context}`, { error: cafeError.message });
 
     return {
       success: false,
       error: {
-        code: error.code || 'UNKNOWN',
-        message: error.message || 'Unknown error',
-        details: error.details,
+        code: cafeError.code,
+        message: cafeError.message,
+        details: cafeError.details,
       },
     };
   }
@@ -290,9 +293,10 @@ async function ensureSessionForFollowup(
       await baristaEngine.restoreSessionForFollowup(order, barista, cafeId, cwd);
       console.log(`[Order IPC] Session restored for order ${orderId}`);
       return true;
-    } catch (restoreError: any) {
-      console.error(`[Order IPC] Failed to restore session for order ${orderId}:`, restoreError);
-      throw new Error(`Failed to restore session: ${restoreError.message}`);
+    } catch (restoreError: unknown) {
+      const cafeError = toCodeCafeError(restoreError);
+      logger.error(`Failed to restore session for order ${orderId}`, { error: cafeError.message });
+      throw new Error(`Failed to restore session: ${cafeError.message}`);
     }
   }
 

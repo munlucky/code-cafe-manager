@@ -18,6 +18,8 @@ import {
   CreateCafeParamsSchema,
   UpdateCafeParamsSchema,
   createLogger,
+  toCodeCafeError,
+  getErrorMessage,
 } from '@codecafe/core';
 
 const logger = createLogger({ context: 'IPC:Cafe' });
@@ -275,20 +277,28 @@ async function handleIpc<T>(
       success: true,
       data
     };
-  } catch (error: any) {
-    logger.error(`Error in ${context}`, { error: error instanceof Error ? error.message : String(error) });
+  } catch (error: unknown) {
+    logger.error(`Error in ${context}`, { error: getErrorMessage(error) });
 
-    let errorMessage = error.message || 'Unknown error';
+    // Handle ZodError specially for validation messages
     if (error instanceof z.ZodError) {
-      errorMessage = `Validation failed: ${error.errors.map(e => e.message).join(', ')}`;
+      return {
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: `Validation failed: ${error.errors.map(e => e.message).join(', ')}`,
+          details: error.errors
+        }
+      };
     }
 
+    const cafeError = toCodeCafeError(error);
     return {
       success: false,
       error: {
-        code: error.code || 'UNKNOWN',
-        message: errorMessage,
-        details: error.details
+        code: cafeError.code,
+        message: cafeError.message,
+        details: cafeError.details
       }
     };
   }

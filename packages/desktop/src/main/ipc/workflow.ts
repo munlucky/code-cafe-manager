@@ -7,8 +7,11 @@ import { ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as yaml from 'js-yaml';
+import { createLogger, toCodeCafeError } from '@codecafe/core';
 import { WorkflowExecutor, WorkflowRun } from '@codecafe/orchestrator';
 import type { WorkflowExecutionOptions } from '@codecafe/orchestrator';
+
+const logger = createLogger({ context: 'IPC:Workflow' });
 
 /**
  * IPC Response 타입
@@ -73,15 +76,16 @@ async function handleIpc<T>(
       success: true,
       data,
     };
-  } catch (error: any) {
-    console.error(`[IPC] Error in ${context}:`, error);
+  } catch (error: unknown) {
+    const cafeError = toCodeCafeError(error);
+    logger.error(`Error in ${context}`, { error: cafeError.message });
 
     return {
       success: false,
       error: {
-        code: error.code || 'UNKNOWN',
-        message: error.message || 'Unknown error',
-        details: error.details,
+        code: cafeError.code,
+        message: cafeError.message,
+        details: cafeError.details,
       },
     };
   }
@@ -610,5 +614,5 @@ export function registerWorkflowHandlers(): void {
     });
   });
 
-  console.log('[IPC] Workflow handlers registered');
+  logger.info('Workflow handlers registered');
 }

@@ -8,7 +8,10 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { createLogger, getErrorMessage } from '@codecafe/core';
 import type { IpcResponse } from './types.js';
+
+const logger = createLogger({ context: 'IPC:System' });
 
 const execAsync = promisify(exec);
 
@@ -68,13 +71,13 @@ export function registerSystemHandlers(): void {
         success: true,
         data: { git, node, pnpm },
       };
-    } catch (error: any) {
-      console.error('[System] checkEnvironment error:', error);
+    } catch (error: unknown) {
+      logger.error('checkEnvironment error', { error: getErrorMessage(error) });
       return {
         success: false,
         error: {
           code: 'CHECK_ERROR',
-          message: error.message || 'Failed to check environment',
+          message: getErrorMessage(error),
         },
       };
     }
@@ -98,8 +101,8 @@ export function registerSystemHandlers(): void {
       try {
         const { stdout } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: path });
         currentBranch = stdout.trim();
-      } catch (error) {
-        console.warn('[System] Failed to get current branch:', error);
+      } catch (error: unknown) {
+        logger.warn('Failed to get current branch', { error: getErrorMessage(error) });
       }
 
       // Check for remote
@@ -117,8 +120,8 @@ export function registerSystemHandlers(): void {
             remoteUrl = parts[1];
           }
         }
-      } catch (error) {
-        console.warn('[System] No remote configured or failed to get remote:', error);
+      } catch (error: unknown) {
+        logger.warn('No remote configured or failed to get remote', { error: getErrorMessage(error) });
       }
 
       return {
@@ -131,13 +134,13 @@ export function registerSystemHandlers(): void {
           currentBranch,
         },
       };
-    } catch (error: any) {
-      console.error('[System] checkGitRepo error:', error);
+    } catch (error: unknown) {
+      logger.error('checkGitRepo error', { error: getErrorMessage(error) });
       return {
         success: false,
         error: {
           code: 'GIT_CHECK_ERROR',
-          message: error.message || 'Failed to check git repository',
+          message: getErrorMessage(error),
         },
       };
     }
@@ -147,19 +150,19 @@ export function registerSystemHandlers(): void {
   ipcMain.handle('system:gitInit', async (_, path: string): Promise<IpcResponse<void>> => {
     try {
       await execAsync('git init', { cwd: path });
-      console.log(`[System] Git repository initialized at: ${path}`);
+      logger.info(`Git repository initialized at: ${path}`);
       return { success: true };
-    } catch (error: any) {
-      console.error('[System] gitInit error:', error);
+    } catch (error: unknown) {
+      logger.error('gitInit error', { error: getErrorMessage(error) });
       return {
         success: false,
         error: {
           code: 'GIT_INIT_ERROR',
-          message: error.message || 'Failed to initialize git repository',
+          message: getErrorMessage(error),
         },
       };
     }
   });
 
-  console.log('[IPC] System handlers registered');
+  logger.info('System handlers registered');
 }

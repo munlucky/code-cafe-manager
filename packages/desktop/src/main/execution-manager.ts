@@ -6,7 +6,7 @@
 import * as path from 'path';
 import { BrowserWindow } from 'electron';
 import { existsSync } from 'fs';
-import { Orchestrator, Order, Barista, OrderStatus, createLogger } from '@codecafe/core';
+import { Orchestrator, Order, Barista, OrderStatus, createLogger, toCodeCafeError, getErrorMessage } from '@codecafe/core';
 
 const logger = createLogger({ context: 'ExecutionManager' });
 import { BaristaEngineV2, TerminalPool } from '@codecafe/orchestrator';
@@ -504,16 +504,17 @@ export class ExecutionManager {
         message: 'Execution completed successfully',
       });
 
-    } catch (error: any) {
-      logger.error('Execution failed', { error: error.message });
+    } catch (error: unknown) {
+      const cafeError = toCodeCafeError(error);
+      logger.error('Execution failed', { error: cafeError.message });
 
       // 실패 처리
-      await this.orchestrator.completeOrder(orderId, false, error.message || 'Execution failed');
+      await this.orchestrator.completeOrder(orderId, false, cafeError.message);
 
       this.sendToRenderer('order:execution-progress', {
         orderId,
         stage: 'failed',
-        message: error.message || 'Execution failed',
+        message: cafeError.message,
         error: true,
       });
     } finally {
@@ -579,8 +580,9 @@ export class ExecutionManager {
           });
 
           return;
-        } catch (error: any) {
-          logger.error(`Failed to restore and execute followup for order ${orderId}`, { error: error.message });
+        } catch (error: unknown) {
+          const cafeError = toCodeCafeError(error);
+          logger.error(`Failed to restore and execute followup for order ${orderId}`, { error: cafeError.message });
           return;
         }
       }
@@ -614,8 +616,9 @@ export class ExecutionManager {
           stage: 'followup-started',
           message: `Followup request sent: ${message.substring(0, 50)}...`,
         });
-      } catch (error: any) {
-        logger.error('Failed to execute followup', { error: error.message });
+      } catch (error: unknown) {
+        const cafeError = toCodeCafeError(error);
+        logger.error('Failed to execute followup', { error: cafeError.message });
       }
       return;
     }
@@ -631,8 +634,9 @@ export class ExecutionManager {
         stage: 'input-sent',
         message: `Input sent: ${message.substring(0, 50)}...`,
       });
-    } catch (error: any) {
-      logger.error('Failed to send input', { error: error.message });
+    } catch (error: unknown) {
+      const cafeError = toCodeCafeError(error);
+      logger.error('Failed to send input', { error: cafeError.message });
     }
   }
 
@@ -724,15 +728,17 @@ export class ExecutionManager {
           this.activeExecutions.set(order.id, { baristaId: barista.id });
 
           logger.info(`Restored session for order ${order.id} with worktree ${cwd} (followup ready)`);
-        } catch (err: any) {
-          logger.error(`Failed to restore session for order ${order.id}`, { error: err.message });
+        } catch (err: unknown) {
+          const cafeError = toCodeCafeError(err);
+          logger.error(`Failed to restore session for order ${order.id}`, { error: cafeError.message });
           // 실패해도 다른 order는 계속 시도
         }
       }
 
       logger.info(`Session restore completed. ${restorableOrders.length} orders restored.`);
-    } catch (error: any) {
-      logger.error('Error restoring sessions', { error: error.message });
+    } catch (error: unknown) {
+      const cafeError = toCodeCafeError(error);
+      logger.error('Error restoring sessions', { error: cafeError.message });
     }
   }
 }
