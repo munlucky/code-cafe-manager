@@ -6,7 +6,9 @@
  */
 
 import { EventEmitter } from 'events';
-import { Order, Barista } from '@codecafe/core';
+import { Order, Barista, createLogger, EventListenerManager } from '@codecafe/core';
+
+const logger = createLogger({ context: 'CafeSessionManager' });
 import { TerminalPool } from '../terminal/terminal-pool';
 import { OrderSession, WorkflowConfig, SessionStatus } from './order-session';
 
@@ -45,6 +47,8 @@ export class CafeSessionManager extends EventEmitter {
 
   // Cafe별 세션 관리
   private readonly cafes = new Map<string, CafeSessionInfo>();
+  // 세션별 리스너 관리
+  private readonly sessionListeners = new Map<string, EventListenerManager>();
 
   constructor(config: SessionManagerConfig) {
     super();
@@ -66,7 +70,7 @@ export class CafeSessionManager extends EventEmitter {
         maxConcurrentOrders: this.maxConcurrentOrdersPerCafe,
       };
       this.cafes.set(cafeId, cafe);
-      console.log(`[CafeSessionManager] Registered cafe: ${cafeId}`);
+      logger.info(` Registered cafe: ${cafeId}`);
     }
 
     return cafe;
@@ -97,32 +101,34 @@ export class CafeSessionManager extends EventEmitter {
     // 세션 생성
     const session = new OrderSession(order, barista, cafeId, this.terminalPool);
 
+    // 세션별 리스너 관리자 생성
+    const listenerManager = new EventListenerManager();
+    this.sessionListeners.set(order.id, listenerManager);
+
     // 세션 이벤트 전파
-    session.on('session:started', (data) => this.emit('session:started', data));
-    session.on('session:completed', (data) => {
+    listenerManager.attach(session, 'session:started', (data: unknown) => this.emit('session:started', data));
+    listenerManager.attach(session, 'session:completed', (data: unknown) => {
       this.emit('session:completed', data);
       this.cleanupSession(cafeId, order.id);
     });
-    session.on('session:failed', (data) => {
+    listenerManager.attach(session, 'session:failed', (data: unknown) => {
       this.emit('session:failed', data);
       this.cleanupSession(cafeId, order.id);
     });
-    session.on('session:cancelled', (data) => {
+    listenerManager.attach(session, 'session:cancelled', (data: unknown) => {
       this.emit('session:cancelled', data);
       this.cleanupSession(cafeId, order.id);
     });
-    session.on('session:awaiting', (data) => this.emit('session:awaiting', data));
-    session.on('session:resumed', (data) => this.emit('session:resumed', data));
-    session.on('output', (data) => this.emit('output', data));
-    session.on('stage:started', (data) => this.emit('stage:started', data));
-    session.on('stage:completed', (data) => this.emit('stage:completed', data));
-    session.on('stage:failed', (data) => this.emit('stage:failed', data));
+    listenerManager.attach(session, 'session:awaiting', (data: unknown) => this.emit('session:awaiting', data));
+    listenerManager.attach(session, 'session:resumed', (data: unknown) => this.emit('session:resumed', data));
+    listenerManager.attach(session, 'output', (data: unknown) => this.emit('output', data));
+    listenerManager.attach(session, 'stage:started', (data: unknown) => this.emit('stage:started', data));
+    listenerManager.attach(session, 'stage:completed', (data: unknown) => this.emit('stage:completed', data));
+    listenerManager.attach(session, 'stage:failed', (data: unknown) => this.emit('stage:failed', data));
 
     cafe.sessions.set(order.id, session);
 
-    console.log(
-      `[CafeSessionManager] Created session for order ${order.id} in cafe ${cafeId}`
-    );
+    logger.debug(`Created session for order ${order.id} in cafe ${cafeId}`);
 
     return session;
   }
@@ -270,6 +276,13 @@ export class CafeSessionManager extends EventEmitter {
       return;
     }
 
+    // 세션 리스너 정리
+    const listenerManager = this.sessionListeners.get(orderId);
+    if (listenerManager) {
+      listenerManager.detachAll();
+      this.sessionListeners.delete(orderId);
+    }
+
     const session = cafe.sessions.get(orderId);
     if (session) {
       await session.dispose();
@@ -294,6 +307,12 @@ export class CafeSessionManager extends EventEmitter {
         if (isTerminal && status.completedAt) {
           const completedTime = new Date(status.completedAt).getTime();
           if (now - completedTime > olderThanMs) {
+            // 세션 리스너 정리
+            const listenerManager = this.sessionListeners.get(orderId);
+            if (listenerManager) {
+              listenerManager.detachAll();
+              this.sessionListeners.delete(orderId);
+            }
             await session.dispose();
             cafe.sessions.delete(orderId);
             cleanedCount++;
@@ -302,7 +321,7 @@ export class CafeSessionManager extends EventEmitter {
       }
     }
 
-    console.log(`[CafeSessionManager] Cleaned up ${cleanedCount} completed sessions`);
+    logger.info(` Cleaned up ${cleanedCount} completed sessions`);
     return cleanedCount;
   }
 
@@ -310,6 +329,12 @@ export class CafeSessionManager extends EventEmitter {
    * 전체 정리
    */
   async dispose(): Promise<void> {
+    // 모든 세션 리스너 정리
+    for (const listenerManager of this.sessionListeners.values()) {
+      listenerManager.detachAll();
+    }
+    this.sessionListeners.clear();
+
     for (const cafe of this.cafes.values()) {
       for (const session of cafe.sessions.values()) {
         await session.dispose();
@@ -320,6 +345,6 @@ export class CafeSessionManager extends EventEmitter {
     this.cafes.clear();
     this.removeAllListeners();
 
-    console.log('[CafeSessionManager] Disposed all sessions');
+    logger.debug('Disposed all sessions');
   }
 }

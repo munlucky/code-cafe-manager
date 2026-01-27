@@ -4,7 +4,10 @@
  */
 
 import { ipcMain, dialog, BrowserWindow } from 'electron';
+import { createLogger } from '@codecafe/core';
 import type { IpcResponse } from './types.js';
+
+const logger = createLogger({ context: 'IPC:Dialog' });
 
 /**
  * Register Dialog IPC Handlers
@@ -32,7 +35,7 @@ export function registerDialogHandlers(): void {
 
       return { success: true, data: result.filePaths[0] };
     } catch (error: any) {
-      console.error('[Dialog] selectFolder error:', error);
+      logger.error('selectFolder error', { error: error.message });
       return {
         success: false,
         error: {
@@ -68,7 +71,7 @@ export function registerDialogHandlers(): void {
 
         return { success: true, data: result.filePaths[0] };
       } catch (error: any) {
-        console.error('[Dialog] selectFile error:', error);
+        logger.error('selectFile error', { error: error.message });
         return {
           success: false,
           error: {
@@ -80,5 +83,5 @@ export function registerDialogHandlers(): void {
     }
   );
 
-  console.log('[IPC] Dialog handlers registered');
+  logger.info('Dialog handlers registered');
 }

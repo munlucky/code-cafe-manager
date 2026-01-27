@@ -17,7 +17,10 @@ import {
   CafeRegistrySchema,
   CreateCafeParamsSchema,
   UpdateCafeParamsSchema,
+  createLogger,
 } from '@codecafe/core';
+
+const logger = createLogger({ context: 'IPC:Cafe' });
 
 // Error handling
 export enum CafeErrorCode {
@@ -111,12 +114,12 @@ class CafeRegistry {
       const data = JSON.parse(content);
       return CafeRegistrySchema.parse(data);
     } catch (error) {
-      console.error('[Cafe Registry] Failed to load registry:', error);
+      logger.error('Failed to load registry', { error: error instanceof Error ? error.message : String(error) });
 
       // Backup corrupted file
       const backupPath = `${path}.backup.${Date.now()}`;
       await fs.copyFile(path, backupPath);
-      console.log(`[Cafe Registry] Corrupted registry backed up to: ${backupPath}`);
+      logger.info(`Corrupted registry backed up to: ${backupPath}`);
 
       return { version: '1.0', cafes: [] };
     }
@@ -178,7 +181,7 @@ class CafeRegistry {
 
     registry.cafes.push(cafe);
     await this.save(registry);
-    console.log(`[Cafe Registry] Created Cafe: ${cafe.name} (${cafe.id})`);
+    logger.info(`Created Cafe: ${cafe.name} (${cafe.id})`);
 
     return cafe;
   }
@@ -203,7 +206,7 @@ class CafeRegistry {
     }
 
     await this.save(registry);
-    console.log(`[Cafe Registry] Updated Cafe: ${cafe.name} (${cafe.id})`);
+    logger.info(`Updated Cafe: ${cafe.name} (${cafe.id})`);
 
     return cafe;
   }
@@ -224,7 +227,7 @@ class CafeRegistry {
     }
 
     await this.save(registry);
-    console.log(`[Cafe Registry] Deleted Cafe: ${cafe.name} (${cafe.id})`);
+    logger.info(`Deleted Cafe: ${cafe.name} (${cafe.id})`);
   }
 
   async setLastAccessed(id: string): Promise<void> {
@@ -237,7 +240,7 @@ class CafeRegistry {
 
     registry.lastAccessed = id;
     await this.save(registry);
-    console.log(`[Cafe Registry] Set last accessed: ${cafe.name} (${cafe.id})`);
+    logger.info(`Set last accessed: ${cafe.name} (${cafe.id})`);
   }
 
   async getLastAccessed(): Promise<Cafe | null> {
@@ -273,7 +276,7 @@ async function handleIpc<T>(
       data
     };
   } catch (error: any) {
-    console.error(`[IPC] Error in ${context}:`, error);
+    logger.error(`Error in ${context}`, { error: error instanceof Error ? error.message : String(error) });
 
     let errorMessage = error.message || 'Unknown error';
     if (error instanceof z.ZodError) {
@@ -323,5 +326,5 @@ export function registerCafeHandlers(): void {
     handleIpc(() => cafeRegistry.getLastAccessed(), 'cafe:getLastAccessed')
   );
 
-  console.log('[IPC] Cafe handlers registered');
+  logger.info('Cafe handlers registered');
 }

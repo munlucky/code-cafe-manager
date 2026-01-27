@@ -3,7 +3,9 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import dotenv from 'dotenv';
-import { Orchestrator } from '@codecafe/core';
+import { Orchestrator, createLogger } from '@codecafe/core';
+
+const logger = createLogger({ context: 'Main' });
 
 import { registerCafeHandlers } from './ipc/cafe.js';
 import { registerTerminalHandlers } from './ipc/terminal.js';
@@ -62,7 +64,7 @@ async function waitForDevServer(url: string, maxAttempts = 30): Promise<void> {
     try {
       const response = await fetch(url);
       if (response.ok) {
-        console.log(`[Main] Dev server is ready at ${url}`);
+        logger.info(`Dev server is ready at ${url}`);
         return;
       }
     } catch (error) {
@@ -92,19 +94,19 @@ async function createWindow(): Promise<void> {
   }
 
   const isDev = !app.isPackaged;
-  console.log(`[Main] isDev: ${isDev}, app.isPackaged: ${app.isPackaged}`);
+  logger.info(`isDev: ${isDev}, app.isPackaged: ${app.isPackaged}`);
 
   if (isDev) {
     const port = process.env.RENDERER_PORT || '8081';
     const url = process.env.RENDERER_URL || `http://localhost:${port}`;
-    console.log(`[Main] Waiting for dev server at ${url}...`);
+    logger.info(`Waiting for dev server at ${url}...`);
     await waitForDevServer(url);
-    console.log(`[Main] Loading renderer from ${url}`);
+    logger.info(`Loading renderer from ${url}`);
     await mainWindow.loadURL(url);
   } else {
     // In production, files are relative to the app root
     const indexPath = join(__dirname, '../../renderer/index.html');
-    console.log(`[Main] Loading renderer from file: ${indexPath}`);
+    logger.info(`Loading renderer from file: ${indexPath}`);
     await mainWindow.loadFile(indexPath);
   }
 
@@ -117,7 +119,7 @@ async function createWindow(): Promise<void> {
  * Initialize and start the Orchestrator
  */
 async function initOrchestrator(): Promise<void> {
-  console.log('[Main] Initializing orchestrator...');
+  logger.info('Initializing orchestrator...');
   const codecafeDir = join(homedir(), '.codecafe');
   const dataDir = join(codecafeDir, 'data');
   const logsDir = join(codecafeDir, 'logs');
@@ -133,14 +135,14 @@ async function initOrchestrator(): Promise<void> {
       mainWindow?.webContents.send(event, data);
     });
   }
-  console.log('[Main] Orchestrator initialized.');
+  logger.info('Orchestrator initialized.');
 
   // ExecutionManager 초기화 (BaristaEngineV2 연동)
   try {
     await initExecutionManager(orchestrator, mainWindow);
-    console.log('[Main] ExecutionManager initialized.');
+    logger.info('ExecutionManager initialized.');
   } catch (error) {
-    console.error('[Main] Failed to initialize ExecutionManager:', error);
+    logger.error('Failed to initialize ExecutionManager', { error: error instanceof Error ? error.message : String(error) });
     // ExecutionManager 초기화 실패해도 앱은 계속 실행
   }
 }
@@ -149,7 +151,7 @@ async function initOrchestrator(): Promise<void> {
  * Set up all IPC handlers
  */
 function setupIpcHandlers(): void {
-  console.log('[Main] Setting up IPC handlers...');
+  logger.info('Setting up IPC handlers...');
   const orchDir = resolveOrchDir();
 
   registerCafeHandlers();
@@ -169,7 +171,7 @@ function setupIpcHandlers(): void {
   // Note: registerElectronHandlers removed to avoid duplicate handler registration
   // Workflow handlers are now registered via registerWorkflowHandlers
   // TODO: Add run handlers if needed
-  console.log('[Main] IPC handlers set up.');
+  logger.info('IPC handlers set up.');
 }
 
 // Application Lifecycle
@@ -177,11 +179,11 @@ function setupIpcHandlers(): void {
 setupMainProcessLogger();
 
 app.whenReady().then(async () => {
-  console.log('[Main] App is ready.');
+  logger.info('App is ready.');
   await initOrchestrator();
   setupIpcHandlers();
   await createWindow();
-  console.log('[Main] Window created.');
+  logger.info('Window created.');
 
   // ExecutionManager에 mainWindow 참조 업데이트
   const execManager = getExecutionManager();

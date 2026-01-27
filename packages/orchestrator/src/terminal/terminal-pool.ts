@@ -3,7 +3,9 @@
  * Gap 2 해결: Enhanced concurrency model with proper lease management
  */
 
-import { ProviderType } from '@codecafe/core';
+import { ProviderType, createLogger } from '@codecafe/core';
+
+const logger = createLogger({ context: 'TerminalPool', json: true });
 import {
   Terminal,
   TerminalPoolConfig,
@@ -27,12 +29,19 @@ export interface TerminalLease {
   release: () => Promise<void>;
 }
 
+// Exit handler tracking for cleanup
+interface ExitHandlerEntry {
+  handler: (event: { exitCode: number }) => void;
+}
+
 export class TerminalPool {
   private terminals: Map<string, Terminal> = new Map();
   private semaphores: Map<ProviderType, PoolSemaphore> = new Map();
   private config: TerminalPoolConfig;
   private activeLeases: Map<string, LeaseToken> = new Map();
   private metrics: PoolMetrics = { providers: {} };
+  // Exit handler tracking for memory leak prevention
+  private exitHandlers: Map<string, ExitHandlerEntry> = new Map();
 
   constructor(config: TerminalPoolConfig) {
     this.config = config;
@@ -70,12 +79,7 @@ export class TerminalPool {
    * C3: Structured log helper for diagnostics
    */
   private log(step: string, details: Record<string, unknown> = {}): void {
-    console.log(JSON.stringify({
-      scope: 'terminal-pool',
-      step,
-      timestamp: new Date().toISOString(),
-      ...details,
-    }));
+    logger.debug(step, { scope: 'terminal-pool', ...details });
   }
 
   /**
@@ -264,6 +268,15 @@ export class TerminalPool {
       semaphore.dispose();
     }
 
+    // Remove all exit handlers before killing terminals
+    for (const [terminalId, handlerEntry] of this.exitHandlers) {
+      const terminal = this.terminals.get(terminalId);
+      if (terminal?.process) {
+        terminal.process.removeListener('exit', handlerEntry.handler as (...args: unknown[]) => void);
+      }
+    }
+    this.exitHandlers.clear();
+
     const killPromises = Array.from(this.terminals.values()).map(terminal => {
       if (terminal.process) {
         const adapter = ProviderAdapterFactory.get(terminal.provider);
@@ -283,6 +296,13 @@ export class TerminalPool {
    * Helper to kill a specific terminal
    */
   private async killTerminal(terminal: Terminal): Promise<void> {
+    // Remove exit handler before killing to prevent double handling
+    const handlerEntry = this.exitHandlers.get(terminal.id);
+    if (handlerEntry && terminal.process) {
+      terminal.process.removeListener('exit', handlerEntry.handler as (...args: unknown[]) => void);
+      this.exitHandlers.delete(terminal.id);
+    }
+
     if (terminal.process) {
       const adapter = ProviderAdapterFactory.get(terminal.provider);
       await adapter.kill(terminal.process);
@@ -309,11 +329,11 @@ export class TerminalPool {
       // Find an idle terminal to recycle (even if CWD didn't match above)
       const victim = providerTerminals.find(t => t.status === 'idle');
       if (victim) {
-        console.log(`[TerminalPool] Recycling terminal ${victim.id} (CWD mismatch: ${victim.cwd} != ${effectiveCwd})`);
+        logger.info(` Recycling terminal ${victim.id} (CWD mismatch: ${victim.cwd} != ${effectiveCwd})`);
         await this.killTerminal(victim);
       } else {
         // Should not happen if Semaphore logic is correct (permits <= size)
-        console.warn('[TerminalPool] Semaphore acquired but no idle terminals to recycle?');
+        logger.warn(' Semaphore acquired but no idle terminals to recycle?');
       }
     }
 
@@ -347,10 +367,17 @@ export class TerminalPool {
   private setupProcessHandlers(terminal: Terminal): void {
     const adapter = ProviderAdapterFactory.get(terminal.provider);
 
-    adapter.onExit(terminal.process, ({ exitCode }) => {
-      console.log(`Terminal ${terminal.id} exited with code ${exitCode}`);
+    const exitHandler = ({ exitCode }: { exitCode: number }) => {
+      logger.info(`Terminal ${terminal.id} exited with code ${exitCode}`);
       this.handleTerminalExit(terminal, exitCode);
-    });
+      // Remove from tracking after exit
+      this.exitHandlers.delete(terminal.id);
+    };
+
+    adapter.onExit(terminal.process, exitHandler);
+
+    // Track for cleanup
+    this.exitHandlers.set(terminal.id, { handler: exitHandler });
   }
 
   private handleTerminalExit(terminal: Terminal, exitCode: number): void {
@@ -379,7 +406,7 @@ export class TerminalPool {
 
   private recoverCrashedLease(terminal: Terminal): void {
     this.handleCrashDuringLease(terminal).catch((error) => {
-      console.error(`Crash recovery failed for terminal ${terminal.id}:`, error);
+      logger.error(`Crash recovery failed for terminal ${terminal.id}`, { error });
       this.releaseSemaphoreOnCrashFailure(terminal);
     });
   }
@@ -391,12 +418,12 @@ export class TerminalPool {
     const provider = crashedTerminal.provider;
     const maxRetries = this.config.perProvider[provider].maxRetries;
 
-    console.warn(`Attempting auto-restart for crashed terminal ${crashedTerminal.id}`);
+    logger.warn(`Attempting auto-restart for crashed terminal ${crashedTerminal.id}`);
 
     try {
       await this.retryTerminalCreation(crashedTerminal, maxRetries);
     } catch (error) {
-      console.error(`All restart attempts failed for terminal ${crashedTerminal.id}`);
+      logger.error(`All restart attempts failed for terminal ${crashedTerminal.id}`);
       throw error;
     }
   }
@@ -409,7 +436,7 @@ export class TerminalPool {
       } catch (error) {
         if (attempt === maxRetries - 1) throw error;
 
-        console.error(`Restart attempt ${attempt + 1} failed:`, error);
+        logger.error(`Restart attempt ${attempt + 1} failed`, { error });
         await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
       }
     }
@@ -430,7 +457,7 @@ export class TerminalPool {
     this.terminals.delete(crashedTerminal.id);
     this.updateMetrics();
 
-    console.log(`Terminal ${crashedTerminal.id} restarted as ${newTerminal.id}`);
+    logger.info(`Terminal ${crashedTerminal.id} restarted as ${newTerminal.id}`);
   }
 
   /**
@@ -440,7 +467,7 @@ export class TerminalPool {
     const semaphore = this.semaphores.get(terminal.provider);
     if (semaphore && terminal.leaseToken) {
       semaphore.release(terminal.id);
-      console.warn(`Semaphore released for crashed terminal ${terminal.id}`);
+      logger.warn(`Semaphore released for crashed terminal ${terminal.id}`);
     }
   }
 

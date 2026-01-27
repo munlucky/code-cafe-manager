@@ -1,6 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { createLogger } from '@codecafe/core';
 import { RunState, StageType } from '../types';
+
+const logger = createLogger({ context: 'RunStateManager' });
 
 export interface CreateRunOptions {
   workflow: string;
@@ -54,7 +57,7 @@ export class RunStateManager {
       const content = fs.readFileSync(statePath, 'utf-8');
       return JSON.parse(content) as RunState;
     } catch (error) {
-      console.error(`Failed to load run state: ${statePath}`, error);
+      logger.error(`Failed to load run state: ${statePath}`, { error });
       return null;
     }
   }

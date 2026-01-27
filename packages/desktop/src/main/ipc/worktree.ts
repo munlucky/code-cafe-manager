@@ -1,5 +1,8 @@
 import { ipcMain, shell } from 'electron';
 import { WorktreeManager, WorktreeMergeOptions } from '@codecafe/git-worktree';
+import { createLogger } from '@codecafe/core';
+
+const logger = createLogger({ context: 'IPC:Worktree' });
 
 /**
  * Standardized IPC handler wrapper
@@ -11,7 +14,7 @@ async function handleIpc<T>(
   try {
     return await handler();
   } catch (error) {
-    console.error(`[IPC] Error in ${context}:`, error);
+    logger.error(`Error in ${context}`, { error: error instanceof Error ? error.message : String(error) });
     throw error;
   }
 }
@@ -73,5 +76,5 @@ export function registerWorktreeHandlers(): void {
       handleIpc(() => WorktreeManager.removeWorktreeOnly(worktreePath, repoPath), 'worktree:removeOnly')
   );
 
-  console.log('[IPC] Worktree handlers registered');
+  logger.info('Worktree handlers registered');
 }

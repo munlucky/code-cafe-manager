@@ -1,4 +1,7 @@
 import { ipcMain } from 'electron';
+import { createLogger } from '@codecafe/core';
+
+const logger = createLogger({ context: 'IPC:Provider' });
 
 /**
  * Standardized IPC handler wrapper
@@ -10,7 +13,7 @@ async function handleIpc<T>(
   try {
     return await handler();
   } catch (error) {
-    console.error(`[IPC] Error in ${context}:`, error);
+    logger.error(`Error in ${context}`, { error: error instanceof Error ? error.message : String(error) });
     throw error;
   }
 }
@@ -29,5 +32,5 @@ export function registerProviderHandlers(): void {
     }, 'getAvailableProviders')
   );
 
-  console.log('[IPC] Provider handlers registered');
+  logger.info('Provider handlers registered');
 }

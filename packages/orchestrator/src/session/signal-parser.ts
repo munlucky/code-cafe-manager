@@ -5,7 +5,10 @@
  */
 
 import * as yaml from 'yaml';
+import { createLogger } from '@codecafe/core';
 import { StageSignals, DEFAULT_SIGNALS, isValidSignals } from './stage-signals';
+
+const logger = createLogger({ context: 'SignalParser' });
 
 /**
  * 시그널 파싱 결과
@@ -92,7 +95,7 @@ export class SignalParser {
       
       // 질문이 5개 이상이고 출력이 충분하지 않을 때만 await_user로 추론
       if (questionCount >= 5 && !isSubstantialOutput) {
-        console.log(`[SignalParser] Inferring await_user: ${questionCount} questions in ${outputLength} chars (no signals block)`);
+        logger.debug(`Inferring await_user: ${questionCount} questions in ${outputLength} chars (no signals block)`);
         return {
           success: false,
           signals: {
@@ -105,7 +108,7 @@ export class SignalParser {
         };
       }
 
-      console.log(`[SignalParser] No signals block found, output: ${outputLength} chars, questions: ${questionCount}`);
+      logger.debug(`No signals block found, output: ${outputLength} chars, questions: ${questionCount}`);
       return {
         success: false,
         signals: { ...DEFAULT_SIGNALS },

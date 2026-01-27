@@ -6,6 +6,9 @@
 
 import * as path from 'path';
 import { EventEmitter } from 'events';
+import { createLogger } from '@codecafe/core';
+
+const logger = createLogger({ context: 'WorkflowExecutor' });
 import { randomBytes } from 'crypto';
 import { DAGExecutor } from '../engine/dag-executor';
 import { FSMEngine } from '../engine/fsm';
@@ -135,7 +138,7 @@ export class WorkflowExecutor extends EventEmitter {
 
     // Start execution in background
     this.executeWorkflow(run, workflow, options).catch((error) => {
-      console.error(`Workflow run ${runId} failed:`, error);
+      logger.error(`Workflow run ${runId} failed`, { error });
       this.cleanupRun(runId);
     });
 
