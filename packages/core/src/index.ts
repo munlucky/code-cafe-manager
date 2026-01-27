@@ -21,3 +21,6 @@ export * from './types/role.js';
 // Phase 2: Terminal and Role schemas
 export * from './schema/terminal.js';
 export * from './schema/role.js';
+
+// Logging utilities
+export * from './logging/index.js';
