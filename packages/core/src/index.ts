@@ -27,3 +27,6 @@ export * from './logging/index.js';
 
 // Utility modules
 export * from './utils/index.js';
+
+// Error handling
+export * from './errors/index.js';
