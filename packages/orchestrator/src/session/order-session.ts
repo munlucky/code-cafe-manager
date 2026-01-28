@@ -264,7 +264,7 @@ export class OrderSession extends EventEmitter {
         this.contextManager.buildFailedState({
           error: errorMsg,
           executionPlan: this.currentExecutionPlan,
-          failedBatchIndex: -1,
+          failedBatchIndex: 0, // 실패 지점 불명 시 처음부터
           cwd,
         });
       }
@@ -492,7 +492,7 @@ export class OrderSession extends EventEmitter {
         this.contextManager.removeCompletedStage(retryOptions[i].stageId);
       }
     } else {
-      startBatchIndex = failedState.failedBatchIndex;
+      startBatchIndex = failedState.failedBatchIndex < 0 ? 0 : failedState.failedBatchIndex;
       this.contextManager.removeCompletedStage(failedState.failedStageId);
     }
 
