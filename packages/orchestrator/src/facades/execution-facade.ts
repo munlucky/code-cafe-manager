@@ -301,23 +301,23 @@ export class ExecutionFacade extends EventEmitter {
   /**
    * Create a new barista
    */
-  createBarista(provider: ProviderType): Barista {
+  async createBarista(provider: ProviderType): Promise<Barista> {
     const barista = this.baristaManager.createBarista(provider);
-    this.saveState(); // Async save (fire and forget)
+    await this.persistState();
     return barista;
   }
 
   /**
    * Create a new order
    */
-  createOrder(
+  async createOrder(
     workflowId: string,
     workflowName: string,
     counter: string,
     provider?: ProviderType,
     vars: Record<string, string> = {},
     cafeId?: string
-  ): Order {
+  ): Promise<Order> {
     const defaultProvider: ProviderType = provider || 'claude-code';
     const order = this.orderManager.createOrder(workflowId, workflowName, counter, defaultProvider, vars, cafeId);
 
@@ -331,7 +331,7 @@ export class ExecutionFacade extends EventEmitter {
       }
     }
 
-    this.saveState();
+    await this.persistState();
     return order;
   }
 
@@ -472,10 +472,10 @@ export class ExecutionFacade extends EventEmitter {
    */
   private async saveState(): Promise<void> {
     // Don't wait, save in background
-    this.storage.saveOrders(this.orderManager.getAllOrders()).catch((err) => {
+    this.storage.saveOrders(this.orderManager.getAllOrders()).catch((err: unknown) => {
       console.error('[ExecutionFacade] Failed to save orders:', err);
     });
-    this.storage.saveBaristas(this.baristaManager.getAllBaristas()).catch((err) => {
+    this.storage.saveBaristas(this.baristaManager.getAllBaristas()).catch((err: unknown) => {
       console.error('[ExecutionFacade] Failed to save baristas:', err);
     });
   }
