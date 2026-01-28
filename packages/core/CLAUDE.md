@@ -50,16 +50,34 @@
 | `src/barista.ts` | Barista 관리 | `BaristaManager` |
 | `src/order.ts` | Order 관리 | `OrderManager` |
 | `src/storage.ts` | 저장소 인터페이스 | `IStorage` |
-| `src/orchestrator.ts` | 오케스트레이터 인터페이스 | `Orchestrator` |
 | `src/log-manager.ts` | 로깅 | `LogManager` |
+| **types/** | | |
 | `src/types/cafe.ts` | Cafe 타입 | `Cafe`, `CafeConfig` |
 | `src/types/terminal.ts` | Terminal 타입 | `Terminal`, `TerminalPoolConfig` |
 | `src/types/role.ts` | Role 타입 | `Role`, `Step` |
-| `src/schema/*.ts` | Zod 스키마 | `CafeSchema`, `RoleSchema`, etc. |
-| `src/utils/index.ts` | 유틸리티 | `EventEmitter`, `TypeGuards` |
-| `src/errors/index.ts` | 에러 클래스 | `WorktreeError`, `ErrorCode` |
+| `src/types/step.ts` | Step 타입 | `StepDefinition` |
+| **schema/** | | |
+| `src/schema/cafe.ts` | Cafe 스키마 | `CafeSchema` |
+| `src/schema/terminal.ts` | Terminal 스키마 | `TerminalSchema` |
+| `src/schema/role.ts` | Role 스키마 | `RoleSchema` |
+| `src/schema/workflow.ts` | Workflow 스키마 | `WorkflowSchema` |
+| `src/schema/provider.ts` | Provider 스키마 | `ProviderSchema` |
+| **utils/** | | |
+| `src/utils/index.ts` | 유틸리티 진입점 | 모든 유틸리티 export |
+| `src/utils/type-guards.ts` | 타입 가드 | `isBarista`, `isOrder` |
+| `src/utils/typed-event-emitter.ts` | 타입 안전 EventEmitter | `TypedEventEmitter` |
+| `src/utils/event-listener-manager.ts` | 이벤트 리스너 관리 | `EventListenerManager` |
+| **errors/** | | |
+| `src/errors/index.ts` | 에러 모듈 진입점 | 모든 에러 export |
+| `src/errors/base-error.ts` | 기본 에러 클래스 | `BaseError` |
+| `src/errors/error-codes.ts` | 에러 코드 정의 | `ErrorCode` |
+| `src/errors/specific-errors.ts` | 구체 에러 클래스 | `WorktreeError`, `ValidationError` |
+| **logging/** | | |
+| `src/logging/index.ts` | 로깅 모듈 진입점 | `createLogger` |
+| `src/logging/logger.ts` | 로거 구현 | `Logger` |
+| `src/logging/types.ts` | 로깅 타입 | `LogLevel`, `LoggerOptions` |
+| **constants/** | | |
 | `src/constants/timeouts.ts` | 타임아웃 상수 | `TIMEOUTS` |
-| `src/logging/index.ts` | 로깅 유틸 | `createLogger` |
 
 ## Domain Model
 

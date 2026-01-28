@@ -9,9 +9,9 @@
         │
         ▼
 ┌───────────────────────────────────────────────────────────────────────┐
-│  src/main/index.ts:177-199                                            │
+│  src/main/index.ts:185-203                                            │
 │  app.whenReady()                                                      │
-│  1. initOrchestrator() → Orchestrator 초기화                           │
+│  1. initExecutionFacade() → ExecutionFacade 초기화                     │
 │     └─ initExecutionManager() → BaristaEngineV2 연동 (내부 호출)        │
 │  2. setupIpcHandlers() → IPC 핸들러 등록                               │
 │  3. createWindow() → BrowserWindow 생성                               │
@@ -24,23 +24,27 @@
 │  Main Process           │◀──IPC────▶│  Renderer Process               │
 │                         │            │                                 │
 │  ipc/*.ts               │            │  React UI                       │
-│  - cafe.ts              │            │  - zustand store                │
+│  - cafe.ts              │            │  - zustand stores               │
 │  - order.ts             │            │  - @radix-ui components         │
 │  - workflow.ts          │            │  - tailwindcss                  │
 │  - terminal.ts          │            │                                 │
-│  - provider.ts          │            │  utils/terminal-log/            │
-│  - worktree.ts          │            │  - parser.ts                    │
-│  - skill.ts             │            │  - summarizer.ts                │
-│  - dialog.ts            │            │  - tool-extractor.ts            │
+│  - provider.ts          │            │  hooks/                         │
+│  - worktree.ts          │            │  - useCafeHandlers              │
+│  - skill.ts             │            │  - useOrderHandlers             │
+│  - dialog.ts            │            │  - useRecipeHandlers            │
 │  - system.ts            │            │                                 │
-│  - orchestrator.ts      │            │                                 │
+│  - execution-facade.ts  │            │  utils/terminal-log/            │
+│                         │            │  - parser.ts                    │
+│  services/              │            │  - summarizer.ts                │
+│  - workflow-service.ts  │            │  - tool-extractor.ts            │
+│  - order-service.ts     │            │                                 │
 └─────────────────────────┘            └─────────────────────────────────┘
         │
         ▼
 ┌───────────────────────────────────────────────────────────────────────┐
 │  execution-manager.ts                                                 │
 │  initExecutionManager()                                               │
-│  - ExecutionFacade 생성 (from orchestrator)                            │
+│  - ExecutionFacade 연동 (from orchestrator)                            │
 │  - Order 실행 관리                                                     │
 │  - 이벤트 → Renderer 전달                                              │
 └───────────────────────────────────────────────────────────────────────┘
@@ -60,6 +64,11 @@
 | `src/main/index.ts` | Electron 메인 진입점 | app lifecycle |
 | `src/main/execution-manager.ts` | 실행 관리 | `initExecutionManager()`, `getExecutionManager()` |
 | `src/main/file-logger.ts` | 파일 로깅 | `setupMainProcessLogger()` |
+| **Main Services** | | |
+| `src/main/services/workflow-service.ts` | Workflow 서비스 | `WorkflowService` |
+| `src/main/services/order-service.ts` | Order 서비스 | `OrderService` |
+| **Main Config** | | |
+| `src/main/config/terminal-pool.config.ts` | Terminal Pool 설정 | 풀 설정 |
 | **IPC Handlers** | | |
 | `src/main/ipc/cafe.ts` | Cafe 관리 | `registerCafeHandlers()` |
 | `src/main/ipc/order.ts` | Order 관리 | `registerOrderHandlers()` |
@@ -70,14 +79,51 @@
 | `src/main/ipc/skill.ts` | Skill 관리 | `registerSkillHandlers()` |
 | `src/main/ipc/dialog.ts` | 다이얼로그 | `registerDialogHandlers()` |
 | `src/main/ipc/system.ts` | 시스템 정보 | `registerSystemHandlers()` |
-| `src/main/ipc/orchestrator.ts` | Orchestrator 연동 | `registerOrchestratorHandlers()` |
-| **Preload** | | |
-| `src/preload.ts` | Context Bridge | 보안 브리지 |
-| **Renderer** | | |
-| `src/renderer/utils/terminal-log/` | 로그 파싱 | `parser`, `summarizer`, `tool-extractor` |
+| `src/main/ipc/execution-facade.ts` | ExecutionFacade 연동 | `registerExecutionFacadeHandlers()` |
+| `src/main/ipc/types.ts` | IPC 타입 | 핸들러 타입 정의 |
+| **IPC Handlers (subfolder)** | | |
+| `src/main/ipc/handlers/order.handler.ts` | Order 핸들러 | Order IPC 핸들러 |
+| `src/main/ipc/handlers/workflow.handler.ts` | Workflow 핸들러 | Workflow IPC 핸들러 |
+| **IPC Utils** | | |
+| `src/main/ipc/utils/output-interval-manager.ts` | 출력 인터벌 관리 | `OutputIntervalManager` |
+| **Renderer Stores (zustand)** | | |
+| `src/renderer/store/useCafeStore.ts` | Cafe 상태 | `useCafeStore` |
+| `src/renderer/store/useOrderStore.ts` | Order 상태 | `useOrderStore` |
+| `src/renderer/store/useBaristaStore.ts` | Barista 상태 | `useBaristaStore` |
+| `src/renderer/store/useTerminalStore.ts` | Terminal 상태 | `useTerminalStore` |
+| `src/renderer/store/useViewStore.ts` | View 상태 | `useViewStore` |
+| `src/renderer/store/useSettingsStore.ts` | Settings 상태 | `useSettingsStore` |
+| **Renderer Hooks** | | |
+| `src/renderer/hooks/useCafeHandlers.ts` | Cafe 핸들러 | `useCafeHandlers` |
+| `src/renderer/hooks/useOrderHandlers.ts` | Order 핸들러 | `useOrderHandlers` |
+| `src/renderer/hooks/useRecipeHandlers.ts` | Recipe 핸들러 | `useRecipeHandlers` |
+| `src/renderer/hooks/useSkillHandlers.ts` | Skill 핸들러 | `useSkillHandlers` |
+| `src/renderer/hooks/useBaristas.ts` | Barista 관리 | `useBaristas` |
+| `src/renderer/hooks/useOrders.ts` | Order 관리 | `useOrders` |
+| `src/renderer/hooks/useIpcEffect.ts` | IPC 이펙트 | `useIpcEffect` |
+| `src/renderer/hooks/useSmartScroll.ts` | 스마트 스크롤 | `useSmartScroll` |
+| `src/renderer/hooks/useStageTracking.ts` | Stage 추적 | `useStageTracking` |
+| **Renderer Utils** | | |
+| `src/renderer/utils/terminal-log/parser.ts` | 로그 파싱 | `parseTerminalLog` |
+| `src/renderer/utils/terminal-log/summarizer.ts` | 로그 요약 | `summarizeLog` |
+| `src/renderer/utils/terminal-log/tool-extractor.ts` | 도구 추출 | `extractTools` |
+| `src/renderer/utils/terminal-log/formatter.ts` | 로그 포맷 | `formatLog` |
+| `src/renderer/utils/terminal-log/content-detector.ts` | 콘텐츠 감지 | `detectContent` |
+| `src/renderer/utils/cn.ts` | 클래스명 유틸 | `cn` |
+| `src/renderer/utils/formatters.ts` | 포맷터 | 포맷 유틸 |
+| `src/renderer/utils/converters.ts` | 컨버터 | 변환 유틸 |
+| **Renderer i18n** | | |
+| `src/renderer/i18n/index.ts` | i18n 설정 | i18n 초기화 |
+| `src/renderer/i18n/translations.ts` | 번역 리소스 | 번역 데이터 |
+| `src/renderer/i18n/useTranslation.ts` | 번역 훅 | `useTranslation` |
+| **Renderer Types** | | |
+| `src/renderer/types/models.ts` | 모델 타입 | 도메인 모델 타입 |
+| `src/renderer/types/terminal.ts` | Terminal 타입 | Terminal 관련 타입 |
+| `src/renderer/types/design.ts` | 디자인 타입 | UI 디자인 타입 |
 | **Common** | | |
 | `src/common/ipc-types.ts` | IPC 타입 정의 | IPC 메시지 타입 |
 | `src/common/output-markers.ts` | 출력 마커 | 마커 상수 |
+| `src/common/output-utils.ts` | 출력 유틸 | 출력 관련 유틸 |
 
 ## IPC Channels
 
