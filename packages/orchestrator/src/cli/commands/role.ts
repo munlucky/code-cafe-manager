@@ -2,7 +2,16 @@ import chalk from 'chalk';
 import { RoleManager } from '../../role/role-manager';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import inquirer from 'inquirer';
+type InquirerModule = typeof import('inquirer');
+
+let inquirerPromise: Promise<InquirerModule> | null = null;
+
+async function getInquirer(): Promise<InquirerModule> {
+  if (!inquirerPromise) {
+    inquirerPromise = import('inquirer');
+  }
+  return inquirerPromise;
+}
 import type { Role } from '../../types';
 
 const execAsync = promisify(exec);
@@ -135,6 +144,7 @@ export async function removeRole(
 
   // 대화형 확인 (--yes 플래그로 건너뛰기)
   if (!options.yes) {
+    const { default: inquirer } = await getInquirer();
     const { confirm } = await inquirer.prompt([
       {
         type: 'confirm',
