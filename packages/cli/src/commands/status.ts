@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { Orchestrator } from '@codecafe/core';
+import { ExecutionFacade } from '@codecafe/orchestrator';
 import { ConfigManager } from '../config.js';
 
 export function registerStatusCommand(program: Command): void {
@@ -12,15 +12,14 @@ export function registerStatusCommand(program: Command): void {
         const configManager = new ConfigManager();
         const config = await configManager.loadConfig();
 
-        const orchestrator = new Orchestrator(
-          configManager.getDataDir(),
-          configManager.getLogsDir(),
-          config.maxBaristas
-        );
-        await orchestrator.init();
+        const facade = new ExecutionFacade({
+          dataDir: configManager.getDataDir(),
+          logsDir: configManager.getLogsDir(),
+        });
+        await facade.initState();
 
-        const baristas = orchestrator.getAllBaristas();
-        const orders = orchestrator.getAllOrders();
+        const baristas = facade.getAllBaristas();
+        const orders = facade.getAllOrders();
 
         console.log(chalk.cyan.bold('\n📋 CodeCafe Status\n'));
 
