@@ -22,6 +22,10 @@ export * from './types/role.js';
 export * from './schema/terminal.js';
 export * from './schema/role.js';
 
+// Phase 2: Provider and Workflow schemas
+export * from './schema/provider.js';
+export * from './schema/workflow.js';
+
 // Logging utilities
 export * from './logging/index.js';
 

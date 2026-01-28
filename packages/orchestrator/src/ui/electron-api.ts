@@ -8,6 +8,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as yaml from 'js-yaml';
+import { safeParseWorkflowYaml } from '@codecafe/core';
 import { runWorkflow, resumeWorkflow } from '../cli/commands/run.js';
 import { RunStateManager } from '../storage/run-state.js';
 import { EventLogger } from '../storage/event-logger.js';
@@ -245,10 +246,15 @@ function listStageProfiles(orchDir: string, stage: StageType): string[] {
 function parseWorkflowInfo(filePath: string, id: string): WorkflowInfo | null {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    const parsed = yaml.load(content) as any;
-    const workflow = parsed?.workflow || parsed;
+    const raw = yaml.load(content);
+    const parseResult = safeParseWorkflowYaml(raw);
+
+    // Use parsed data or raw data with fallback
+    const parsed = parseResult.success ? parseResult.data : (raw as Record<string, unknown>);
+    const workflow = (parsed?.workflow as Record<string, unknown>) || parsed;
+
     const stages = Array.isArray(workflow?.stages)
-      ? workflow.stages
+      ? (workflow.stages as string[])
       : ['plan', 'code', 'test', 'check'];
     const name =
       (typeof workflow?.name === 'string' && workflow.name) ||
