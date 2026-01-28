@@ -98,6 +98,7 @@ export function registerOrchCommand(program: Command) {
     .command('role <action> [role]')
     .description('Manage roles (add|edit|rm|list|show)')
     .option('--from <template>', 'Template file to create role from')
+    .option('-y, --yes', 'Skip confirmation for delete')
     .action(async (action, role, options) => {
       try {
         switch (action) {
@@ -127,7 +128,7 @@ export function registerOrchCommand(program: Command) {
               console.log(chalk.gray('Usage: codecafe orch role rm <roleId>'));
               process.exit(1);
             }
-            await removeRole(role);
+            await removeRole(role, undefined, { yes: options.yes });
             break;
           case 'show':
             if (!role) {

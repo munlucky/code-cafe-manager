@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import { RoleManager } from '../../role/role-manager';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import inquirer from 'inquirer';
 import type { Role } from '../../types';
 
 const execAsync = promisify(exec);
@@ -124,11 +125,31 @@ export async function editRole(roleId: string, orchDir?: string): Promise<void> 
 /**
  * Removes a role.
  */
-export async function removeRole(roleId: string, orchDir?: string): Promise<void> {
+export async function removeRole(
+  roleId: string,
+  orchDir?: string,
+  options: { yes?: boolean } = {}
+): Promise<void> {
   const manager = new RoleManager(orchDir);
   ensureRoleExists(manager, roleId);
 
-  // TODO: Add interactive confirmation
+  // 대화형 확인 (--yes 플래그로 건너뛰기)
+  if (!options.yes) {
+    const { confirm } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'confirm',
+        message: `Delete role "${roleId}"?`,
+        default: false,
+      },
+    ]);
+
+    if (!confirm) {
+      console.log(chalk.gray('Cancelled.'));
+      process.exit(0);
+    }
+  }
+
   console.log(chalk.yellow(`Deleting role "${roleId}"...`));
 
   if (manager.deleteRole(roleId)) {

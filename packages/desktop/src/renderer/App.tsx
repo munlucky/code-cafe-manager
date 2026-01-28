@@ -46,7 +46,7 @@ export function App(): JSX.Element {
   );
 
   // Get current cafe ID from viewParams (set when navigating to a cafe view)
-  const currentCafeId = (viewParams as { cafeId?: string } | undefined)?.cafeId;
+  const currentCafeId = (viewParams as { cafeId?: string } | undefined)?.cafeId ?? null;
   const getCurrentCafe = () => (currentCafeId ? getCafe(currentCafeId) : null);
 
   // Global data state

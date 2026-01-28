@@ -170,7 +170,7 @@ function setupIpcHandlers(): void {
 
   // Note: registerElectronHandlers removed to avoid duplicate handler registration
   // Workflow handlers are now registered via registerWorkflowHandlers
-  // TODO: Add run handlers if needed
+  // Orchestrator and Order handlers handle run-related functionality
   logger.info('IPC handlers set up.');
 }
 

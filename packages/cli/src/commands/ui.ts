@@ -1,6 +1,8 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { spawn } from 'child_process';
+import * as path from 'path';
+import * as fs from 'fs';
 
 export function registerUiCommand(program: Command): void {
   program
@@ -9,13 +11,28 @@ export function registerUiCommand(program: Command): void {
     .action(() => {
       console.log(chalk.cyan('Launching CodeCafe Manager...'));
 
-      // TODO: Electron 앱 실행 경로 확인 필요
-      // M1에서는 기본 안내 메시지만 표시
-      console.log(chalk.yellow('Electron UI is not yet implemented in M1'));
-      console.log(chalk.yellow('Coming soon in the next version!'));
+      // Desktop 패키지 빌드된 경로 확인
+      const desktopMainPath = path.join(
+        __dirname,
+        '../../desktop/dist/main/index.js'
+      );
 
-      // 추후 구현:
-      // const electronPath = join(__dirname, '../../desktop/dist/main/index.js');
-      // spawn('electron', [electronPath], { stdio: 'inherit' });
+      if (!fs.existsSync(desktopMainPath)) {
+        console.error(chalk.red('Electron app not built!'));
+        console.error(chalk.yellow('Run: pnpm --filter desktop build'));
+        process.exit(1);
+      }
+
+      // Electron 실행
+      const electronProcess = spawn(
+        'electron',
+        [desktopMainPath],
+        { stdio: 'inherit' }
+      );
+
+      electronProcess.on('error', (err) => {
+        console.error(chalk.red('Failed to launch Electron:'), err);
+        process.exit(1);
+      });
     });
 }
