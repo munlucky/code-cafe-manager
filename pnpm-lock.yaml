@@ -250,6 +250,10 @@ importers:
         version: 4.15.2(debug@4.4.3)(webpack-cli@5.1.4)(webpack@5.104.1)
 
   packages/git-worktree:
+    dependencies:
+      '@codecafe/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@types/node':
         specifier: ^20.10.0
