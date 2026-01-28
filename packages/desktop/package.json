@@ -16,7 +16,8 @@
     "dev:renderer": "webpack serve --config webpack.renderer.config.cjs --mode development",
     "dev:electron": "wait-on -t 60000 http://localhost:8081 && electron .",
     "clean": "powershell -Command \"Remove-Item -Recurse -Force dist, *.tsbuildinfo -ErrorAction SilentlyContinue\"",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.renderer.json --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.renderer.json --noEmit",
+    "lint": "eslint \"src/**/*.{ts,tsx}\""
   },
   "keywords": [
     "codecafe",

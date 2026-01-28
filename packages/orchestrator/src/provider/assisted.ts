@@ -7,6 +7,7 @@ import { RoleManager } from '../role/role-manager';
 import { TemplateEngine } from '../role/template';
 import { ProviderType } from '../types';
 import { validateJson } from '../schema/validator';
+import { TIMEOUTS } from '@codecafe/core';
 
 /**
  * Assisted execution options
@@ -168,7 +169,7 @@ export class AssistedExecutor {
 
         const waitResult = await this.waitForResultFile(
           resultPath,
-          3600000,
+          TIMEOUTS.SESSION_CLEANUP,
           attempt > 1
         );
 
@@ -247,7 +248,7 @@ export class AssistedExecutor {
    */
   private async waitForResultFile(
     filePath: string,
-    timeout: number = 3600000, // 1 hour default
+    timeout: number = TIMEOUTS.SESSION_CLEANUP, // 1 hour default
     requireChange: boolean = false
   ): Promise<{ success: boolean; error?: string }> {
     return new Promise((resolve) => {

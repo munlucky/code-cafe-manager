@@ -4,6 +4,7 @@
  */
 
 import { WorkflowRun, RunStatus } from '../types';
+import { TIMEOUTS } from '@codecafe/core';
 
 /**
  * Run entry in registry
@@ -22,7 +23,7 @@ export class RunRegistry {
   private static instance: RunRegistry;
   private runs: Map<string, RunEntry> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
-  private readonly TTL = 24 * 60 * 60 * 1000; // 24 hours
+  private readonly TTL = TIMEOUTS.DAY; // 24 hours
 
   private constructor() {
     this.startCleanup();
@@ -143,7 +144,7 @@ export class RunRegistry {
   private startCleanup(): void {
     this.cleanupInterval = setInterval(() => {
       this.cleanup();
-    }, 60 * 60 * 1000); // Every hour
+    }, TIMEOUTS.SESSION_CLEANUP); // Every hour
   }
 
   /**

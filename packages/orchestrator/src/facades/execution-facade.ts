@@ -6,6 +6,7 @@
 
 import { EventEmitter } from 'events';
 import type { TerminalPoolConfig, PoolStatus } from '@codecafe/core';
+import { TIMEOUTS } from '@codecafe/core';
 import { BaristaEngineV2 } from '../barista/barista-engine-v2.js';
 import { TerminalPool } from '../terminal/terminal-pool.js';
 import type { SessionStatusSummary } from '../session/index.js';
@@ -47,8 +48,8 @@ export class ExecutionFacade extends EventEmitter {
     // Create Terminal Pool with default config if not provided
     const poolConfig: TerminalPoolConfig = config.terminalPoolConfig || {
       perProvider: {
-        'claude-code': { size: 4, timeout: 30000, maxRetries: 3 },
-        'codex': { size: 4, timeout: 30000, maxRetries: 3 },
+        'claude-code': { size: 4, timeout: TIMEOUTS.COMMAND_EXECUTION, maxRetries: 3 },
+        'codex': { size: 4, timeout: TIMEOUTS.COMMAND_EXECUTION, maxRetries: 3 },
       },
     };
     this.terminalPool = new TerminalPool(poolConfig);

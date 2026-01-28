@@ -24,7 +24,8 @@
     "test:cli:spawn": "npx tsx scripts/test-claude-cli.ts spawn",
     "test:cli:prompt": "npx tsx scripts/test-claude-cli.ts prompt",
     "test:cli:full": "npx tsx scripts/test-claude-cli.ts full",
-    "test:cli:i": "npx tsx scripts/test-claude-cli.ts interactive"
+    "test:cli:i": "npx tsx scripts/test-claude-cli.ts interactive",
+    "lint": "eslint \"src/**/*.ts\""
   },
   "dependencies": {
     "@codecafe/core": "workspace:*",

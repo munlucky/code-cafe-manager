@@ -5,7 +5,7 @@
  */
 
 import * as yaml from 'yaml';
-import { createLogger } from '@codecafe/core';
+import { createLogger, OUTPUT_THRESHOLDS } from '@codecafe/core';
 import { StageSignals, DEFAULT_SIGNALS, isValidSignals } from './stage-signals';
 
 const logger = createLogger({ context: 'SignalParser' });
@@ -91,7 +91,7 @@ export class SignalParser {
       // 하지만 출력이 충분히 길다면 단순히 설명 중에 질문을 포함한 것일 수 있음
       const questionCount = (output.match(/\?/g) || []).length;
       const outputLength = output.length;
-      const isSubstantialOutput = outputLength > 1000;
+      const isSubstantialOutput = outputLength > OUTPUT_THRESHOLDS.SUBSTANTIAL;
       
       // 질문이 5개 이상이고 출력이 충분하지 않을 때만 await_user로 추론
       if (questionCount >= 5 && !isSubstantialOutput) {

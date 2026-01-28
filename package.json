@@ -9,7 +9,8 @@
     "clean": "pnpm -r clean",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "prepare": "husky"
   },
   "keywords": [
     "ai",
@@ -23,9 +24,17 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.10.0",
-    "typescript": "^5.3.3",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "eslint": "^8.55.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "prettier": "^3.1.0",
-    "eslint": "^8.55.0"
+    "type-coverage": "^2.29.7",
+    "typescript": "^5.3.3"
   },
   "engines": {
     "node": ">=18.0.0",
@@ -37,6 +46,12 @@
       "electron-winstaller",
       "node-pty",
       "msw"
+    ]
+  },
+  "lint-staged": {
+    "packages/*/src/**/*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
     ]
   }
 }

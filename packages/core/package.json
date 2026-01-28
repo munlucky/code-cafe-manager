@@ -32,7 +32,8 @@
     "build:cjs": "tsc -p tsconfig.cjs.json && node -e \"require('fs').mkdirSync('dist/cjs', { recursive: true }); require('fs').writeFileSync('dist/cjs/package.json', '{\\\"type\\\": \\\"commonjs\\\"}\\n')\"",
     "dev": "tsc -p tsconfig.cjs.json && tsc -b --watch",
     "clean": "powershell -Command \"Remove-Item -Recurse -Force dist, *.tsbuildinfo -ErrorAction SilentlyContinue\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\""
   },
   "keywords": ["codecafe", "core", "domain"],
   "author": "",

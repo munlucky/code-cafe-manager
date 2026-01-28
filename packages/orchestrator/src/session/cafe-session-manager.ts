@@ -6,7 +6,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { Order, Barista, createLogger, EventListenerManager } from '@codecafe/core';
+import { Order, Barista, createLogger, EventListenerManager, TIMEOUTS } from '@codecafe/core';
 
 const logger = createLogger({ context: 'CafeSessionManager' });
 import { TerminalPool } from '../terminal/terminal-pool';
@@ -295,7 +295,7 @@ export class CafeSessionManager extends EventEmitter {
   /**
    * 완료된 세션 정리
    */
-  async cleanupCompletedSessions(olderThanMs: number = 3600000): Promise<number> {
+  async cleanupCompletedSessions(olderThanMs: number = TIMEOUTS.SESSION_CLEANUP): Promise<number> {
     const now = Date.now();
 
     // Collect all sessions to cleanup across all cafes

@@ -6,7 +6,7 @@
 import * as path from 'path';
 import { BrowserWindow } from 'electron';
 import { existsSync } from 'fs';
-import { Orchestrator, Order, Barista, OrderStatus, createLogger, toCodeCafeError, getErrorMessage } from '@codecafe/core';
+import { Orchestrator, Order, Barista, OrderStatus, createLogger, toCodeCafeError, getErrorMessage, TIMEOUTS } from '@codecafe/core';
 
 const logger = createLogger({ context: 'ExecutionManager' });
 import { ExecutionFacade } from '@codecafe/orchestrator';
@@ -310,7 +310,7 @@ export class ExecutionManager {
       // 완료된 Order의 메트릭는 일정 시간 후 정리
       setTimeout(() => {
         this.outputMetrics.delete(data.orderId);
-      }, 60000); // 1분 후 정리
+      }, TIMEOUTS.MINUTE); // 1분 후 정리
     });
 
     this.executionFacade.on('order:failed', (data: OrderFailedData) => {
@@ -464,7 +464,7 @@ export class ExecutionManager {
       }
 
       logger.debug('=== End of Metrics ===');
-    }, 10000); // 10초
+    }, TIMEOUTS.IDLE); // 10초
   }
 
   /**

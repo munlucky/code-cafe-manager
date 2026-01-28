@@ -1,0 +1,63 @@
+name: Quality Gate
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+        continue-on-error: true
+
+      - name: Test
+        run: pnpm test -- --coverage
+        continue-on-error: true
+
+      - name: Check console.log count
+        run: |
+          COUNT=$(grep -r "console\." packages/*/src --include="*.ts" --include="*.tsx" 2>/dev/null | wc -l)
+          echo "Console statements found: $COUNT"
+          if [ "$COUNT" -gt 10 ]; then
+            echo "::warning::Found $COUNT console statements (goal: 0)"
+          fi
+
+      - name: Check any type count
+        run: |
+          COUNT=$(grep -r ": any" packages/*/src --include="*.ts" 2>/dev/null | wc -l)
+          echo "Explicit any types found: $COUNT"
+          THRESHOLD=50
+          if [ "$COUNT" -gt "$THRESHOLD" ]; then
+            echo "::warning::Found $COUNT any types (threshold: $THRESHOLD)"
+          fi
+
+      - name: Check file sizes
+        run: |
+          for file in $(find packages/*/src -name "*.ts" -o -name "*.tsx" 2>/dev/null); do
+            lines=$(wc -l < "$file")
+            if [ "$lines" -gt 400 ]; then
+              echo "::warning::$file has $lines lines (max: 400)"
+            fi
+          done

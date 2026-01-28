@@ -16,6 +16,7 @@ import {
 } from './stage-signals';
 import { SignalParser, ParseResult } from './signal-parser';
 import { SharedContext } from './shared-context';
+import { OUTPUT_THRESHOLDS } from '../constants/thresholds';
 
 const logger = createLogger({ context: 'StageOrchestrator' });
 
@@ -176,7 +177,7 @@ export class StageOrchestrator extends EventEmitter {
     // 1. 출력 길이 확인 - 실질적인 출력이 있는가?
     const outputLength = output.length;
     const hasSubstantialOutput = outputLength > 500;
-    const hasVerySubstantialOutput = outputLength > 10000; // 10KB 이상이면 매우 충분한 출력
+    const hasVerySubstantialOutput = outputLength > OUTPUT_THRESHOLDS.VERY_SUBSTANTIAL; // 10KB 이상이면 매우 충분한 출력
 
     // 2. 작업 완료 지표 확인
     const completionIndicators = [
@@ -194,7 +195,7 @@ export class StageOrchestrator extends EventEmitter {
     const hasUncertainty = this.hasUncertaintyIndicators(output);
     const questionCount = (output.match(/\?/g) || []).length;
     // 출력 대비 질문 비율 계산 (긴 출력에서는 질문이 자연스럽게 많을 수 있음)
-    const questionDensity = questionCount / (outputLength / 1000); // 1KB당 질문 수
+    const questionDensity = questionCount / (outputLength / OUTPUT_THRESHOLDS.QUESTION_DENSITY); // 1KB당 질문 수
     const hasExcessiveQuestions = questionCount >= 5 && questionDensity > 2; // 1KB당 2개 이상의 질문이면 과다
 
     // 4. 스테이지별 특화 처리
