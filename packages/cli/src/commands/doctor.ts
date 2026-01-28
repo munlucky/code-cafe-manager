@@ -1,10 +1,31 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
-import { ConfigManager } from '../config.js';
 import { ClaudeCodeProvider } from '@codecafe/provider-claude-code';
 import { CodexProvider } from '@codecafe/providers-codex';
 import { spawn } from 'child_process';
+import { homedir } from 'os';
+import { join } from 'path';
+import { mkdir } from 'fs/promises';
+import { existsSync } from 'fs';
+
+/**
+ * Get configuration directory from environment or default
+ */
+function getConfigDir(): string {
+  return process.env.CODECAFE_CONFIG_DIR || join(homedir(), '.codecafe');
+}
+
+/**
+ * Initialize configuration directory if not exists
+ */
+async function ensureConfigDir(): Promise<string> {
+  const configDir = getConfigDir();
+  if (!existsSync(configDir)) {
+    await mkdir(configDir, { recursive: true });
+  }
+  return configDir;
+}
 
 export function registerDoctorCommand(program: Command): void {
   program
@@ -18,16 +39,10 @@ export function registerDoctorCommand(program: Command): void {
       // 1. 설정 확인
       const configSpinner = ora('Checking configuration...').start();
       try {
-        const configManager = new ConfigManager();
-        const config = await configManager.loadConfig();
-        configSpinner.succeed(
-          `Configuration OK (${configManager.getConfigDir()})`
-        );
+        const configDir = await ensureConfigDir();
+        configSpinner.succeed(`Configuration OK (${configDir})`);
       } catch (error) {
-        configSpinner.fail('Configuration not found');
-        console.log(
-          chalk.yellow(`  Run ${chalk.bold('codecafe init')} to initialize`)
-        );
+        configSpinner.fail('Configuration check failed');
         hasErrors = true;
       }
 

@@ -1,7 +1,29 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { ExecutionFacade } from '@codecafe/orchestrator';
-import { ConfigManager } from '../config.js';
+import { homedir } from 'os';
+import { join } from 'path';
+
+/**
+ * Get configuration directory from environment or default
+ */
+function getConfigDir(): string {
+  return process.env.CODECAFE_CONFIG_DIR || join(homedir(), '.codecafe');
+}
+
+/**
+ * Get data directory from environment or default
+ */
+function getDataDir(): string {
+  return process.env.CODECAFE_DATA_DIR || join(getConfigDir(), 'data');
+}
+
+/**
+ * Get logs directory from environment or default
+ */
+function getLogsDir(): string {
+  return process.env.CODECAFE_LOGS_DIR || join(getConfigDir(), 'logs');
+}
 
 export function registerStatusCommand(program: Command): void {
   program
@@ -9,12 +31,9 @@ export function registerStatusCommand(program: Command): void {
     .description('Show baristas and orders status')
     .action(async () => {
       try {
-        const configManager = new ConfigManager();
-        const config = await configManager.loadConfig();
-
         const facade = new ExecutionFacade({
-          dataDir: configManager.getDataDir(),
-          logsDir: configManager.getLogsDir(),
+          dataDir: getDataDir(),
+          logsDir: getLogsDir(),
         });
         await facade.initState();
 

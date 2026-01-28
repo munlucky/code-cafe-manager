@@ -1,7 +1,24 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
-import { ConfigManager } from '../config.js';
+import { homedir } from 'os';
+import { join } from 'path';
+import { mkdir } from 'fs/promises';
+import { existsSync } from 'fs';
+
+/**
+ * Get configuration directory from environment or default
+ */
+function getConfigDir(): string {
+  return process.env.CODECAFE_CONFIG_DIR || join(homedir(), '.codecafe');
+}
+
+/**
+ * Get default provider from environment or default
+ */
+function getDefaultProvider(): string {
+  return process.env.CODECAFE_DEFAULT_PROVIDER || 'claude-code';
+}
 
 export function registerInitCommand(program: Command): void {
   program
@@ -11,23 +28,30 @@ export function registerInitCommand(program: Command): void {
       const spinner = ora('Initializing CodeCafe...').start();
 
       try {
-        const configManager = new ConfigManager();
-        await configManager.init();
+        const configDir = getConfigDir();
 
-        const config = await configManager.loadConfig();
+        // Create directories
+        if (!existsSync(configDir)) {
+          await mkdir(configDir, { recursive: true });
+        }
+
+        const dataDir = join(configDir, 'data');
+        if (!existsSync(dataDir)) {
+          await mkdir(dataDir, { recursive: true });
+        }
+
+        const logsDir = join(configDir, 'logs');
+        if (!existsSync(logsDir)) {
+          await mkdir(logsDir, { recursive: true });
+        }
 
         spinner.succeed('CodeCafe initialized successfully!');
 
         console.log(chalk.cyan('\nConfiguration:'));
-        console.log(`  Config directory: ${configManager.getConfigDir()}`);
-        console.log(`  Default provider: ${config.defaultProvider}`);
-        console.log(`  Default menu: ${config.defaultMenu}`);
-        console.log(`  Max baristas: ${config.maxBaristas}`);
-
-        console.log(chalk.cyan('\nDefault menu sources:'));
-        for (const menu of config.menuSources) {
-          console.log(`  - ${menu.name} (${menu.type}): ${menu.source}`);
-        }
+        console.log(`  Config directory: ${configDir}`);
+        console.log(`  Default provider: ${getDefaultProvider()}`);
+        console.log(`  Data directory: ${dataDir}`);
+        console.log(`  Logs directory: ${logsDir}`);
 
         console.log(chalk.green('\nNext steps:'));
         console.log(`  1. Run ${chalk.bold('codecafe doctor')} to check your environment`);

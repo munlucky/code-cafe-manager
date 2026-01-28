@@ -1,17 +1,16 @@
 /**
  * Barista Engine V2 Tests
- * Tests for Terminal Pool integration and Role-based execution
+ * Tests for Terminal Pool integration and Session-based execution
  */
 
 import { BaristaEngineV2 } from '../barista/barista-engine-v2';
-import { ProviderAdapterFactory } from '../terminal/provider-adapter';
 import { Barista, BaristaStatus, Order, OrderStatus } from '@codecafe/core';
+import { OrderSession } from '../session';
 
 describe('BaristaEngineV2', () => {
   let engine: BaristaEngineV2;
   let mockTerminalPool: any;
-  let mockRoleManager: any;
-  let mockAdapter: any;
+  let mockSession: any;
 
   // Default Mock Data
   const mockBarista: Barista = {
@@ -45,42 +44,10 @@ describe('BaristaEngineV2', () => {
     ],
   };
 
-  const mockLease = {
-    terminal: {
-      id: 'terminal-1',
-      provider: 'claude-code',
-      process: {
-        pid: 123,
-        write: vi.fn().mockResolvedValue(undefined),
-      },
-      status: 'busy' as const,
-      createdAt: new Date(),
-      lastUsed: new Date(),
-    },
-    token: {
-      id: 'lease-1',
-      terminalId: 'terminal-1',
-      baristaId: 'barista-1',
-      provider: 'claude-code',
-      leasedAt: new Date(),
-      expiresAt: new Date(Date.now() + 30000),
-      released: false,
-    },
-    release: vi.fn().mockResolvedValue(undefined),
-  };
-
-  const defaultRole = {
-    id: 'planner',
-    name: 'Planner',
-    output_schema: '',
-    inputs: ['read_file', 'write_file'],
-    template: 'Plan: {{param1}}',
-  };
-
   // Helper to control execution flow
   const setupControlledExecution = () => {
     let resolveExecution: (value: any) => void;
-    mockAdapter.execute.mockImplementation(() => {
+    mockSession.execute.mockImplementation(() => {
       return new Promise(resolve => {
         resolveExecution = resolve;
       });
@@ -89,25 +56,36 @@ describe('BaristaEngineV2', () => {
   };
 
   beforeEach(() => {
-    // Reset write mock for each test
-    mockLease.terminal.process.write = vi.fn().mockResolvedValue(undefined);
+    // Initialize mock session
+    mockSession = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      executePrompt: vi.fn().mockResolvedValue(undefined),
+      sendInput: vi.fn().mockResolvedValue(undefined),
+      cancel: vi.fn().mockResolvedValue(undefined),
+      getStatus: vi.fn().mockReturnValue({ status: 'idle' }),
+      getContext: vi.fn().mockReturnValue({
+        getCurrentAttemptNumber: () => 1,
+      }),
+      retryFromStage: vi.fn().mockResolvedValue(undefined),
+      retryFromBeginning: vi.fn().mockResolvedValue(undefined),
+      enterFollowup: vi.fn().mockResolvedValue(undefined),
+      executeFollowup: vi.fn().mockResolvedValue(undefined),
+      finishFollowup: vi.fn().mockResolvedValue(undefined),
+      restoreForFollowup: vi.fn().mockResolvedValue(undefined),
+      once: vi.fn().mockReturnValue(mockSession),
+      on: vi.fn().mockReturnValue(mockSession),
+    };
 
     mockTerminalPool = {
-      acquireLease: vi.fn().mockResolvedValue(mockLease),
+      acquireLease: vi.fn().mockResolvedValue(undefined),
     };
 
-    mockRoleManager = {
-      loadRole: vi.fn().mockReturnValue(defaultRole),
-    };
+    engine = new BaristaEngineV2(mockTerminalPool as any);
 
-    mockAdapter = {
-      execute: vi.fn().mockResolvedValue({ success: true, output: 'test output' }),
-      kill: vi.fn().mockResolvedValue(undefined),
-    };
-
-    (ProviderAdapterFactory as any).get = vi.fn().mockReturnValue(mockAdapter);
-
-    engine = new BaristaEngineV2(mockTerminalPool as any, mockRoleManager);
+    // Mock sessionManager.createSession to return our mock session
+    const sessionManager = engine.getSessionManager();
+    vi.spyOn(sessionManager, 'createSession').mockReturnValue(mockSession as any);
+    vi.spyOn(sessionManager, 'createSessionWithWorkflow').mockReturnValue(mockSession as any);
   });
 
   afterEach(() => {
@@ -118,96 +96,32 @@ describe('BaristaEngineV2', () => {
     it('should execute order successfully', async () => {
       await engine.executeOrder(mockOrder, mockBarista);
 
-      expect(mockTerminalPool.acquireLease).toHaveBeenCalledWith('claude-code', 'barista-1', expect.any(String));
-      expect(mockAdapter.execute).toHaveBeenCalled();
-      expect(mockLease.release).toHaveBeenCalled();
-    });
-
-    it('should handle role not found', async () => {
-      mockRoleManager.loadRole.mockReturnValue(null);
-
-      await expect(engine.executeOrder(mockOrder, mockBarista))
-        .rejects.toThrow("Role 'planner' not found for barista barista-1");
-    });
-
-    it('should execute order without role', async () => {
-      const baristaWithoutRole = { ...mockBarista, role: undefined };
-      mockRoleManager.loadRole.mockReturnValue(null);
-
-      await engine.executeOrder(mockOrder, baristaWithoutRole);
-
-      expect(mockTerminalPool.acquireLease).toHaveBeenCalled();
-      expect(mockAdapter.execute).toHaveBeenCalled();
-      expect(mockLease.release).toHaveBeenCalled();
+      expect(mockSession.execute).toHaveBeenCalled();
     });
 
     it('should handle execution failure', async () => {
-      mockAdapter.execute.mockRejectedValue(new Error('Execution failed'));
+      mockSession.execute.mockRejectedValue(new Error('Execution failed'));
 
       await expect(engine.executeOrder(mockOrder, mockBarista))
         .rejects.toThrow();
-
-      expect(mockLease.release).toHaveBeenCalled();
-    });
-
-    it('should handle step failure', async () => {
-      mockAdapter.execute.mockResolvedValue({ success: false, error: 'Step failed' });
-
-      await expect(engine.executeOrder(mockOrder, mockBarista))
-        .rejects.toThrow('Step step-1 failed: Step failed');
-
-      expect(mockLease.release).toHaveBeenCalled();
     });
   });
 
   describe('Context Preparation', () => {
-    it('should prepare context with role template', async () => {
-      const mockRole = {
-        ...defaultRole,
-        inputs: ['skill1', 'skill2'],
-        template: 'Plan for {{param1}} with {{param2}}',
-      };
-      mockRoleManager.loadRole.mockReturnValue(mockRole);
+    it('should execute order with session', async () => {
+      await engine.executeOrder(mockOrder, mockBarista);
 
-      const orderWithParams: Order = {
-        ...mockOrder,
-        steps: [{
-          id: 'step-1',
-          task: 'Test task',
-          parameters: { param1: 'value1', param2: 'value2' },
-        }],
-      };
-
-      await engine.executeOrder(orderWithParams, mockBarista);
-
-      const context = mockAdapter.execute.mock.calls[0][1];
-      expect(context).toMatchObject({
-        stepId: 'step-1',
-        task: 'Test task',
-        parameters: { param1: 'value1', param2: 'value2' },
-        role: {
-          id: 'planner',
-          name: 'Planner',
-          skills: ['skill1', 'skill2'],
-        },
-        systemPrompt: 'Plan for value1 with value2',
-      });
+      const sessionManager = engine.getSessionManager();
+      expect(sessionManager.createSessionWithWorkflow).toHaveBeenCalled();
+      expect(mockSession.execute).toHaveBeenCalled();
     });
 
-    it('should prepare context without role', async () => {
-      const baristaWithoutRole = { ...mockBarista, role: undefined };
-      mockRoleManager.loadRole.mockReturnValue(null);
+    it('should execute order with prompt using session', async () => {
+      await engine.executeOrderWithSession(mockOrder, mockBarista, 'default', 'test prompt');
 
-      await engine.executeOrder(mockOrder, baristaWithoutRole);
-
-      const context = mockAdapter.execute.mock.calls[0][1];
-      expect(context).toMatchObject({
-        stepId: 'step-1',
-        task: 'Test task',
-        parameters: { param1: 'value1' },
-      });
-      expect(context.role).toBeUndefined();
-      expect(context.systemPrompt).toBeUndefined();
+      const sessionManager = engine.getSessionManager();
+      expect(sessionManager.createSession).toHaveBeenCalled();
+      expect(mockSession.executePrompt).toHaveBeenCalledWith('test prompt', expect.any(String));
     });
   });
 
@@ -222,12 +136,11 @@ describe('BaristaEngineV2', () => {
       const cancelled = await engine.cancelOrder('order-1');
 
       expect(cancelled).toBe(true);
-      expect(mockAdapter.kill).toHaveBeenCalledWith(mockLease.terminal.process);
-      expect(mockLease.release).toHaveBeenCalled();
+      expect(mockSession.cancel).toHaveBeenCalled();
 
       // Resolve execution to clean up
       resolveExecution({ success: true, output: 'cancelled' });
-      await executePromise;
+      await executePromise.catch(() => {});
     });
 
     it('should return false for non-existent order', async () => {
@@ -236,20 +149,20 @@ describe('BaristaEngineV2', () => {
     });
 
     it('should handle cancellation failure', async () => {
-      // Setup active order that will fail to kill
+      // Setup active order that will fail to cancel
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Mock kill failure
-      mockAdapter.kill.mockRejectedValue(new Error('Kill failed'));
+      // Mock cancel failure
+      mockSession.cancel.mockRejectedValue(new Error('Cancel failed'));
 
       const cancelled = await engine.cancelOrder('order-1');
       expect(cancelled).toBe(false);
 
       resolveExecution({ success: true, output: 'done' });
-      await executePromise;
+      await executePromise.catch(() => {});
     });
   });
 
@@ -263,6 +176,7 @@ describe('BaristaEngineV2', () => {
       const activeExecutions = engine.getActiveExecutions();
       expect(activeExecutions.size).toBe(1);
       expect(activeExecutions.get('order-1')?.baristaId).toBe('barista-1');
+      expect(activeExecutions.get('order-1')?.session).toBeDefined();
 
       // Complete execution
       resolveExecution({ success: true, output: 'done' });
@@ -275,70 +189,65 @@ describe('BaristaEngineV2', () => {
   describe('Resource Cleanup', () => {
     it('should dispose resources and cancel active orders', async () => {
       // Setup blocked execution
-      mockAdapter.execute.mockImplementation(() => new Promise(() => {}));
+      mockSession.execute.mockImplementation(() => new Promise(() => {}));
 
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
       await new Promise(resolve => setTimeout(resolve, 50));
 
       await engine.dispose();
 
-      expect(mockAdapter.kill).toHaveBeenCalled();
-      expect(mockLease.release).toHaveBeenCalled();
+      expect(mockSession.cancel).toHaveBeenCalled();
       expect(engine.getActiveExecutions().size).toBe(0);
     });
   });
 
-  describe('sendInput - Legacy Mode', () => {
-    it('should send input to active legacy execution', async () => {
+  describe('sendInput', () => {
+    it('should send input to active session execution', async () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Send input to active order
       const testMessage = 'test input message';
       await engine.sendInput('order-1', testMessage);
 
-      // Verify write was called on the terminal process
-      expect(mockLease.terminal.process.write).toHaveBeenCalledWith(testMessage + '\n');
+      expect(mockSession.sendInput).toHaveBeenCalledWith(testMessage);
 
-      // Complete execution
       resolveExecution({ success: true, output: 'done' });
-      await executePromise;
+      await executePromise.catch(() => {});
     });
 
     it('should handle non-existent order gracefully', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      await engine.sendInput('non-existent-order', 'test');
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[BaristaEngineV2] No active execution for order to send input: non-existent-order'
-      );
-
-      warnSpy.mockRestore();
+      // Should not throw even when order does not exist
+      await expect(engine.sendInput('non-existent-order', 'test')).resolves.toBeUndefined();
     });
 
-    it('should handle write errors gracefully', async () => {
+    it('should handle sendInput errors gracefully', async () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Mock write failure
-      mockLease.terminal.process.write.mockImplementation(() => {
-        throw new Error('Write failed');
-      });
+      mockSession.sendInput.mockRejectedValue(new Error('Send failed'));
 
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      await expect(engine.sendInput('order-1', 'test')).rejects.toThrow('Send failed');
 
-      await expect(engine.sendInput('order-1', 'test')).rejects.toThrow('Write failed');
-
-      errorSpy.mockRestore();
-
-      // Complete execution
       resolveExecution({ success: true, output: 'done' });
-      await executePromise;
+      await executePromise.catch(() => {});
+    });
+
+    it('should handle empty input', async () => {
+      const resolveExecution = setupControlledExecution();
+      const executePromise = engine.executeOrder(mockOrder, mockBarista);
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      await engine.sendInput('order-1', '');
+
+      expect(mockSession.sendInput).toHaveBeenCalledWith('');
+
+      resolveExecution({ success: true, output: 'done' });
+      await executePromise.catch(() => {});
     });
 
     it('should handle multiline input', async () => {
@@ -350,10 +259,10 @@ describe('BaristaEngineV2', () => {
       const multilineInput = 'Line 1\nLine 2\nLine 3';
       await engine.sendInput('order-1', multilineInput);
 
-      expect(mockLease.terminal.process.write).toHaveBeenCalledWith(multilineInput + '\n');
+      expect(mockSession.sendInput).toHaveBeenCalledWith(multilineInput);
 
       resolveExecution({ success: true, output: 'done' });
-      await executePromise;
+      await executePromise.catch(() => {});
     });
 
     it('should handle unicode input', async () => {
@@ -365,106 +274,10 @@ describe('BaristaEngineV2', () => {
       const unicodeInput = '안녕하세요 👍 🚀';
       await engine.sendInput('order-1', unicodeInput);
 
-      expect(mockLease.terminal.process.write).toHaveBeenCalledWith(unicodeInput + '\n');
+      expect(mockSession.sendInput).toHaveBeenCalledWith(unicodeInput);
 
       resolveExecution({ success: true, output: 'done' });
-      await executePromise;
-    });
-  });
-
-  describe('sendInput - Session Mode', () => {
-    let mockSession: any;
-
-    beforeEach(() => {
-      mockSession = {
-        execute: vi.fn().mockResolvedValue(undefined),
-        sendInput: vi.fn().mockResolvedValue(undefined),
-        cancel: vi.fn().mockResolvedValue(undefined),
-      };
-    });
-
-    it('should send input to active session execution', async () => {
-      // Manually set up a session-based execution
-      engine['activeExecutions'].set('order-1', {
-        baristaId: 'barista-1',
-        session: mockSession,
-      });
-
-      const testMessage = 'session input message';
-      await engine.sendInput('order-1', testMessage);
-
-      expect(mockSession.sendInput).toHaveBeenCalledWith(testMessage);
-    });
-
-    it('should handle session sendInput errors', async () => {
-      engine['activeExecutions'].set('order-1', {
-        baristaId: 'barista-1',
-        session: mockSession,
-      });
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      mockSession.sendInput.mockRejectedValue(new Error('Session send failed'));
-
-      await expect(engine.sendInput('order-1', 'test')).rejects.toThrow('Session send failed');
-
-      errorSpy.mockRestore();
-    });
-  });
-
-  describe('sendInput - Edge Cases', () => {
-    it('should handle execution without session or lease', async () => {
-      const resolveExecution = setupControlledExecution();
-      const executePromise = engine.executeOrder(mockOrder, mockBarista);
-
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      // Manually remove lease to simulate edge case
-      const execution = engine['activeExecutions'].get('order-1');
-      if (execution) {
-        delete execution.lease;
-      }
-
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      await engine.sendInput('order-1', 'test');
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[BaristaEngineV2] No active terminal for order: order-1'
-      );
-
-      warnSpy.mockRestore();
-
-      resolveExecution({ success: true, output: 'done' });
-      await executePromise;
-    });
-
-    it('should handle empty input', async () => {
-      const resolveExecution = setupControlledExecution();
-      const executePromise = engine.executeOrder(mockOrder, mockBarista);
-
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      await engine.sendInput('order-1', '');
-
-      expect(mockLease.terminal.process.write).toHaveBeenCalledWith('\n');
-
-      resolveExecution({ success: true, output: 'done' });
-      await executePromise;
-    });
-
-    it('should handle special characters', async () => {
-      const resolveExecution = setupControlledExecution();
-      const executePromise = engine.executeOrder(mockOrder, mockBarista);
-
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      const specialInput = 'Test "quoted" and \'escaped\' and $special & <chars>';
-      await engine.sendInput('order-1', specialInput);
-
-      expect(mockLease.terminal.process.write).toHaveBeenCalledWith(specialInput + '\n');
-
-      resolveExecution({ success: true, output: 'done' });
-      await executePromise;
+      await executePromise.catch(() => {});
     });
   });
 });

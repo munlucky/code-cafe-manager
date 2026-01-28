@@ -1,9 +1,15 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
-import { ConfigManager } from '../config.js';
 import { ClaudeCodeProvider } from '@codecafe/provider-claude-code';
 import { resolve } from 'path';
+
+/**
+ * Get default provider from environment or default
+ */
+function getDefaultProvider(): string {
+  return process.env.CODECAFE_DEFAULT_PROVIDER || 'claude-code';
+}
 
 export function registerRunCommand(program: Command): void {
   program
@@ -11,16 +17,13 @@ export function registerRunCommand(program: Command): void {
     .description('Run Claude Code with a task')
     .option('--counter <path>', 'Project directory', '.')
     .option('--issue <text>', 'Issue or task description', '')
-    .option('--provider <name>', 'Provider to use', 'claude-code')
+    .option('--provider <name>', 'Provider to use')
     .action(async (options) => {
       const spinner = ora('Starting CodeCafe...').start();
 
       try {
-        const configManager = new ConfigManager();
-        const config = await configManager.loadConfig();
-
         const counter = resolve(options.counter);
-        const provider = options.provider || config.defaultProvider;
+        const provider = options.provider || getDefaultProvider();
         const issue = options.issue;
 
         if (!issue) {
