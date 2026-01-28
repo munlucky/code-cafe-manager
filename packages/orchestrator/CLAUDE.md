@@ -102,13 +102,13 @@
 | **role/** | | |
 | `role-manager.ts` | Role 관리 | `RoleManager` |
 | `template.ts` | Handlebars 템플릿 | `TemplateEngine` |
-| **cli/commands/** | | |
-| `init.ts`, `run.ts`, etc. | CLI 명령어 | `initOrchestrator`, `runWorkflow`, etc. |
+| **cli/commands/** (UI Layer 연동) | | |
+| `init.ts`, `run.ts`, etc. | CLI 명령어 구현 | `initOrchestrator`, `runWorkflow`, etc. |
 | **storage/** | | |
 | `run-state.ts` | 실행 상태 저장 | `RunStateManager` |
 | `event-logger.ts` | 이벤트 로깅 | `EventLogger` |
-| **ui/** | | |
-| `electron-api.ts` | Electron IPC | `registerElectronHandlers` |
+| **ui/** (UI Layer 연동) | | |
+| `electron-api.ts` | Electron IPC 어댑터 | `registerElectronHandlers` |
 
 ## Event Flow
 

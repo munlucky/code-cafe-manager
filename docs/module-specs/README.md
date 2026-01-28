@@ -31,10 +31,10 @@
          │                         │                         │
          ▼                         ▼                         ▼
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ provider-       │     │ provider-       │     │   providers-    │
-│ claude-code     │────▶│ codex           │────▶│   common        │
-└─────────────────┘     └─────────────────┘     │  (IProvider)    │
-                                                └─────────────────┘
+│ provider-       │     │   providers-    │     │ provider-       │
+│ claude-code     │────▶│   common        │◀────│ codex           │
+└─────────────────┘     │  (IProvider)    │     └─────────────────┘
+                        └─────────────────┘
 ```
 
 ## Layer Architecture
@@ -52,7 +52,9 @@
 │      ├── terminal/        : Terminal Pool (Phase 2)                     │
 │      ├── barista/         : BaristaEngineV2 실행 엔진                    │
 │      ├── engine/          : FSM, DAG Executor                           │
-│      └── workflow/        : Workflow Execution                          │
+│      ├── workflow/        : Workflow Execution                          │
+│      ├── cli/commands/    : CLI 명령어 구현 (UI Layer 연동)               │
+│      └── ui/              : Electron IPC 어댑터 (UI Layer 연동)           │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  Domain Layer                                                           │
 │  └── core/                                                              │

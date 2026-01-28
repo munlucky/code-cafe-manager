@@ -12,9 +12,9 @@
 │  src/main/index.ts:177-199                                            │
 │  app.whenReady()                                                      │
 │  1. initOrchestrator() → Orchestrator 초기화                           │
+│     └─ initExecutionManager() → BaristaEngineV2 연동 (내부 호출)        │
 │  2. setupIpcHandlers() → IPC 핸들러 등록                               │
 │  3. createWindow() → BrowserWindow 생성                               │
-│  4. initExecutionManager() → BaristaEngineV2 연동                     │
 └───────────────────────────────────────────────────────────────────────┘
         │
         ├──────────────────────────────────────────────────┐
@@ -114,7 +114,7 @@ ExecutionFacade                  Main Process              Renderer
 ## Dependencies
 
 - **상위**: (최상위 UI 패키지)
-- **하위**: `@codecafe/core`, `@codecafe/orchestrator`, `@codecafe/schema`, `@codecafe/git-worktree`
+- **하위**: `@codecafe/core`, `@codecafe/orchestrator`, `@codecafe/git-worktree`
 - **외부**: `electron`, `react`, `react-dom`, `zustand`, `@radix-ui/*`, `tailwindcss`, `i18next`
 
 ## Review Checklist
