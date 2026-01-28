@@ -3,7 +3,8 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import dotenv from 'dotenv';
-import { Orchestrator, createLogger } from '@codecafe/core';
+import { ExecutionFacade } from '@codecafe/orchestrator';
+import { createLogger } from '@codecafe/core';
 
 const logger = createLogger({ context: 'Main' });
 
@@ -11,7 +12,7 @@ import { registerCafeHandlers } from './ipc/cafe.js';
 import { registerTerminalHandlers } from './ipc/terminal.js';
 import { registerWorktreeHandlers } from './ipc/worktree.js';
 import { registerProviderHandlers } from './ipc/provider.js';
-import { registerOrchestratorHandlers } from './ipc/orchestrator.js';
+import { registerExecutionFacadeHandlers } from './ipc/execution-facade.js';
 import { registerOrderHandlers, cleanupOrderHandlers } from './ipc/order.js';
 import { registerWorkflowHandlers } from './ipc/workflow.js';
 import { registerSkillHandlers } from './ipc/skill.js';
@@ -28,7 +29,7 @@ const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '..', '..', '.env') });
 
 let mainWindow: BrowserWindow | null = null;
-let orchestrator: Orchestrator | null = null;
+let executionFacade: ExecutionFacade | null = null;
 
 /**
  * Resolve the directory for Orchestrator data
@@ -116,30 +117,33 @@ async function createWindow(): Promise<void> {
 }
 
 /**
- * Initialize and start the Orchestrator
+ * Initialize and start the ExecutionFacade
+ * Replaces Orchestrator(core) with ExecutionFacade(orchestrator)
  */
-async function initOrchestrator(): Promise<void> {
-  logger.info('Initializing orchestrator...');
+async function initExecutionFacade(): Promise<void> {
+  logger.info('Initializing ExecutionFacade...');
   const codecafeDir = join(homedir(), '.codecafe');
   const dataDir = join(codecafeDir, 'data');
   const logsDir = join(codecafeDir, 'logs');
 
-  orchestrator = new Orchestrator(dataDir, logsDir, 4);
-  await orchestrator.init();
-  orchestrator.start();
+  executionFacade = new ExecutionFacade({
+    dataDir,
+    logsDir,
+  });
+  await executionFacade.initState();
 
-  // Forward Orchestrator events to the renderer
-  const events = ['barista:event', 'order:event', 'order:assigned', 'order:completed'];
+  // Forward ExecutionFacade events to the renderer
+  const events = ['order:output', 'order:started', 'order:completed', 'order:failed', 'stage:started', 'stage:completed'];
   for (const event of events) {
-    orchestrator.on(event, (data) => {
+    executionFacade.on(event, (data) => {
       mainWindow?.webContents.send(event, data);
     });
   }
-  logger.info('Orchestrator initialized.');
+  logger.info('ExecutionFacade initialized.');
 
   // ExecutionManager 초기화 (BaristaEngineV2 연동)
   try {
-    await initExecutionManager(orchestrator, mainWindow);
+    await initExecutionManager(executionFacade, mainWindow);
     logger.info('ExecutionManager initialized.');
   } catch (error) {
     logger.error('Failed to initialize ExecutionManager', { error: error instanceof Error ? error.message : String(error) });
@@ -163,14 +167,14 @@ function setupIpcHandlers(): void {
   registerDialogHandlers();
   registerSystemHandlers();
 
-  if (orchestrator) {
-    registerOrchestratorHandlers(orchestrator);
-    registerOrderHandlers(orchestrator);
+  if (executionFacade) {
+    registerExecutionFacadeHandlers(executionFacade);
+    registerOrderHandlers(executionFacade);
   }
 
   // Note: registerElectronHandlers removed to avoid duplicate handler registration
   // Workflow handlers are now registered via registerWorkflowHandlers
-  // Orchestrator and Order handlers handle run-related functionality
+  // ExecutionFacade and Order handlers handle run-related functionality
   logger.info('IPC handlers set up.');
 }
 
@@ -180,7 +184,7 @@ setupMainProcessLogger();
 
 app.whenReady().then(async () => {
   logger.info('App is ready.');
-  await initOrchestrator();
+  await initExecutionFacade();
   setupIpcHandlers();
   await createWindow();
   logger.info('Window created.');
@@ -200,7 +204,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    orchestrator?.stop();
+    executionFacade?.dispose();
     app.quit();
   }
 });
@@ -215,8 +219,8 @@ app.on('will-quit', async (event) => {
   isQuitting = true;
   cleanupOrderHandlers();
   await cleanupExecutionManager();
-  if (orchestrator) {
-    await orchestrator.stop();
+  if (executionFacade) {
+    await executionFacade.dispose();
   }
   app.quit();
 });

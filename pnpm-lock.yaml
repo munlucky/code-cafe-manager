@@ -3,11 +3,6 @@ lockfileVersion: '9.0'
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
-  onlyBuiltDependencies:
-    - electron
-    - electron-winstaller
-    - node-pty
-    - msw
 
 importers:
 
@@ -375,9 +370,6 @@ importers:
 
   packages/providers/claude-code:
     dependencies:
-      '@codecafe/core':
-        specifier: workspace:*
-        version: link:../../core
       '@codecafe/providers-common':
         specifier: workspace:*
         version: link:../common

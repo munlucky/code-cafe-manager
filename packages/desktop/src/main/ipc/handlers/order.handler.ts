@@ -1,10 +1,12 @@
 /**
  * Order IPC Handlers
+ * Phase C: ExecutionFacade(orchestrator) 사용, Orchestrator(core) 제거
  * Thin layer that delegates to OrderService for business logic
  */
 
 import { ipcMain } from 'electron';
-import { Orchestrator, createLogger, toCodeCafeError } from '@codecafe/core';
+import { ExecutionFacade } from '@codecafe/orchestrator';
+import { createLogger, toCodeCafeError } from '@codecafe/core';
 import { getExecutionManager } from '../../execution-manager.js';
 import {
   OrderService,
@@ -66,10 +68,11 @@ function registerHandler<T extends unknown[], R>(
 
 /**
  * Order IPC Handlers Registration
+ * Phase C: ExecutionFacade 사용
  */
-export function registerOrderHandlers(orchestrator: Orchestrator): void {
+export function registerOrderHandlers(facade: ExecutionFacade): void {
   const orderService = new OrderService({
-    orchestrator,
+    facade,
     getExecutionManager,
   });
 

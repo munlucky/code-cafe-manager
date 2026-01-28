@@ -1,5 +1,6 @@
 /**
  * Order Service
+ * Phase C: ExecutionFacade(orchestrator) 사용, Orchestrator(core) 제거
  * Business logic for order management, extracted from IPC handlers
  */
 
@@ -7,9 +8,9 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { promises as fs } from 'fs';
 import { homedir } from 'os';
-import { Orchestrator, Order, createLogger, toCodeCafeError } from '@codecafe/core';
+import { Order, createLogger, toCodeCafeError, ProviderType } from '@codecafe/core';
 import { WorktreeManager } from '@codecafe/git-worktree';
-import type { ExecutionFacade } from '@codecafe/orchestrator';
+import { ExecutionFacade } from '@codecafe/orchestrator';
 import { convertAnsiToHtml } from '../../common/output-utils.js';
 import { parseOutputType } from '../../common/output-markers.js';
 
@@ -113,9 +114,10 @@ export interface OutputHistoryEntry {
 
 /**
  * OrderService dependencies
+ * Phase C: ExecutionFacade 사용
  */
 export interface OrderServiceDependencies {
-  orchestrator: Orchestrator;
+  facade: ExecutionFacade;
   getExecutionManager: () => { getBaristaEngine: () => ExecutionFacade | null } | null;
 }
 
@@ -162,13 +164,14 @@ function parseLogChunks(content: string): LogChunk[] {
 
 /**
  * OrderService - Business logic for order management
+ * Phase C: Orchestrator(core) 제거, ExecutionFacade 사용
  */
 export class OrderService {
-  private readonly orchestrator: Orchestrator;
+  private readonly facade: ExecutionFacade;
   private readonly getExecutionManager: () => { getBaristaEngine: () => ExecutionFacade | null } | null;
 
   constructor(deps: OrderServiceDependencies) {
-    this.orchestrator = deps.orchestrator;
+    this.facade = deps.facade;
     this.getExecutionManager = deps.getExecutionManager;
   }
 
@@ -259,7 +262,7 @@ export class OrderService {
     logger.info('Removing worktree', { orderId: order.id, path: order.worktreeInfo.path });
 
     // Cancel any running process first
-    await this.orchestrator.cancelOrder(order.id).catch(() => {});
+    await this.facade.cancelOrder(order.id).catch(() => {});
 
     // WorktreeManager.removeWorktree has built-in retry logic for file lock issues
     await WorktreeManager.removeWorktree({
@@ -286,7 +289,7 @@ export class OrderService {
       throw new Error(`Cafe not found: ${params.cafeId}`);
     }
 
-    const order = await this.orchestrator.createOrder(
+    const order = await this.facade.createOrder(
       params.workflowId,
       params.workflowName,
       cafe.path,
@@ -306,8 +309,8 @@ export class OrderService {
 
         // Rollback order on worktree failure
         try {
-          await this.orchestrator.cancelOrder(order.id);
-          await this.orchestrator.deleteOrder(order.id);
+          await this.facade.cancelOrder(order.id);
+          await this.facade.deleteOrder(order.id);
           logger.info('Order rolled back due to worktree failure', { orderId: order.id });
         } catch (deleteError: any) {
           logger.error('Failed to rollback order', { orderId: order.id, error: deleteError.message });
@@ -326,7 +329,7 @@ export class OrderService {
    * Create simple order
    */
   createOrder(params: CreateOrderParams): Order {
-    return this.orchestrator.createOrder(
+    return this.facade.createOrder(
       params.workflowId,
       params.workflowName,
       params.counter,
@@ -339,28 +342,28 @@ export class OrderService {
    * Get order by ID
    */
   getOrder(orderId: string): Order | undefined {
-    return this.orchestrator.getOrder(orderId);
+    return this.facade.getOrder(orderId);
   }
 
   /**
    * Get all orders
    */
   getAllOrders(): Order[] {
-    return this.orchestrator.getAllOrders();
+    return this.facade.getAllOrders();
   }
 
   /**
    * Cancel order
    */
   async cancelOrder(orderId: string): Promise<void> {
-    await this.orchestrator.cancelOrder(orderId);
+    await this.facade.cancelOrder(orderId);
   }
 
   /**
    * Delete order with worktree cleanup
    */
   async deleteOrder(orderId: string): Promise<boolean> {
-    const order = this.orchestrator.getOrder(orderId);
+    const order = this.facade.getOrder(orderId);
 
     if (order) {
       try {
@@ -371,7 +374,7 @@ export class OrderService {
       }
     }
 
-    return await this.orchestrator.deleteOrder(orderId);
+    return await this.facade.deleteOrder(orderId);
   }
 
   /**
@@ -380,7 +383,7 @@ export class OrderService {
   async deleteOrders(orderIds: string[]): Promise<{ deleted: string[]; failed: string[] }> {
     // Remove worktrees in parallel
     const worktreeRemovals = orderIds.map(async (orderId) => {
-      const order = this.orchestrator.getOrder(orderId);
+      const order = this.facade.getOrder(orderId);
       if (order) {
         try {
           await this.removeWorktree(order);
@@ -393,19 +396,24 @@ export class OrderService {
 
     await Promise.allSettled(worktreeRemovals);
 
-    return await this.orchestrator.deleteOrders(orderIds);
+    return await this.facade.deleteOrders(orderIds);
   }
 
   // ============================================
   // Order Execution Operations
   // ============================================
+  // NOTE: executeOrder removed - execution is now handled by ExecutionManager
+  // The IPC handler 'order:execute' should be removed or redirected
 
   /**
-   * Execute order
+   * Execute order (redirected to ExecutionManager)
+   * This method is kept for compatibility but should not be used
+   * @deprecated Use ExecutionManager for order execution
    */
   async executeOrder(orderId: string, prompt: string, vars?: Record<string, string>): Promise<void> {
-    logger.info('Executing order', { orderId, prompt });
-    await this.orchestrator.executeOrder(orderId, prompt, vars || {});
+    logger.warn('executeOrder called on OrderService - this should be handled by ExecutionManager', { orderId, prompt });
+    // Execution is now handled by ExecutionManager through facade.executeOrder(order, barista)
+    // This is a no-op for now
   }
 
   /**
@@ -413,21 +421,21 @@ export class OrderService {
    */
   async sendInput(orderId: string, message: string): Promise<void> {
     logger.info('Sending input to order', { orderId });
-    await this.orchestrator.sendInput(orderId, message);
+    await this.facade.sendInput(orderId, message);
   }
 
   /**
    * Get order log
    */
   async getOrderLog(orderId: string): Promise<string> {
-    return await this.orchestrator.getOrderLog(orderId);
+    return await this.facade.getOrderLog(orderId);
   }
 
   /**
    * Get all receipts
    */
   async getReceipts(): Promise<any[]> {
-    return await this.orchestrator.getReceipts();
+    return await this.facade.getReceipts();
   }
 
   // ============================================
@@ -507,7 +515,7 @@ export class OrderService {
     cafeId: string,
     worktreeOptions?: { baseBranch?: string; branchPrefix?: string }
   ): Promise<{ worktree: { path: string; branch: string }; message: string }> {
-    const order = this.orchestrator.getOrder(orderId);
+    const order = this.facade.getOrder(orderId);
     if (!order) {
       throw new Error(`Order not found: ${orderId}`);
     }
@@ -545,7 +553,7 @@ export class OrderService {
   async retryFromStage(orderId: string, fromStageId?: string): Promise<void> {
     logger.info('Retrying order from stage', { orderId, fromStageId });
 
-    await this.orchestrator.startOrder(orderId);
+    await this.facade.startOrder(orderId);
 
     const baristaEngine = this.getBaristaEngine();
     await baristaEngine.retryFromStage(orderId, fromStageId);
@@ -571,7 +579,7 @@ export class OrderService {
   async retryFromBeginning(orderId: string, preserveContext: boolean = true): Promise<void> {
     logger.info('Retrying order from beginning', { orderId, preserveContext });
 
-    await this.orchestrator.startOrder(orderId);
+    await this.facade.startOrder(orderId);
 
     const baristaEngine = this.getBaristaEngine();
     await baristaEngine.retryFromBeginning(orderId, preserveContext);
@@ -585,7 +593,7 @@ export class OrderService {
    * Ensure session exists for followup (restore if needed)
    */
   async ensureSessionForFollowup(orderId: string): Promise<boolean> {
-    const order = this.orchestrator.getOrder(orderId);
+    const order = this.facade.getOrder(orderId);
     if (!order) {
       throw new Error(`Order not found: ${orderId}`);
     }
@@ -602,9 +610,9 @@ export class OrderService {
       logger.info('Session not found, attempting to restore for followup');
 
       try {
-        let barista = this.orchestrator.getAllBaristas().find(b => b.provider === order.provider);
+        let barista = this.facade.getAllBaristas().find(b => b.provider === order.provider);
         if (!barista) {
-          barista = this.orchestrator.createBarista(order.provider);
+          barista = this.facade.createBarista(order.provider);
           logger.info('Created barista for followup restore', { provider: order.provider });
         }
 
@@ -675,7 +683,7 @@ export class OrderService {
   async cleanupWorktreeOnly(orderId: string): Promise<CleanupWorktreeResult> {
     logger.info('Cleaning up worktree only', { orderId });
 
-    const order = this.orchestrator.getOrder(orderId);
+    const order = this.facade.getOrder(orderId);
     if (!order) {
       throw new Error(`Order not found: ${orderId}`);
     }
@@ -697,7 +705,7 @@ export class OrderService {
       removed: true,
     };
 
-    await this.orchestrator.persistState();
+    await this.facade.persistState();
 
     logger.info('Worktree removed, order preserved', { branch: worktreeBranch });
 
@@ -719,7 +727,7 @@ export class OrderService {
   ): Promise<MergeToMainResult> {
     logger.info('Merging worktree to main', { orderId, targetBranch });
 
-    const order = this.orchestrator.getOrder(orderId);
+    const order = this.facade.getOrder(orderId);
     if (!order) {
       throw new Error(`Order not found: ${orderId}`);
     }
@@ -747,7 +755,7 @@ export class OrderService {
         mergeCommit: result.commitHash,
       };
 
-      await this.orchestrator.persistState();
+      await this.facade.persistState();
     }
 
     return result;

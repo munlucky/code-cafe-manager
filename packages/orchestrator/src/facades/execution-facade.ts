@@ -2,22 +2,39 @@
  * Execution Facade
  * Stable public API for Desktop to interact with orchestrator execution
  * Hides internal implementation details (BaristaEngineV2, TerminalPool, SessionManager)
+ *
+ * Phase C: State Management Integration
+ * Provides unified API for both execution and state management, replacing Orchestrator(core)
  */
 
 import { EventEmitter } from 'events';
 import type { TerminalPoolConfig, PoolStatus } from '@codecafe/core';
-import { TIMEOUTS } from '@codecafe/core';
+import { TIMEOUTS, ProviderType, OrderStatus, Receipt } from '@codecafe/core';
 import { BaristaEngineV2 } from '../barista/barista-engine-v2.js';
 import { TerminalPool } from '../terminal/terminal-pool.js';
 import type { SessionStatusSummary } from '../session/index.js';
-import type { Barista } from '@codecafe/core';
-import type { Order } from '@codecafe/core';
+import type { Barista, Order } from '@codecafe/core';
+import { Storage } from '@codecafe/core';
+import { OrderManager } from '@codecafe/core';
+import { BaristaManager } from '@codecafe/core';
+import { LogManager } from '@codecafe/core';
+import * as path from 'path';
 
 /**
  * Execution Facade Configuration
  */
 export interface ExecutionFacadeConfig {
   terminalPoolConfig?: TerminalPoolConfig;
+  /**
+   * Data directory for persistent storage (orders, baristas, receipts, logs)
+   * @default process.cwd()/.codecafe
+   */
+  dataDir?: string;
+  /**
+   * Logs directory for order execution logs
+   * @default process.cwd()/.codecafe/logs
+   */
+  logsDir?: string;
 }
 
 /**
@@ -37,13 +54,34 @@ export interface RetryOption {
 /**
  * Execution Facade
  * Public API for order execution in Desktop
+ * Phase C: Extended with state management capabilities to replace Orchestrator(core)
  */
 export class ExecutionFacade extends EventEmitter {
   private readonly engine: BaristaEngineV2;
   private readonly terminalPool: TerminalPool;
 
+  // State Management (Phase C)
+  private readonly orderManager: OrderManager;
+  private readonly baristaManager: BaristaManager;
+  private readonly storage: Storage;
+  private readonly logManager: LogManager;
+  private readonly dataDir: string;
+  private readonly logsDir: string;
+  private initialized: boolean = false;
+
   constructor(config: ExecutionFacadeConfig = {}) {
     super();
+
+    // Data directories
+    const cwd = process.cwd();
+    this.dataDir = config.dataDir || path.join(cwd, '.codecafe');
+    this.logsDir = config.logsDir || path.join(this.dataDir, 'logs');
+
+    // Initialize state management components
+    this.orderManager = new OrderManager();
+    this.baristaManager = new BaristaManager(4); // Default max baristas
+    this.storage = new Storage(this.dataDir);
+    this.logManager = new LogManager(this.logsDir);
 
     // Create Terminal Pool with default config if not provided
     const poolConfig: TerminalPoolConfig = config.terminalPoolConfig || {
@@ -59,6 +97,34 @@ export class ExecutionFacade extends EventEmitter {
 
     // Forward engine events to facade
     this.forwardEngineEvents();
+  }
+
+  /**
+   * Initialize state management (storage, logs)
+   * Call this before using state management features
+   */
+  async initState(): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
+
+    await this.storage.init();
+    await this.logManager.init();
+
+    // Restore saved state
+    const savedOrders = await this.storage.loadOrders();
+    if (savedOrders.length > 0) {
+      this.orderManager.restoreOrders(savedOrders);
+    }
+
+    const savedBaristas = await this.storage.loadBaristas();
+    // Note: Baristas are not restored (process connections needed)
+    if (savedBaristas.length > 0) {
+      // Log but don't restore (baristas need fresh process connections)
+      console.log(`[ExecutionFacade] Found ${savedBaristas.length} saved baristas (not restoring)`);
+    }
+
+    this.initialized = true;
   }
 
   /**
@@ -225,5 +291,192 @@ export class ExecutionFacade extends EventEmitter {
     cwd: string
   ): Promise<void> {
     return this.engine.restoreSessionForFollowup(order, barista, cafeId, cwd);
+  }
+
+  // ========================================
+  // State Management (Phase C)
+  // Replaces Orchestrator(core) state API
+  // ========================================
+
+  /**
+   * Create a new barista
+   */
+  createBarista(provider: ProviderType): Barista {
+    const barista = this.baristaManager.createBarista(provider);
+    this.saveState(); // Async save (fire and forget)
+    return barista;
+  }
+
+  /**
+   * Create a new order
+   */
+  createOrder(
+    workflowId: string,
+    workflowName: string,
+    counter: string,
+    provider?: ProviderType,
+    vars: Record<string, string> = {},
+    cafeId?: string
+  ): Order {
+    const defaultProvider: ProviderType = provider || 'claude-code';
+    const order = this.orderManager.createOrder(workflowId, workflowName, counter, defaultProvider, vars, cafeId);
+
+    // Auto-create barista if none available for the provider
+    const idleBarista = this.baristaManager.findIdleBarista(defaultProvider);
+    if (!idleBarista) {
+      try {
+        this.baristaManager.createBarista(defaultProvider);
+      } catch (error) {
+        console.error('Failed to auto-create barista:', error);
+      }
+    }
+
+    this.saveState();
+    return order;
+  }
+
+  /**
+   * Get all orders
+   */
+  getAllOrders(): Order[] {
+    return this.orderManager.getAllOrders();
+  }
+
+  /**
+   * Get all baristas
+   */
+  getAllBaristas(): Barista[] {
+    return this.baristaManager.getAllBaristas();
+  }
+
+  /**
+   * Get order by ID
+   */
+  getOrder(orderId: string): Order | undefined {
+    return this.orderManager.getOrder(orderId);
+  }
+
+  /**
+   * Get barista by ID
+   */
+  getBarista(baristaId: string): Barista | undefined {
+    return this.baristaManager.getBarista(baristaId);
+  }
+
+  /**
+   * Get order log
+   */
+  async getOrderLog(orderId: string): Promise<string> {
+    return await this.logManager.readLog(orderId);
+  }
+
+  /**
+   * Append to order log
+   */
+  async appendOrderLog(orderId: string, message: string): Promise<void> {
+    await this.logManager.appendLog(orderId, message);
+  }
+
+  /**
+   * Get all receipts
+   */
+  async getReceipts(): Promise<Receipt[]> {
+    return await this.storage.loadReceipts();
+  }
+
+  /**
+   * Delete an order
+   */
+  async deleteOrder(orderId: string): Promise<boolean> {
+    const deleted = this.orderManager.deleteOrder(orderId);
+    if (deleted) {
+      await this.saveState();
+    }
+    return deleted;
+  }
+
+  /**
+   * Delete multiple orders
+   */
+  async deleteOrders(orderIds: string[]): Promise<{ deleted: string[]; failed: string[] }> {
+    const result = this.orderManager.deleteOrders(orderIds);
+    await this.saveState();
+    return result;
+  }
+
+  /**
+   * Update order status (internal use)
+   */
+  updateOrderStatus(orderId: string, status: OrderStatus): void {
+    const order = this.orderManager.getOrder(orderId);
+    if (order) {
+      order.status = status;
+      if (status === OrderStatus.RUNNING && !order.startedAt) {
+        order.startedAt = new Date();
+      }
+      if (status === OrderStatus.COMPLETED || status === OrderStatus.FAILED) {
+        order.endedAt = new Date();
+      }
+    }
+  }
+
+  /**
+   * Start an order (marks as RUNNING)
+   * Called when execution begins
+   */
+  async startOrder(orderId: string): Promise<void> {
+    this.orderManager.startOrder(orderId);
+    await this.logManager.appendLog(orderId, 'Order started');
+    await this.saveState();
+  }
+
+  /**
+   * Complete an order (marks as COMPLETED or FAILED)
+   * Called when execution finishes
+   */
+  async completeOrder(orderId: string, success: boolean, error?: string): Promise<void> {
+    const order = this.orderManager.getOrder(orderId);
+    if (!order) {
+      throw new Error(`Order ${orderId} not found`);
+    }
+
+    this.orderManager.completeOrder(orderId, success, error);
+    await this.logManager.appendLog(orderId, success ? 'Order completed' : `Order failed: ${error}`);
+
+    // Receipt 생성
+    const receipt: Receipt = {
+      orderId: order.id,
+      status: order.status,
+      startedAt: order.startedAt!,
+      endedAt: order.endedAt!,
+      provider: order.provider,
+      counter: order.counter,
+    };
+    await this.storage.addReceipt(receipt);
+
+    await this.saveState();
+  }
+
+  /**
+   * Persist state to storage immediately (synchronous save)
+   */
+  async persistState(): Promise<void> {
+    await Promise.all([
+      this.storage.saveOrders(this.orderManager.getAllOrders()),
+      this.storage.saveBaristas(this.baristaManager.getAllBaristas()),
+    ]);
+  }
+
+  /**
+   * Save state to storage (async, fire and forget)
+   */
+  private async saveState(): Promise<void> {
+    // Don't wait, save in background
+    this.storage.saveOrders(this.orderManager.getAllOrders()).catch((err) => {
+      console.error('[ExecutionFacade] Failed to save orders:', err);
+    });
+    this.storage.saveBaristas(this.baristaManager.getAllBaristas()).catch((err) => {
+      console.error('[ExecutionFacade] Failed to save baristas:', err);
+    });
   }
 }

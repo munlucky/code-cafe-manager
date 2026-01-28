@@ -17,7 +17,7 @@ import {
  * Orchestrator
  * Barista Pool + Order Queue + Storage + Logging을 통합 관리
  *
- * @deprecated Use ExecutionFacade from @codecafe/orchestrator instead.
+ * @deprecated The Orchestrator class is part of a legacy architecture and is being replaced by more modular components. For order execution, please migrate to ExecutionFacade from @codecafe/orchestrator.
  * This class will be removed in v0.2.0.
  */
 export class Orchestrator extends EventEmitter {
