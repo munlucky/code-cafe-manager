@@ -131,7 +131,7 @@ describe('BaristaEngineV2', () => {
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
       // Wait for execution to start
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       const cancelled = await engine.cancelOrder('order-1');
 
@@ -153,7 +153,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       // Mock cancel failure
       mockSession.cancel.mockRejectedValue(new Error('Cancel failed'));
@@ -171,7 +171,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       const activeExecutions = engine.getActiveExecutions();
       expect(activeExecutions.size).toBe(1);
@@ -192,7 +192,7 @@ describe('BaristaEngineV2', () => {
       mockSession.execute.mockImplementation(() => new Promise(() => {}));
 
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       await engine.dispose();
 
@@ -206,7 +206,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       const testMessage = 'test input message';
       await engine.sendInput('order-1', testMessage);
@@ -226,7 +226,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       mockSession.sendInput.mockRejectedValue(new Error('Send failed'));
 
@@ -240,7 +240,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       await engine.sendInput('order-1', '');
 
@@ -254,7 +254,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       const multilineInput = 'Line 1\nLine 2\nLine 3';
       await engine.sendInput('order-1', multilineInput);
@@ -269,7 +269,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       const unicodeInput = '안녕하세요 👍 🚀';
       await engine.sendInput('order-1', unicodeInput);
@@ -340,7 +340,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       await engine.retryFromStage('order-1', 'stage-2');
 
@@ -354,7 +354,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       await engine.retryFromBeginning('order-1', true);
 
@@ -368,7 +368,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       // Mock getRetryOptions on session
       const mockRetryOptions = [
@@ -396,7 +396,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       await engine.enterFollowup('order-1');
 
@@ -410,7 +410,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       await engine.executeFollowup('order-1', 'Add tests for this feature');
 
@@ -424,7 +424,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       await engine.finishFollowup('order-1');
 
@@ -438,7 +438,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       // Mock canFollowup on session
       mockSession.canFollowup = vi.fn().mockReturnValue(true);

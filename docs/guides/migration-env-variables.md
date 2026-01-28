@@ -20,9 +20,12 @@ CodeCafe v0.2.0부터 `~/.codecafe/config.json` 대신 환경 변수를 사용�
 | 환경 변수 | 설명 | 기본값 |
 |----------|------|-------|
 | `CODECAFE_DEFAULT_PROVIDER` | 기본 AI 제공자 | `claude-code` |
-| `CODECAFE_CLAUDE_VERBOSE` | Claude 상세 로깅 | `false` |
-| `CODECAFE_CLAUDE_STREAMING` | 스트리밍 모드 | `0` |
-| `CODECAFE_SKIP_BUN` | Bun 런타임 건너뛰기 | `false` |
+| `CODECAFE_CLAUDE_VERBOSE` | Claude 상세 로깅 활성화 (`1` 또는 `true`) | `false` |
+| `CODECAFE_CLAUDE_STREAMING` | 스트리밍 출력 활성화 (`1` 또는 `true`) | `true` (미설정 시 활성화) |
+| `CODECAFE_SKIP_BUN` | Bun 런타임 건너뛰기 (`1` 또는 `true`) | `false` |
+
+> **참고**: Boolean 환경 변수는 `1` 또는 `true`로 활성화합니다. 다른 값이나 미설정 시 비활성화됩니다.
+> 단, `CODECAFE_CLAUDE_STREAMING`은 미설정 시 기본 활성화됩니다. 비활성화하려면 `0` 또는 `false`로 설정하세요.
 
 ### Desktop Configuration
 

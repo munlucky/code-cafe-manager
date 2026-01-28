@@ -390,7 +390,7 @@ export class ExecutionFacade extends EventEmitter {
   async deleteOrder(orderId: string): Promise<boolean> {
     const deleted = this.orderManager.deleteOrder(orderId);
     if (deleted) {
-      await this.saveState();
+      await this.persistState();
     }
     return deleted;
   }
@@ -400,7 +400,7 @@ export class ExecutionFacade extends EventEmitter {
    */
   async deleteOrders(orderIds: string[]): Promise<{ deleted: string[]; failed: string[] }> {
     const result = this.orderManager.deleteOrders(orderIds);
-    await this.saveState();
+    await this.persistState();
     return result;
   }
 
@@ -427,7 +427,7 @@ export class ExecutionFacade extends EventEmitter {
   async startOrder(orderId: string): Promise<void> {
     this.orderManager.startOrder(orderId);
     await this.logManager.appendLog(orderId, 'Order started');
-    await this.saveState();
+    await this.persistState();
   }
 
   /**
@@ -454,7 +454,7 @@ export class ExecutionFacade extends EventEmitter {
     };
     await this.storage.addReceipt(receipt);
 
-    await this.saveState();
+    await this.persistState();
   }
 
   /**
@@ -468,10 +468,10 @@ export class ExecutionFacade extends EventEmitter {
   }
 
   /**
-   * Save state to storage (async, fire and forget)
+   * Save state to storage (fire and forget, non-blocking)
+   * Use persistState() if you need to wait for completion
    */
-  private async saveState(): Promise<void> {
-    // Don't wait, save in background
+  private saveState(): void {
     this.storage.saveOrders(this.orderManager.getAllOrders()).catch((err: unknown) => {
       console.error('[ExecutionFacade] Failed to save orders:', err);
     });
