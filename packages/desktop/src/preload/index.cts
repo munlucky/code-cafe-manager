@@ -3,195 +3,383 @@
  * Exposes IPC handlers to renderer process via contextBridge
  */
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, IpcRendererEvent } = require('electron');
 
-// Helper to create IPC invoke functions with IpcResponse wrapper
-function createIpcInvoker(channel: string) {
-  return (...args: any[]) => ipcRenderer.invoke(channel, ...args);
+// ============================================================================
+// Type Definitions for Preload Bridge
+// ============================================================================
+
+// IPC Response Types
+interface IpcResponse<T = void> {
+  success: boolean;
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
 }
 
-// Helper to manage IPC event listeners
-function setupIpcListener(channel: string, callback: (event: any) => void): () => void {
-  const listener = (_: any, event: any) => callback(event);
+// Event Data Types
+interface BaristaEvent {
+  type: string;
+  timestamp: Date;
+  baristaId: string;
+  data: unknown;
+}
+
+interface OrderEvent {
+  type: string;
+  timestamp: Date;
+  orderId: string;
+  data: unknown;
+}
+
+interface OutputEvent {
+  orderId: string;
+  timestamp: string;
+  type: string;
+  content: string;
+}
+
+interface OrderAssignedEvent {
+  orderId: string;
+  baristaId: string;
+  timestamp?: string;
+}
+
+interface OrderCompletedEvent {
+  orderId: string;
+  status: string;
+  timestamp?: string;
+}
+
+interface OrderFailedEvent {
+  orderId: string;
+  error: string;
+  timestamp?: string;
+}
+
+interface SessionStartedEvent {
+  sessionId: string;
+  orderId: string;
+  workflowId: string;
+  timestamp: string;
+}
+
+interface SessionCompletedEvent {
+  sessionId: string;
+  orderId: string;
+  duration: number;
+  status: string;
+  timestamp: string;
+}
+
+interface SessionFailedEvent {
+  sessionId: string;
+  orderId: string;
+  error: string;
+  canRetry: boolean;
+  timestamp: string;
+}
+
+interface StageStartedEvent {
+  sessionId: string;
+  orderId: string;
+  stageId: string;
+  stageName: string;
+  stageIndex: number;
+  timestamp: string;
+}
+
+interface StageCompletedEvent {
+  sessionId: string;
+  orderId: string;
+  stageId: string;
+  stageName: string;
+  status: string;
+  duration: number;
+  output?: unknown;
+  timestamp: string;
+}
+
+interface StageFailedEvent {
+  sessionId: string;
+  orderId: string;
+  stageId: string;
+  stageName: string;
+  error: string;
+  canRetry: boolean;
+  timestamp: string;
+}
+
+interface AwaitingInputEvent {
+  sessionId: string;
+  orderId: string;
+  stageId: string;
+  questions?: string[];
+  message?: string;
+  timestamp: string;
+}
+
+interface TodoProgressEvent {
+  orderId: string;
+  todos: Array<{
+    content: string;
+    status: string;
+    activeForm: string;
+  }>;
+  timestamp: string;
+}
+
+interface StatusChangedEvent {
+  orderId: string;
+  previousStatus: string;
+  newStatus: string;
+  timestamp: string;
+}
+
+interface FollowupStartedEvent {
+  sessionId: string;
+  orderId: string;
+  prompt: string;
+  timestamp: string;
+}
+
+interface FollowupCompletedEvent {
+  sessionId: string;
+  orderId: string;
+  stageId: string;
+  output?: string;
+  timestamp: string;
+}
+
+interface FollowupFailedEvent {
+  sessionId: string;
+  orderId: string;
+  stageId?: string;
+  error: string;
+  timestamp: string;
+}
+
+interface FollowupFinishedEvent {
+  sessionId: string;
+  orderId: string;
+  timestamp: string;
+}
+
+// IPC Channel type (string literal union for common channels)
+type IpcChannel = string;
+
+// Generic callback type for IPC listeners
+type IpcEventCallback<T> = (event: T) => void;
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Helper to create IPC invoke functions with type safety
+ * Returns a function that invokes the IPC channel with provided arguments
+ */
+function createIpcInvoker<TArgs extends unknown[], TResponse>(
+  channel: IpcChannel
+): (...args: TArgs) => Promise<TResponse> {
+  return (...args: TArgs) => ipcRenderer.invoke(channel, ...args);
+}
+
+/**
+ * Helper to manage IPC event listeners with type safety
+ * Returns cleanup function to remove the listener
+ */
+function setupIpcListener<T>(
+  channel: IpcChannel,
+  callback: IpcEventCallback<T>
+): () => void {
+  const listener = (_: typeof IpcRendererEvent, event: T): void => callback(event);
   ipcRenderer.on(channel, listener);
   return () => ipcRenderer.removeListener(channel, listener);
 }
 
+// ============================================================================
+// CodeCafe API Bridge
+// ============================================================================
+
 contextBridge.exposeInMainWorld('codecafe', {
   cafe: {
-    list: createIpcInvoker('cafe:list'),
-    get: createIpcInvoker('cafe:get'),
-    create: createIpcInvoker('cafe:create'),
-    update: createIpcInvoker('cafe:update'),
-    delete: createIpcInvoker('cafe:delete'),
-    setLastAccessed: createIpcInvoker('cafe:setLastAccessed'),
-    getLastAccessed: createIpcInvoker('cafe:getLastAccessed'),
+    list: createIpcInvoker<[], IpcResponse<unknown[]>>('cafe:list'),
+    get: createIpcInvoker<[string], IpcResponse<unknown>>('cafe:get'),
+    create: createIpcInvoker<[unknown], IpcResponse<unknown>>('cafe:create'),
+    update: createIpcInvoker<[string, unknown], IpcResponse<unknown>>('cafe:update'),
+    delete: createIpcInvoker<[string], IpcResponse<void>>('cafe:delete'),
+    setLastAccessed: createIpcInvoker<[string], IpcResponse<void>>('cafe:setLastAccessed'),
+    getLastAccessed: createIpcInvoker<[], IpcResponse<unknown>>('cafe:getLastAccessed'),
   },
 
   barista: {
-    create: createIpcInvoker('barista:create'),
-    getAll: createIpcInvoker('barista:getAll'),
-    onEvent: (callback: (event: any) => void) => setupIpcListener('barista:event', callback),
+    create: createIpcInvoker<[string], IpcResponse<unknown>>('barista:create'),
+    getAll: createIpcInvoker<[], IpcResponse<unknown[]>>('barista:getAll'),
+    onEvent: (callback: IpcEventCallback<BaristaEvent>) => setupIpcListener('barista:event', callback),
   },
 
   order: {
-    create: createIpcInvoker('order:create'),
-    getAll: createIpcInvoker('order:getAll'),
-    get: createIpcInvoker('order:get'),
-    getLog: createIpcInvoker('order:getLog'),
-    cancel: createIpcInvoker('order:cancel'),
-    delete: createIpcInvoker('order:delete'),
-    deleteMany: createIpcInvoker('order:deleteMany'),
-    execute: createIpcInvoker('order:execute'),
-    sendInput: createIpcInvoker('order:sendInput'),
-    createWithWorktree: createIpcInvoker('order:createWithWorktree'),
-    subscribeOutput: createIpcInvoker('order:subscribeOutput'),
-    unsubscribeOutput: createIpcInvoker('order:unsubscribeOutput'),
+    create: createIpcInvoker<[unknown], IpcResponse<unknown>>('order:create'),
+    getAll: createIpcInvoker<[], IpcResponse<unknown[]>>('order:getAll'),
+    get: createIpcInvoker<[string], IpcResponse<unknown>>('order:get'),
+    getLog: createIpcInvoker<[string], IpcResponse<string | null>>('order:getLog'),
+    cancel: createIpcInvoker<[string], IpcResponse<{ cancelled: boolean }>>('order:cancel'),
+    delete: createIpcInvoker<[string], IpcResponse<{ deleted: boolean }>>('order:delete'),
+    deleteMany: createIpcInvoker<[string[]], IpcResponse<{ deleted: string[] }>>('order:deleteMany'),
+    execute: createIpcInvoker<[string, string, Record<string, string>?], IpcResponse<{ started: boolean }>>('order:execute'),
+    sendInput: createIpcInvoker<[string, string], IpcResponse<{ sent: boolean }>>('order:sendInput'),
+    createWithWorktree: createIpcInvoker<[unknown], IpcResponse<unknown>>('order:createWithWorktree'),
+    subscribeOutput: createIpcInvoker<[string], IpcResponse<{ subscribed: boolean; history: unknown[] }>>('order:subscribeOutput'),
+    unsubscribeOutput: createIpcInvoker<[string], IpcResponse<{ unsubscribed: boolean }>>('order:unsubscribeOutput'),
     // Retry support
-    retryFromStage: createIpcInvoker('order:retryFromStage'),
-    retryFromBeginning: createIpcInvoker('order:retryFromBeginning'),
-    getRetryOptions: createIpcInvoker('order:getRetryOptions'),
+    retryFromStage: createIpcInvoker<[{ orderId: string; fromStageId?: string }], IpcResponse<{ started: boolean }>>('order:retryFromStage'),
+    retryFromBeginning: createIpcInvoker<[{ orderId: string; preserveContext?: boolean }], IpcResponse<{ started: boolean }>>('order:retryFromBeginning'),
+    getRetryOptions: createIpcInvoker<[string], IpcResponse<unknown>>('order:getRetryOptions'),
     // Followup support (additional commands after completion)
-    enterFollowup: createIpcInvoker('order:enterFollowup'),
-    executeFollowup: createIpcInvoker('order:executeFollowup'),
-    finishFollowup: createIpcInvoker('order:finishFollowup'),
-    canFollowup: createIpcInvoker('order:canFollowup'),
+    enterFollowup: createIpcInvoker<[string], IpcResponse<{ success: boolean }>>('order:enterFollowup'),
+    executeFollowup: createIpcInvoker<[string, string], IpcResponse<{ started: boolean }>>('order:executeFollowup'),
+    finishFollowup: createIpcInvoker<[string], IpcResponse<{ success: boolean }>>('order:finishFollowup'),
+    canFollowup: createIpcInvoker<[string], IpcResponse<{ canFollowup: boolean }>>('order:canFollowup'),
     // Worktree management (preserve order history)
-    cleanupWorktreeOnly: createIpcInvoker('order:cleanupWorktreeOnly'),
-    mergeWorktreeToMain: createIpcInvoker('order:mergeWorktreeToMain'),
-    onEvent: (callback: (event: any) => void) => setupIpcListener('order:event', callback),
-    onAssigned: (callback: (data: any) => void) => setupIpcListener('order:assigned', callback),
-    onCompleted: (callback: (data: any) => void) => setupIpcListener('order:completed', callback),
-    onFailed: (callback: (data: any) => void) => setupIpcListener('order:failed', callback),
-    onOutput: (callback: (event: any) => void) => setupIpcListener('order:output', callback),
+    cleanupWorktreeOnly: createIpcInvoker<[string], IpcResponse<{ success: boolean; branch: string; message: string }>>('order:cleanupWorktreeOnly'),
+    mergeWorktreeToMain: createIpcInvoker<[{ orderId: string; targetBranch?: string; deleteAfterMerge?: boolean; squash?: boolean }], IpcResponse<unknown>>('order:mergeWorktreeToMain'),
+    onEvent: (callback: IpcEventCallback<OrderEvent>) => setupIpcListener('order:event', callback),
+    onAssigned: (callback: IpcEventCallback<OrderAssignedEvent>) => setupIpcListener('order:assigned', callback),
+    onCompleted: (callback: IpcEventCallback<OrderCompletedEvent>) => setupIpcListener('order:completed', callback),
+    onFailed: (callback: IpcEventCallback<OrderFailedEvent>) => setupIpcListener('order:failed', callback),
+    onOutput: (callback: IpcEventCallback<OutputEvent>) => setupIpcListener('order:output', callback),
     // Session events
-    onSessionStarted: (callback: (data: any) => void) => setupIpcListener('order:session-started', callback),
-    onSessionCompleted: (callback: (data: any) => void) => setupIpcListener('order:session-completed', callback),
-    onSessionFailed: (callback: (data: any) => void) => setupIpcListener('order:session-failed', callback),
+    onSessionStarted: (callback: IpcEventCallback<SessionStartedEvent>) => setupIpcListener('order:session-started', callback),
+    onSessionCompleted: (callback: IpcEventCallback<SessionCompletedEvent>) => setupIpcListener('order:session-completed', callback),
+    onSessionFailed: (callback: IpcEventCallback<SessionFailedEvent>) => setupIpcListener('order:session-failed', callback),
     // Stage events
-    onStageStarted: (callback: (data: any) => void) => setupIpcListener('order:stage-started', callback),
-    onStageCompleted: (callback: (data: any) => void) => setupIpcListener('order:stage-completed', callback),
-    onStageFailed: (callback: (data: any) => void) => setupIpcListener('order:stage-failed', callback),
+    onStageStarted: (callback: IpcEventCallback<StageStartedEvent>) => setupIpcListener('order:stage-started', callback),
+    onStageCompleted: (callback: IpcEventCallback<StageCompletedEvent>) => setupIpcListener('order:stage-completed', callback),
+    onStageFailed: (callback: IpcEventCallback<StageFailedEvent>) => setupIpcListener('order:stage-failed', callback),
     // Awaiting input event
-    onAwaitingInput: (callback: (data: any) => void) => setupIpcListener('order:awaiting-input', callback),
+    onAwaitingInput: (callback: IpcEventCallback<AwaitingInputEvent>) => setupIpcListener('order:awaiting-input', callback),
     // Todo progress event (from Claude's TodoWrite)
-    onTodoProgress: (callback: (data: any) => void) => setupIpcListener('order:todo-progress', callback),
+    onTodoProgress: (callback: IpcEventCallback<TodoProgressEvent>) => setupIpcListener('order:todo-progress', callback),
     // Order status changed event (for retry status updates)
-    onStatusChanged: (callback: (data: any) => void) => setupIpcListener('order:status-changed', callback),
+    onStatusChanged: (callback: IpcEventCallback<StatusChangedEvent>) => setupIpcListener('order:status-changed', callback),
     // Followup events
-    onFollowup: (callback: (data: any) => void) => setupIpcListener('order:followup', callback),
-    onFollowupStarted: (callback: (data: any) => void) => setupIpcListener('order:followup-started', callback),
-    onFollowupCompleted: (callback: (data: any) => void) => setupIpcListener('order:followup-completed', callback),
-    onFollowupFailed: (callback: (data: any) => void) => setupIpcListener('order:followup-failed', callback),
-    onFollowupFinished: (callback: (data: any) => void) => setupIpcListener('order:followup-finished', callback),
+    onFollowup: (callback: IpcEventCallback<FollowupStartedEvent>) => setupIpcListener('order:followup', callback),
+    onFollowupStarted: (callback: IpcEventCallback<FollowupStartedEvent>) => setupIpcListener('order:followup-started', callback),
+    onFollowupCompleted: (callback: IpcEventCallback<FollowupCompletedEvent>) => setupIpcListener('order:followup-completed', callback),
+    onFollowupFailed: (callback: IpcEventCallback<FollowupFailedEvent>) => setupIpcListener('order:followup-failed', callback),
+    onFollowupFinished: (callback: IpcEventCallback<FollowupFinishedEvent>) => setupIpcListener('order:followup-finished', callback),
   },
 
   receipt: {
-    getAll: createIpcInvoker('receipt:getAll'),
+    getAll: createIpcInvoker<[], IpcResponse<unknown[]>>('receipt:getAll'),
   },
 
   provider: {
-    getAvailable: createIpcInvoker('provider:getAvailable'),
+    getAvailable: createIpcInvoker<[], IpcResponse<string[]>>('provider:getAvailable'),
   },
 
   worktree: {
-    list: createIpcInvoker('worktree:list'),
-    exportPatch: createIpcInvoker('worktree:exportPatch'),
-    remove: createIpcInvoker('worktree:remove'),
-    openFolder: createIpcInvoker('worktree:openFolder'),
+    list: createIpcInvoker<[string], IpcResponse<unknown[]>>('worktree:list'),
+    exportPatch: createIpcInvoker<[string, string, string?], IpcResponse<string>>('worktree:exportPatch'),
+    remove: createIpcInvoker<[string, string, boolean?], IpcResponse<{ success: boolean }>>('worktree:remove'),
+    openFolder: createIpcInvoker<[string], IpcResponse<{ success: boolean }>>('worktree:openFolder'),
     // New: merge and cleanup functions
-    mergeToTarget: createIpcInvoker('worktree:mergeToTarget'),
-    removeOnly: createIpcInvoker('worktree:removeOnly'),
+    mergeToTarget: createIpcInvoker<[unknown], unknown>('worktree:mergeToTarget'),
+    removeOnly: createIpcInvoker<[string, string], void>('worktree:removeOnly'),
   },
 
   workflow: {
-    list: createIpcInvoker('workflow:list'),
-    get: createIpcInvoker('workflow:get'),
-    create: createIpcInvoker('workflow:create'),
-    update: createIpcInvoker('workflow:update'),
-    delete: createIpcInvoker('workflow:delete'),
-    run: createIpcInvoker('workflow:run'),
+    list: createIpcInvoker<[], IpcResponse<unknown[]>>('workflow:list'),
+    get: createIpcInvoker<[string], IpcResponse<unknown>>('workflow:get'),
+    create: createIpcInvoker<[unknown], IpcResponse<unknown>>('workflow:create'),
+    update: createIpcInvoker<[unknown], IpcResponse<unknown>>('workflow:update'),
+    delete: createIpcInvoker<[string], IpcResponse<{ success: boolean }>>('workflow:delete'),
+    run: createIpcInvoker<[string, unknown?], IpcResponse<{ runId: string }>>('workflow:run'),
   },
 
   skill: {
-    list: createIpcInvoker('skill:list'),
-    get: createIpcInvoker('skill:get'),
-    create: createIpcInvoker('skill:create'),
-    update: createIpcInvoker('skill:update'),
-    delete: createIpcInvoker('skill:delete'),
-    duplicate: createIpcInvoker('skill:duplicate'),
+    list: createIpcInvoker<[], IpcResponse<unknown[]>>('skill:list'),
+    get: createIpcInvoker<[string], IpcResponse<unknown>>('skill:get'),
+    create: createIpcInvoker<[unknown], IpcResponse<unknown>>('skill:create'),
+    update: createIpcInvoker<[unknown], IpcResponse<unknown>>('skill:update'),
+    delete: createIpcInvoker<[string], IpcResponse<{ success: boolean }>>('skill:delete'),
+    duplicate: createIpcInvoker<[string, string, string?], IpcResponse<unknown>>('skill:duplicate'),
   },
 
   run: {
-    list: createIpcInvoker('run:list'),
-    getStatus: createIpcInvoker('run:status'),
-    resume: createIpcInvoker('run:resume'),
-    getLogs: createIpcInvoker('run:logs'),
+    list: createIpcInvoker<[], IpcResponse<unknown[]>>('run:list'),
+    getStatus: createIpcInvoker<[string], IpcResponse<unknown>>('run:status'),
+    resume: createIpcInvoker<[string], IpcResponse<void>>('run:resume'),
+    getLogs: createIpcInvoker<[string], IpcResponse<unknown[]>>('run:logs'),
   },
 
   config: {
     assignments: {
-      get: createIpcInvoker('config:assignments:get'),
-      set: createIpcInvoker('config:assignments:set'),
+      get: createIpcInvoker<[], IpcResponse<unknown>>('config:assignments:get'),
+      set: createIpcInvoker<[unknown], IpcResponse<void>>('config:assignments:set'),
     },
     profiles: {
-      list: createIpcInvoker('config:profiles:list'),
-      set: createIpcInvoker('config:profiles:set'),
+      list: createIpcInvoker<[], IpcResponse<unknown[]>>('config:profiles:list'),
+      set: createIpcInvoker<[unknown], IpcResponse<void>>('config:profiles:set'),
     },
   },
 
   terminal: {
-    init: createIpcInvoker('terminal:init'),
-    getStatus: createIpcInvoker('terminal:poolStatus'),
-    getMetrics: createIpcInvoker('terminal:poolMetrics'),
-    subscribe: createIpcInvoker('terminal:subscribe'),
-    unsubscribe: createIpcInvoker('terminal:unsubscribe'),
-    shutdown: createIpcInvoker('terminal:shutdown'),
-    onData: (terminalId: string, callback: (data: string) => void) =>
+    init: createIpcInvoker<[unknown], IpcResponse<void>>('terminal:init'),
+    getStatus: createIpcInvoker<[], IpcResponse<unknown>>('terminal:poolStatus'),
+    getMetrics: createIpcInvoker<[], IpcResponse<unknown>>('terminal:poolMetrics'),
+    subscribe: createIpcInvoker<[string], IpcResponse<void>>('terminal:subscribe'),
+    unsubscribe: createIpcInvoker<[string], IpcResponse<void>>('terminal:unsubscribe'),
+    shutdown: createIpcInvoker<[], IpcResponse<void>>('terminal:shutdown'),
+    onData: (terminalId: string, callback: IpcEventCallback<string>) =>
       setupIpcListener(`terminal:data:${terminalId}`, callback),
   },
 
   dialog: {
-    selectFolder: createIpcInvoker('dialog:selectFolder'),
-    selectFile: createIpcInvoker('dialog:selectFile'),
+    selectFolder: createIpcInvoker<[], IpcResponse<string | null>>('dialog:selectFolder'),
+    selectFile: createIpcInvoker<[unknown?], IpcResponse<string | null>>('dialog:selectFile'),
   },
 
   system: {
-    checkEnvironment: createIpcInvoker('system:checkEnvironment'),
-    checkGitRepo: createIpcInvoker('system:checkGitRepo'),
-    gitInit: createIpcInvoker('system:gitInit'),
+    checkEnvironment: createIpcInvoker<[], IpcResponse<unknown>>('system:checkEnvironment'),
+    checkGitRepo: createIpcInvoker<[string], IpcResponse<unknown>>('system:checkGitRepo'),
+    gitInit: createIpcInvoker<[string], IpcResponse<void>>('system:gitInit'),
   },
 
   // Backward compatibility - legacy flat API
-  createBarista: createIpcInvoker('barista:create'),
-  getAllBaristas: createIpcInvoker('barista:getAll'),
-  createOrder: createIpcInvoker('order:create'),
-  getAllOrders: createIpcInvoker('order:getAll'),
-  getOrder: createIpcInvoker('order:get'),
-  getOrderLog: createIpcInvoker('order:getLog'),
-  cancelOrder: createIpcInvoker('order:cancel'),
-  getReceipts: createIpcInvoker('receipt:getAll'),
-  getAvailableProviders: createIpcInvoker('provider:getAvailable'),
-  listWorktrees: createIpcInvoker('worktree:list'),
-  exportPatch: createIpcInvoker('worktree:exportPatch'),
-  removeWorktree: createIpcInvoker('worktree:remove'),
-  openWorktreeFolder: createIpcInvoker('worktree:openFolder'),
-  onBaristaEvent: (callback: (event: any) => void) => setupIpcListener('barista:event', callback),
-  onOrderEvent: (callback: (event: any) => void) => setupIpcListener('order:event', callback),
-  onOrderAssigned: (callback: (data: any) => void) => setupIpcListener('order:assigned', callback),
-  onOrderCompleted: (callback: (data: any) => void) => setupIpcListener('order:completed', callback),
+  createBarista: createIpcInvoker<[string], IpcResponse<unknown>>('barista:create'),
+  getAllBaristas: createIpcInvoker<[], IpcResponse<unknown[]>>('barista:getAll'),
+  createOrder: createIpcInvoker<[unknown], IpcResponse<unknown>>('order:create'),
+  getAllOrders: createIpcInvoker<[], IpcResponse<unknown[]>>('order:getAll'),
+  getOrder: createIpcInvoker<[string], IpcResponse<unknown>>('order:get'),
+  getOrderLog: createIpcInvoker<[string], IpcResponse<string | null>>('order:getLog'),
+  cancelOrder: createIpcInvoker<[string], IpcResponse<{ cancelled: boolean }>>('order:cancel'),
+  getReceipts: createIpcInvoker<[], IpcResponse<unknown[]>>('receipt:getAll'),
+  getAvailableProviders: createIpcInvoker<[], IpcResponse<string[]>>('provider:getAvailable'),
+  listWorktrees: createIpcInvoker<[string], IpcResponse<unknown[]>>('worktree:list'),
+  exportPatch: createIpcInvoker<[string, string, string?], IpcResponse<string>>('worktree:exportPatch'),
+  removeWorktree: createIpcInvoker<[string, string, boolean?], IpcResponse<{ success: boolean }>>('worktree:remove'),
+  openWorktreeFolder: createIpcInvoker<[string], IpcResponse<{ success: boolean }>>('worktree:openFolder'),
+  onBaristaEvent: (callback: IpcEventCallback<BaristaEvent>) => setupIpcListener('barista:event', callback),
+  onOrderEvent: (callback: IpcEventCallback<OrderEvent>) => setupIpcListener('order:event', callback),
+  onOrderAssigned: (callback: IpcEventCallback<OrderAssignedEvent>) => setupIpcListener('order:assigned', callback),
+  onOrderCompleted: (callback: IpcEventCallback<OrderCompletedEvent>) => setupIpcListener('order:completed', callback),
 });
 
 // Expose 'api' namespace for terminal
 contextBridge.exposeInMainWorld('api', {
   terminal: {
-    init: createIpcInvoker('terminal:init'),
-    getStatus: createIpcInvoker('terminal:poolStatus'),
-    getMetrics: createIpcInvoker('terminal:poolMetrics'),
-    subscribe: createIpcInvoker('terminal:subscribe'),
-    unsubscribe: createIpcInvoker('terminal:unsubscribe'),
-    shutdown: createIpcInvoker('terminal:shutdown'),
-    onData: (terminalId: string, callback: (data: string) => void) =>
+    init: createIpcInvoker<[unknown], IpcResponse<void>>('terminal:init'),
+    getStatus: createIpcInvoker<[], IpcResponse<unknown>>('terminal:poolStatus'),
+    getMetrics: createIpcInvoker<[], IpcResponse<unknown>>('terminal:poolMetrics'),
+    subscribe: createIpcInvoker<[string], IpcResponse<void>>('terminal:subscribe'),
+    unsubscribe: createIpcInvoker<[string], IpcResponse<void>>('terminal:unsubscribe'),
+    shutdown: createIpcInvoker<[], IpcResponse<void>>('terminal:shutdown'),
+    onData: (terminalId: string, callback: IpcEventCallback<string>) =>
       setupIpcListener(`terminal:data:${terminalId}`, callback),
   },
 });

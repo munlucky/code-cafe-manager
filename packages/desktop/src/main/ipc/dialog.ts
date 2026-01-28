@@ -4,7 +4,7 @@
  */
 
 import { ipcMain, dialog, BrowserWindow } from 'electron';
-import { createLogger } from '@codecafe/core';
+import { createLogger, getErrorMessage } from '@codecafe/core';
 import type { IpcResponse } from './types.js';
 
 const logger = createLogger({ context: 'IPC:Dialog' });
@@ -34,13 +34,13 @@ export function registerDialogHandlers(): void {
       }
 
       return { success: true, data: result.filePaths[0] };
-    } catch (error: any) {
-      logger.error('selectFolder error', { error: error.message });
+    } catch (error: unknown) {
+      logger.error('selectFolder error', { error: getErrorMessage(error) });
       return {
         success: false,
         error: {
           code: 'DIALOG_ERROR',
-          message: error.message || 'Failed to open folder dialog',
+          message: getErrorMessage(error),
         },
       };
     }
@@ -70,13 +70,13 @@ export function registerDialogHandlers(): void {
         }
 
         return { success: true, data: result.filePaths[0] };
-      } catch (error: any) {
-        logger.error('selectFile error', { error: error.message });
+      } catch (error: unknown) {
+        logger.error('selectFile error', { error: getErrorMessage(error) });
         return {
           success: false,
           error: {
             code: 'DIALOG_ERROR',
-            message: error.message || 'Failed to open file dialog',
+            message: getErrorMessage(error),
           },
         };
       }

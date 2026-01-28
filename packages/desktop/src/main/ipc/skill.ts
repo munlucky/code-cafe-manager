@@ -6,6 +6,9 @@
 import { ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
+import { createLogger, toCodeCafeError } from '@codecafe/core';
+
+const logger = createLogger({ context: 'IPC:Skill' });
 
 /**
  * Skill Category 타입
@@ -68,15 +71,16 @@ async function handleIpc<T>(
       success: true,
       data,
     };
-  } catch (error: any) {
-    console.error(`[IPC] Error in ${context}:`, error);
+  } catch (error: unknown) {
+    const cafeError = toCodeCafeError(error);
+    logger.error(`Error in ${context}`, { error: cafeError.message });
 
     return {
       success: false,
       error: {
-        code: error.code || 'UNKNOWN',
-        message: error.message || 'Unknown error',
-        details: error.details,
+        code: cafeError.code,
+        message: cafeError.message,
+        details: cafeError.details,
       },
     };
   }
@@ -515,7 +519,7 @@ export function registerSkillHandlers(): void {
     }, 'skill:duplicate')
   );
 
-  console.log('[IPC] Skill handlers registered');
+  logger.info('Skill handlers registered');
 }
 
 // Legacy exports for backward compatibility

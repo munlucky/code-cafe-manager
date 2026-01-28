@@ -20,6 +20,9 @@
   "keywords": ["codecafe", "git", "worktree"],
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "@codecafe/core": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "typescript": "^5.3.3"

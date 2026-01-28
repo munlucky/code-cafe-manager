@@ -1,8 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { createLogger } from '@codecafe/core';
-import { ProviderConfig, ProviderType } from '../types';
+import { createLogger, safeParseProvidersYaml } from '@codecafe/core';
+import type { ProviderConfig } from '@codecafe/core';
+import { ProviderType } from '../types';
 
 const logger = createLogger({ context: 'ProviderAdapter' });
 
@@ -31,12 +32,20 @@ export class ProviderAdapter {
 
     try {
       const content = fs.readFileSync(this.configPath, 'utf-8');
-      const data = yaml.load(content) as any;
+      const raw = yaml.load(content);
+      const result = safeParseProvidersYaml(raw);
 
-      if (data && data.providers) {
-        for (const [providerName, config] of Object.entries(data.providers)) {
-          this.configs.set(providerName as ProviderType, config as ProviderConfig);
-        }
+      if (!result.success) {
+        logger.error('Invalid provider config format', {
+          error: result.error.message,
+          issues: result.error.issues
+        });
+        this.loadDefaults();
+        return;
+      }
+
+      for (const [providerName, config] of Object.entries(result.data.providers)) {
+        this.configs.set(providerName as ProviderType, config);
       }
     } catch (error) {
       logger.error('Failed to load provider configs', { error });
