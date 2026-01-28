@@ -21,7 +21,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@codecafe/core": "workspace:*",
     "@codecafe/providers-common": "workspace:*",
     "node-pty": "^1.0.0"
   },
