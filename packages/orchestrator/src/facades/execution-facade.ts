@@ -301,23 +301,23 @@ export class ExecutionFacade extends EventEmitter {
   /**
    * Create a new barista
    */
-  createBarista(provider: ProviderType): Barista {
+  async createBarista(provider: ProviderType): Promise<Barista> {
     const barista = this.baristaManager.createBarista(provider);
-    this.saveState(); // Async save (fire and forget)
+    await this.persistState();
     return barista;
   }
 
   /**
    * Create a new order
    */
-  createOrder(
+  async createOrder(
     workflowId: string,
     workflowName: string,
     counter: string,
     provider?: ProviderType,
     vars: Record<string, string> = {},
     cafeId?: string
-  ): Order {
+  ): Promise<Order> {
     const defaultProvider: ProviderType = provider || 'claude-code';
     const order = this.orderManager.createOrder(workflowId, workflowName, counter, defaultProvider, vars, cafeId);
 
@@ -331,7 +331,7 @@ export class ExecutionFacade extends EventEmitter {
       }
     }
 
-    this.saveState();
+    await this.persistState();
     return order;
   }
 
@@ -390,7 +390,7 @@ export class ExecutionFacade extends EventEmitter {
   async deleteOrder(orderId: string): Promise<boolean> {
     const deleted = this.orderManager.deleteOrder(orderId);
     if (deleted) {
-      await this.saveState();
+      await this.persistState();
     }
     return deleted;
   }
@@ -400,7 +400,7 @@ export class ExecutionFacade extends EventEmitter {
    */
   async deleteOrders(orderIds: string[]): Promise<{ deleted: string[]; failed: string[] }> {
     const result = this.orderManager.deleteOrders(orderIds);
-    await this.saveState();
+    await this.persistState();
     return result;
   }
 
@@ -427,7 +427,7 @@ export class ExecutionFacade extends EventEmitter {
   async startOrder(orderId: string): Promise<void> {
     this.orderManager.startOrder(orderId);
     await this.logManager.appendLog(orderId, 'Order started');
-    await this.saveState();
+    await this.persistState();
   }
 
   /**
@@ -454,7 +454,7 @@ export class ExecutionFacade extends EventEmitter {
     };
     await this.storage.addReceipt(receipt);
 
-    await this.saveState();
+    await this.persistState();
   }
 
   /**
@@ -468,14 +468,14 @@ export class ExecutionFacade extends EventEmitter {
   }
 
   /**
-   * Save state to storage (async, fire and forget)
+   * Save state to storage (fire and forget, non-blocking)
+   * Use persistState() if you need to wait for completion
    */
-  private async saveState(): Promise<void> {
-    // Don't wait, save in background
-    this.storage.saveOrders(this.orderManager.getAllOrders()).catch((err) => {
+  private saveState(): void {
+    this.storage.saveOrders(this.orderManager.getAllOrders()).catch((err: unknown) => {
       console.error('[ExecutionFacade] Failed to save orders:', err);
     });
-    this.storage.saveBaristas(this.baristaManager.getAllBaristas()).catch((err) => {
+    this.storage.saveBaristas(this.baristaManager.getAllBaristas()).catch((err: unknown) => {
       console.error('[ExecutionFacade] Failed to save baristas:', err);
     });
   }

@@ -131,7 +131,7 @@ describe('BaristaEngineV2', () => {
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
       // Wait for execution to start
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       const cancelled = await engine.cancelOrder('order-1');
 
@@ -153,7 +153,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       // Mock cancel failure
       mockSession.cancel.mockRejectedValue(new Error('Cancel failed'));
@@ -171,7 +171,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       const activeExecutions = engine.getActiveExecutions();
       expect(activeExecutions.size).toBe(1);
@@ -192,7 +192,7 @@ describe('BaristaEngineV2', () => {
       mockSession.execute.mockImplementation(() => new Promise(() => {}));
 
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       await engine.dispose();
 
@@ -206,7 +206,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       const testMessage = 'test input message';
       await engine.sendInput('order-1', testMessage);
@@ -226,7 +226,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       mockSession.sendInput.mockRejectedValue(new Error('Send failed'));
 
@@ -240,7 +240,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       await engine.sendInput('order-1', '');
 
@@ -254,7 +254,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       const multilineInput = 'Line 1\nLine 2\nLine 3';
       await engine.sendInput('order-1', multilineInput);
@@ -269,7 +269,7 @@ describe('BaristaEngineV2', () => {
       const resolveExecution = setupControlledExecution();
       const executePromise = engine.executeOrder(mockOrder, mockBarista);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => engine.once('order:started', resolve));
 
       const unicodeInput = '안녕하세요 👍 🚀';
       await engine.sendInput('order-1', unicodeInput);
@@ -278,6 +278,200 @@ describe('BaristaEngineV2', () => {
 
       resolveExecution({ success: true, output: 'done' });
       await executePromise.catch(() => {});
+    });
+  });
+
+  describe('Workflow Execution', () => {
+    it('should execute order with workflow config', async () => {
+      const orderWithWorkflow: Order = {
+        ...mockOrder,
+        id: 'order-workflow-1',
+        workflowConfig: {
+          stages: [
+            { id: 'analyze', name: 'Analyze', provider: 'claude-code', prompt: 'Analyze the code' },
+            { id: 'code', name: 'Code', provider: 'claude-code', prompt: 'Implement changes' },
+          ],
+          vars: { projectType: 'typescript' },
+        },
+      };
+
+      await engine.executeOrder(orderWithWorkflow, mockBarista);
+
+      const sessionManager = engine.getSessionManager();
+      expect(sessionManager.createSessionWithWorkflow).toHaveBeenCalled();
+      expect(mockSession.execute).toHaveBeenCalled();
+    });
+
+    it('should load default workflow when not provided', async () => {
+      const orderWithoutWorkflow: Order = {
+        ...mockOrder,
+        id: 'order-no-workflow',
+        workflowConfig: undefined,
+      };
+
+      await engine.executeOrder(orderWithoutWorkflow, mockBarista);
+
+      const sessionManager = engine.getSessionManager();
+      expect(sessionManager.createSessionWithWorkflow).toHaveBeenCalled();
+      expect(mockSession.execute).toHaveBeenCalled();
+    });
+
+    it('should handle workflow stage failure', async () => {
+      mockSession.execute.mockRejectedValue(new Error('Stage analyze failed'));
+
+      const orderWithWorkflow: Order = {
+        ...mockOrder,
+        id: 'order-fail-workflow',
+        workflowConfig: {
+          stages: [
+            { id: 'analyze', name: 'Analyze', provider: 'claude-code', prompt: 'Analyze' },
+          ],
+          vars: {},
+        },
+      };
+
+      await expect(engine.executeOrder(orderWithWorkflow, mockBarista))
+        .rejects.toThrow();
+    });
+  });
+
+  describe('Retry and Recovery', () => {
+    it('should retry from specific stage', async () => {
+      const resolveExecution = setupControlledExecution();
+      const executePromise = engine.executeOrder(mockOrder, mockBarista);
+
+      await new Promise(resolve => engine.once('order:started', resolve));
+
+      await engine.retryFromStage('order-1', 'stage-2');
+
+      expect(mockSession.retryFromStage).toHaveBeenCalledWith('stage-2');
+
+      resolveExecution({ success: true, output: 'done' });
+      await executePromise.catch(() => {});
+    });
+
+    it('should retry from beginning', async () => {
+      const resolveExecution = setupControlledExecution();
+      const executePromise = engine.executeOrder(mockOrder, mockBarista);
+
+      await new Promise(resolve => engine.once('order:started', resolve));
+
+      await engine.retryFromBeginning('order-1', true);
+
+      expect(mockSession.retryFromBeginning).toHaveBeenCalledWith(true);
+
+      resolveExecution({ success: true, output: 'done' });
+      await executePromise.catch(() => {});
+    });
+
+    it('should return retry options for order with session', async () => {
+      const resolveExecution = setupControlledExecution();
+      const executePromise = engine.executeOrder(mockOrder, mockBarista);
+
+      await new Promise(resolve => engine.once('order:started', resolve));
+
+      // Mock getRetryOptions on session
+      const mockRetryOptions = [
+        { stageId: 'stage-1', stageName: 'Analyze', batchIndex: 0 },
+        { stageId: 'stage-2', stageName: 'Code', batchIndex: 1 },
+      ];
+      mockSession.getRetryOptions = vi.fn().mockReturnValue(mockRetryOptions);
+
+      const options = engine.getRetryOptions('order-1');
+
+      expect(options).toEqual(mockRetryOptions);
+
+      resolveExecution({ success: true, output: 'done' });
+      await executePromise.catch(() => {});
+    });
+
+    it('should return null retry options for non-existent order', async () => {
+      const options = engine.getRetryOptions('non-existent-order');
+      expect(options).toBeNull();
+    });
+  });
+
+  describe('Followup Mode', () => {
+    it('should enter followup mode after completion', async () => {
+      const resolveExecution = setupControlledExecution();
+      const executePromise = engine.executeOrder(mockOrder, mockBarista);
+
+      await new Promise(resolve => engine.once('order:started', resolve));
+
+      await engine.enterFollowup('order-1');
+
+      expect(mockSession.enterFollowup).toHaveBeenCalled();
+
+      resolveExecution({ success: true, output: 'done' });
+      await executePromise.catch(() => {});
+    });
+
+    it('should execute followup prompt', async () => {
+      const resolveExecution = setupControlledExecution();
+      const executePromise = engine.executeOrder(mockOrder, mockBarista);
+
+      await new Promise(resolve => engine.once('order:started', resolve));
+
+      await engine.executeFollowup('order-1', 'Add tests for this feature');
+
+      expect(mockSession.executeFollowup).toHaveBeenCalledWith('Add tests for this feature');
+
+      resolveExecution({ success: true, output: 'done' });
+      await executePromise.catch(() => {});
+    });
+
+    it('should finish followup mode', async () => {
+      const resolveExecution = setupControlledExecution();
+      const executePromise = engine.executeOrder(mockOrder, mockBarista);
+
+      await new Promise(resolve => engine.once('order:started', resolve));
+
+      await engine.finishFollowup('order-1');
+
+      expect(mockSession.finishFollowup).toHaveBeenCalled();
+
+      resolveExecution({ success: true, output: 'done' });
+      await executePromise.catch(() => {});
+    });
+
+    it('should check canFollowup correctly', async () => {
+      const resolveExecution = setupControlledExecution();
+      const executePromise = engine.executeOrder(mockOrder, mockBarista);
+
+      await new Promise(resolve => engine.once('order:started', resolve));
+
+      // Mock canFollowup on session
+      mockSession.canFollowup = vi.fn().mockReturnValue(true);
+
+      const canFollow = engine.canFollowup('order-1');
+
+      expect(canFollow).toBe(true);
+
+      resolveExecution({ success: true, output: 'done' });
+      await executePromise.catch(() => {});
+    });
+  });
+
+  describe('Session Management', () => {
+    it('should restore session for followup after app restart', async () => {
+      const completedOrder: Order = {
+        ...mockOrder,
+        id: 'order-completed',
+        status: OrderStatus.COMPLETED,
+        startedAt: new Date(),
+        endedAt: new Date(),
+      };
+
+      await engine.restoreSessionForFollowup(
+        completedOrder,
+        mockBarista,
+        'cafe-123',
+        '/project/path'
+      );
+
+      const sessionManager = engine.getSessionManager();
+      expect(sessionManager.createSession).toHaveBeenCalled();
+      expect(mockSession.restoreForFollowup).toHaveBeenCalled();
     });
   });
 });
