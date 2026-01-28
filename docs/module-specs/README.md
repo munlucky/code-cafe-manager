@@ -21,20 +21,21 @@
          │                          │                          │
          └──────────────────────────┼──────────────────────────┘
                                     │
-                                    ▼
-                          ┌─────────────────┐
-                          │      core       │
-                          │  (도메인 모델)   │
-                          └────────┬────────┘
-                                   │
-         ┌─────────────────────────┼─────────────────────────┐
-         │                         │                         │
-         ▼                         ▼                         ▼
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ provider-       │     │   providers-    │     │ provider-       │
-│ claude-code     │────▶│   common        │◀────│ codex           │
-└─────────────────┘     │  (IProvider)    │     └─────────────────┘
-                        └─────────────────┘
+                       ┌────────────┴────────────┐
+                       ▼                         ▼
+             ┌─────────────────┐       ┌─────────────────┐
+             │      core       │       │     schema      │
+             │  (도메인 모델)   │       │  (스키마 검증)   │
+             └────────┬────────┘       └─────────────────┘
+                      │
+    ┌─────────────────┼─────────────────┐
+    │                 │                 │
+    ▼                 ▼                 ▼
+┌─────────┐     ┌───────────┐     ┌─────────┐
+│providers│     │ providers │     │providers│
+│/claude- │────▶│  /common  │◀────│ /codex  │
+│  code   │     │(IProvider)│     │         │
+└─────────┘     └───────────┘     └─────────┘
 ```
 
 ## Layer Architecture
@@ -59,8 +60,10 @@
 │  Domain Layer                                                           │
 │  └── core/                                                              │
 │      ├── Barista, Order, Receipt    : 도메인 엔티티                      │
-│      ├── BaristaManager, OrderManager : 매니저 클래스                    │
-│      └── schema/                    : Zod 스키마 검증                    │
+│      └── BaristaManager, OrderManager : 매니저 클래스                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Schema Layer                                                           │
+│  └── schema/        : YAML/JSON 파싱 및 Zod 스키마 검증                  │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  Infrastructure Layer                                                   │
 │  ├── providers/      : CLI Provider 구현체 (claude-code, codex)         │
@@ -88,16 +91,17 @@ User Request
 
 ## Package Summary
 
-| Package | 역할 | 핵심 Export |
-|---------|------|-------------|
-| `core` | 도메인 모델, 타입, 스키마 | `Barista`, `Order`, `BaristaManager`, `OrderManager` |
-| `orchestrator` | 실행 오케스트레이션 | `ExecutionFacade`, `BaristaEngineV2`, `TerminalPool` |
-| `cli` | 명령줄 인터페이스 | `codecafe` CLI commands |
-| `desktop` | Electron GUI | IPC Handlers, React UI |
-| `git-worktree` | Git Worktree 관리 | `WorktreeManager` |
-| `providers-common` | Provider 인터페이스 | `IProvider` |
-| `provider-claude-code` | Claude Code CLI | `ClaudeCodeProvider` |
-| `providers-codex` | Codex CLI | `CodexProvider` |
+| Package | 역할 | 핵심 Export | Spec |
+|---------|------|-------------|------|
+| `core` | 도메인 모델, 타입 | `Barista`, `Order`, `BaristaManager`, `OrderManager` | [CLAUDE.md](../../packages/core/CLAUDE.md) |
+| `schema` | YAML/JSON 스키마 검증 | `parseYaml`, Zod schemas | [CLAUDE.md](../../packages/schema/CLAUDE.md) |
+| `orchestrator` | 실행 오케스트레이션 | `ExecutionFacade`, `BaristaEngineV2`, `TerminalPool` | [CLAUDE.md](../../packages/orchestrator/CLAUDE.md) |
+| `cli` | 명령줄 인터페이스 | `codecafe` CLI commands | [CLAUDE.md](../../packages/cli/CLAUDE.md) |
+| `desktop` | Electron GUI | IPC Handlers, React UI | [CLAUDE.md](../../packages/desktop/CLAUDE.md) |
+| `git-worktree` | Git Worktree 관리 | `WorktreeManager` | [CLAUDE.md](../../packages/git-worktree/CLAUDE.md) |
+| `providers/common` | Provider 인터페이스 | `IProvider` | [CLAUDE.md](../../packages/providers/common/CLAUDE.md) |
+| `providers/claude-code` | Claude Code CLI | `ClaudeCodeProvider` | [CLAUDE.md](../../packages/providers/claude-code/CLAUDE.md) |
+| `providers/codex` | Codex CLI | `CodexProvider` | [CLAUDE.md](../../packages/providers/codex/CLAUDE.md) |
 
 ## Phase Evolution
 
