@@ -261,9 +261,7 @@ export class OrderService {
     // Cancel any running process first
     await this.orchestrator.cancelOrder(order.id).catch(() => {});
 
-    // Wait for file locks to release
-    await new Promise(resolve => setTimeout(resolve, 500));
-
+    // WorktreeManager.removeWorktree has built-in retry logic for file lock issues
     await WorktreeManager.removeWorktree({
       worktreePath: order.worktreeInfo.path,
       repoPath: order.worktreeInfo?.repoPath || order.counter,
