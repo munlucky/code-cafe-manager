@@ -9,7 +9,7 @@ import { promises as fs } from 'fs';
 import { homedir } from 'os';
 import { Orchestrator, Order, createLogger, toCodeCafeError } from '@codecafe/core';
 import { WorktreeManager } from '@codecafe/git-worktree';
-import type { BaristaEngineV2 } from '@codecafe/orchestrator';
+import type { ExecutionFacade } from '@codecafe/orchestrator';
 import { convertAnsiToHtml } from '../../common/output-utils.js';
 import { parseOutputType } from '../../common/output-markers.js';
 
@@ -116,7 +116,7 @@ export interface OutputHistoryEntry {
  */
 export interface OrderServiceDependencies {
   orchestrator: Orchestrator;
-  getExecutionManager: () => { getBaristaEngine: () => BaristaEngineV2 | null } | null;
+  getExecutionManager: () => { getBaristaEngine: () => ExecutionFacade | null } | null;
 }
 
 /**
@@ -165,7 +165,7 @@ function parseLogChunks(content: string): LogChunk[] {
  */
 export class OrderService {
   private readonly orchestrator: Orchestrator;
-  private readonly getExecutionManager: () => { getBaristaEngine: () => BaristaEngineV2 | null } | null;
+  private readonly getExecutionManager: () => { getBaristaEngine: () => ExecutionFacade | null } | null;
 
   constructor(deps: OrderServiceDependencies) {
     this.orchestrator = deps.orchestrator;
@@ -485,7 +485,7 @@ export class OrderService {
   /**
    * Get BaristaEngine from ExecutionManager
    */
-  private getBaristaEngine(): BaristaEngineV2 {
+  private getBaristaEngine(): ExecutionFacade {
     const executionManager = this.getExecutionManager();
     if (!executionManager) {
       throw new Error('ExecutionManager not initialized');

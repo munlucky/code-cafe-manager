@@ -1,6 +1,6 @@
 /**
  * Execution Manager
- * Orchestrator의 order:execution-started 이벤트를 받아 BaristaEngineV2를 통해 실제 실행
+ * Orchestrator의 order:execution-started 이벤트를 받아 ExecutionFacade를 통해 실제 실행
  */
 
 import * as path from 'path';
@@ -9,20 +9,55 @@ import { existsSync } from 'fs';
 import { Orchestrator, Order, Barista, OrderStatus, createLogger, toCodeCafeError, getErrorMessage } from '@codecafe/core';
 
 const logger = createLogger({ context: 'ExecutionManager' });
-import { BaristaEngineV2, TerminalPool } from '@codecafe/orchestrator';
-import type {
-  OrderStartedEvent,
-  OrderCompletedEvent,
-  OrderFailedEvent,
-  StageStartedEvent,
-  StageCompletedEvent,
-  StageFailedEvent,
-  SessionStatusSummary,
-} from '@codecafe/orchestrator/session';
+import { ExecutionFacade } from '@codecafe/orchestrator';
+import type { SessionStatusSummary } from '@codecafe/orchestrator/session';
 import { DEFAULT_TERMINAL_POOL_CONFIG } from './config/terminal-pool.config.js';
 import { convertAnsiToHtml } from '../common/output-utils.js';
 import { parseOutputType } from '../common/output-markers.js';
 import { terminalLogger } from './file-logger.js';
+
+// Event data types for ExecutionFacade
+interface OrderOutputData {
+  orderId: string;
+  data: unknown;
+}
+
+interface OrderStartedData {
+  orderId: string;
+  status: SessionStatusSummary;
+}
+
+interface OrderCompletedData {
+  orderId: string;
+  status: SessionStatusSummary;
+}
+
+interface OrderFailedData {
+  orderId: string;
+  error: string;
+  status?: SessionStatusSummary;
+}
+
+interface StageStartedData {
+  orderId: string;
+  stageId: string;
+  stageName: string;
+  provider: string;
+  skills: string[];
+}
+
+interface StageCompletedData {
+  orderId: string;
+  stageId: string;
+  stageName: string;
+  duration?: number;
+}
+
+interface StageFailedData {
+  orderId: string;
+  stageId: string;
+  error: string;
+}
 
 interface ExecutionManagerConfig {
   orchestrator: Orchestrator;
@@ -47,8 +82,7 @@ interface OutputMetrics {
 export class ExecutionManager {
   private orchestrator: Orchestrator;
   private mainWindow: BrowserWindow | null;
-  private terminalPool: TerminalPool | null = null;
-  private baristaEngine: BaristaEngineV2 | null = null;
+  private executionFacade: ExecutionFacade | null = null;
   private activeExecutions = new Map<string, { baristaId: string }>();
   // 이벤트 리스너 중복 등록 방지용 플래그
   private eventListenersRegistered = false;
@@ -68,21 +102,18 @@ export class ExecutionManager {
   async start(): Promise<void> {
     logger.info('Starting...');
 
-    // 기존 Barista Engine 정리 (이벤트 리스너 중복 등록 방지)
-    if (this.baristaEngine) {
-      this.baristaEngine.removeAllListeners();
-      await this.baristaEngine.dispose();
-      this.baristaEngine = null;
+    // 기존 Execution Facade 정리 (이벤트 리스너 중복 등록 방지)
+    if (this.executionFacade) {
+      this.executionFacade.removeAllListeners();
+      await this.executionFacade.dispose();
+      this.executionFacade = null;
     }
 
-    // Terminal Pool 초기화
-    await this.initTerminalPool();
+    // Execution Facade 초기화
+    this.executionFacade = await this.initExecutionFacade();
 
-    // Barista Engine 초기화
-    this.baristaEngine = new BaristaEngineV2(this.terminalPool!);
-
-    // Barista Engine 이벤트 리스너 설정
-    this.setupBaristaEngineEvents();
+    // Execution Facade 이벤트 리스너 설정
+    this.setupExecutionFacadeEvents();
 
     // Orchestrator 이벤트 리스너 설정
     this.setupEventListeners();
@@ -108,22 +139,16 @@ export class ExecutionManager {
       this.metricsSamplingTimer = null;
     }
 
-    // Barista Engine 이벤트 리스너 제거
-    if (this.baristaEngine) {
-      this.baristaEngine.removeAllListeners();
-      await this.baristaEngine.dispose();
-      this.baristaEngine = null;
+    // Execution Facade 이벤트 리스너 제거
+    if (this.executionFacade) {
+      this.executionFacade.removeAllListeners();
+      await this.executionFacade.dispose();
+      this.executionFacade = null;
     }
 
     // Orchestrator 이벤트 리스너 제거 (중복 등록 방지)
     this.orchestrator.removeAllListeners('order:execution-started');
     this.orchestrator.removeAllListeners('order:input');
-
-    // Terminal Pool 정리
-    if (this.terminalPool) {
-      await this.terminalPool.dispose();
-      this.terminalPool = null;
-    }
 
     // 메트릭 정리
     this.outputMetrics.clear();
@@ -142,48 +167,51 @@ export class ExecutionManager {
   }
 
   /**
-   * Terminal Pool 초기화
+   * Execution Facade 초기화
    */
-  private async initTerminalPool(): Promise<void> {
+  private async initExecutionFacade(): Promise<ExecutionFacade> {
     const appRoot = process.cwd();
     // Resolve project root (repo root) assuming we are running from packages/desktop during dev
     // If packaged or running from root, handle accordingly
-    const projectRoot = appRoot.includes('packages') 
-      ? path.resolve(appRoot, '..', '..') 
+    const projectRoot = appRoot.includes('packages')
+      ? path.resolve(appRoot, '..', '..')
       : appRoot;
 
-    logger.info(`Initializing Terminal Pool with CWD: ${projectRoot}`);
+    logger.info(`Initializing Execution Facade with CWD: ${projectRoot}`);
 
-    const poolConfig = {
-      ...DEFAULT_TERMINAL_POOL_CONFIG,
-      cwd: projectRoot,
+    const facadeConfig = {
+      terminalPoolConfig: {
+        ...DEFAULT_TERMINAL_POOL_CONFIG,
+        cwd: projectRoot,
+      },
     };
 
-    this.terminalPool = new TerminalPool(poolConfig);
-    logger.info('Terminal pool initialized');
+    const facade = new ExecutionFacade(facadeConfig);
+    logger.info('Execution Facade initialized');
+    return facade;
   }
 
   /**
-   * Barista Engine 이벤트 리스너 설정
+   * Execution Facade 이벤트 리스너 설정
    * 중복 등록 방지: 이미 등록된 경우 리스너를 제거 후 다시 등록
    */
-  private setupBaristaEngineEvents(): void {
-    if (!this.baristaEngine) return;
+  private setupExecutionFacadeEvents(): void {
+    if (!this.executionFacade) return;
 
     // 기존 리스너 제거 (중복 등록 방지)
     if (this.eventListenersRegistered) {
-      this.baristaEngine.removeAllListeners('order:output');
-      this.baristaEngine.removeAllListeners('order:started');
-      this.baristaEngine.removeAllListeners('order:completed');
-      this.baristaEngine.removeAllListeners('order:failed');
-      this.baristaEngine.removeAllListeners('order:awaiting-input');
-      this.baristaEngine.removeAllListeners('stage:started');
-      this.baristaEngine.removeAllListeners('stage:completed');
-      this.baristaEngine.removeAllListeners('stage:failed');
+      this.executionFacade.removeAllListeners('order:output');
+      this.executionFacade.removeAllListeners('order:started');
+      this.executionFacade.removeAllListeners('order:completed');
+      this.executionFacade.removeAllListeners('order:failed');
+      this.executionFacade.removeAllListeners('order:awaiting-input');
+      this.executionFacade.removeAllListeners('stage:started');
+      this.executionFacade.removeAllListeners('stage:completed');
+      this.executionFacade.removeAllListeners('stage:failed');
     }
 
     // order:output - 터미널 출력
-    this.baristaEngine.on('order:output', (data: { orderId: string; data: string }) => {
+    this.executionFacade.on('order:output', (data: OrderOutputData) => {
       const now = Date.now();
 
       // 메트릭 수집
@@ -201,7 +229,7 @@ export class ExecutionManager {
       metrics.totalChunks++;
 
       // Parse output type from markers (uses parseOutputType helper)
-      const parsed = parseOutputType(data.data);
+      const parsed = parseOutputType(String(data.data));
 
       // Map user_prompt to user-input for frontend display
       // Map json to tool_result for collapsible treatment
@@ -230,12 +258,12 @@ export class ExecutionManager {
 
       // 3. 로그 저장 (지속성용) - 원본 그대로 저장 (마커 포함)
       // 3-1. Orchestrator의 Order별 로그 파일 (기존)
-      this.orchestrator.appendOrderLog(data.orderId, data.data).catch((err: Error) => {
+      this.orchestrator.appendOrderLog(data.orderId, String(data.data)).catch((err: Error) => {
         logger.error(`Failed to append log for order ${data.orderId}`, { error: err.message });
       });
 
       // 3-2. 통합 터미널 로그 파일 (신규)
-      terminalLogger.log(data.orderId, data.data).catch((err: Error) => {
+      terminalLogger.log(data.orderId, String(data.data)).catch((err: Error) => {
         logger.error(`Failed to write terminal log for order ${data.orderId}`, { error: err.message });
       });
     });
@@ -243,7 +271,7 @@ export class ExecutionManager {
     // Session 관련 이벤트들
     // NOTE: orchestrator.startOrder()는 orchestrator.executeOrder()에서 이미 호출됨
     // 여기서 중복 호출하면 "Order started" 로그가 두 번 저장되는 버그 발생
-    this.baristaEngine.on('order:started', (data: OrderStartedEvent) => {
+    this.executionFacade.on('order:started', (data: { orderId: string; status: SessionStatusSummary }) => {
       const now = Date.now();
 
       logger.info(`Order STARTED event received: ${data.orderId}`);
@@ -267,7 +295,7 @@ export class ExecutionManager {
       this.sendToRenderer('order:session-started', data);
     });
 
-    this.baristaEngine.on('order:completed', (data: OrderCompletedEvent) => {
+    this.executionFacade.on('order:completed', (data: OrderCompletedData) => {
       const now = Date.now();
       const metrics = this.outputMetrics.get(data.orderId);
       const duration = metrics?.orderStartTime
@@ -285,7 +313,7 @@ export class ExecutionManager {
       }, 60000); // 1분 후 정리
     });
 
-    this.baristaEngine.on('order:failed', (data: OrderFailedEvent) => {
+    this.executionFacade.on('order:failed', (data: OrderFailedData) => {
       const now = Date.now();
       const metrics = this.outputMetrics.get(data.orderId);
       const duration = metrics?.orderStartTime
@@ -302,7 +330,7 @@ export class ExecutionManager {
     });
 
     // Stage 이벤트들 (로깅 강화)
-    this.baristaEngine.on('stage:started', (data: StageStartedEvent) => {
+    this.executionFacade.on('stage:started', (data: StageStartedData) => {
       logger.info(`Stage STARTED: ${data.stageId} (${data.stageName || data.stageId})`, { orderId: data.orderId, provider: data.provider });
       logger.debug('Stage skills', { skills: data.skills });
       this.sendToRenderer('order:stage-started', {
@@ -314,47 +342,47 @@ export class ExecutionManager {
       });
     });
 
-    this.baristaEngine.on('stage:completed', (data: StageCompletedEvent) => {
+    this.executionFacade.on('stage:completed', (data: StageCompletedData) => {
       const duration = data.duration || 0;
       logger.info(`Stage COMPLETED: ${data.stageId}`, { orderId: data.orderId, duration: `${duration}ms` });
       // IPC 전송 제거: stage 완료 정보는 Output 스트림([STAGE_END] 마커)을 통해 단일 경로로 전달
       // 기존: this.sendToRenderer('order:stage-completed', {...})
     });
 
-    this.baristaEngine.on('stage:failed', (data: StageFailedEvent) => {
+    this.executionFacade.on('stage:failed', (data: StageFailedData) => {
       logger.error(`Stage FAILED: ${data.stageId}`, { orderId: data.orderId, error: data.error || 'Unknown' });
       // IPC 전송 제거: stage 실패 정보는 Output 스트림([STAGE_END] 마커)을 통해 단일 경로로 전달
       // 기존: this.sendToRenderer('order:stage-failed', {...})
     });
 
     // order:awaiting-input - 사용자 입력 대기 상태
-    this.baristaEngine.on('order:awaiting-input', (data: { orderId: string }) => {
+    this.executionFacade.on('order:awaiting-input', (data: { orderId: string }) => {
       logger.info(`Order AWAITING INPUT: ${data.orderId}`);
       this.sendToRenderer('order:awaiting-input', data);
     });
 
     // Followup 이벤트들
-    this.baristaEngine.on('order:followup', (data: { orderId: string }) => {
+    this.executionFacade.on('order:followup', (data: { orderId: string }) => {
       logger.info(`Order FOLLOWUP MODE: ${data.orderId}`);
       this.sendToRenderer('order:followup', data);
     });
 
-    this.baristaEngine.on('order:followup-started', (data: { orderId: string; prompt: string }) => {
+    this.executionFacade.on('order:followup-started', (data: { orderId: string; prompt: string }) => {
       logger.info(`Order FOLLOWUP STARTED: ${data.orderId}`);
       this.sendToRenderer('order:followup-started', data);
     });
 
-    this.baristaEngine.on('order:followup-completed', (data: { orderId: string; stageId?: string; output?: string }) => {
+    this.executionFacade.on('order:followup-completed', (data: { orderId: string; stageId?: string; output?: string }) => {
       logger.info(`Order FOLLOWUP COMPLETED: ${data.orderId}`);
       this.sendToRenderer('order:followup-completed', data);
     });
 
-    this.baristaEngine.on('order:followup-failed', (data: { orderId: string; stageId?: string; error?: string }) => {
+    this.executionFacade.on('order:followup-failed', (data: { orderId: string; stageId?: string; error?: string }) => {
       logger.error(`Order FOLLOWUP FAILED: ${data.orderId}`, { error: data.error || 'Unknown' });
       this.sendToRenderer('order:followup-failed', data);
     });
 
-    this.baristaEngine.on('order:followup-finished', (data: { orderId: string }) => {
+    this.executionFacade.on('order:followup-finished', (data: { orderId: string }) => {
       logger.info(`Order FOLLOWUP FINISHED: ${data.orderId}`);
       this.sendToRenderer('order:followup-finished', data);
     });
@@ -443,7 +471,7 @@ export class ExecutionManager {
    * Order 실행 처리
    */
   private async handleOrderExecution(orderId: string, baristaId: string, prompt: string): Promise<void> {
-    if (!this.baristaEngine) {
+    if (!this.executionFacade) {
       logger.error('Barista engine not initialized');
       await this.orchestrator.completeOrder(orderId, false, 'Execution engine not initialized');
       return;
@@ -474,11 +502,11 @@ export class ExecutionManager {
         prompt,
       };
 
-      // BaristaEngineV2를 통해 실행
-      await this.baristaEngine.executeOrder(executionOrder as Order, barista);
+      // ExecutionFacade를 통해 실행
+      await this.executionFacade.executeOrder(executionOrder as Order, barista);
 
       // Session 상태 확인 - awaiting_input이면 완료하지 않음
-      const sessionStatus = this.baristaEngine.getSessionStatus();
+      const sessionStatus = this.executionFacade.getSessionStatus();
       logger.debug(`Session status for order ${orderId}`, { sessionStatus });
       
       const isAwaitingInput = sessionStatus && 
@@ -519,7 +547,7 @@ export class ExecutionManager {
       });
     } finally {
       // Session이 awaiting_input 상태인 경우 activeExecutions에서 삭제하지 않음
-      const sessionStatus = this.baristaEngine?.getSessionStatus();
+      const sessionStatus = this.executionFacade?.getSessionStatus();
       const isAwaitingInput = sessionStatus && 
         typeof sessionStatus === 'object' &&
         'sessions' in sessionStatus &&
@@ -538,7 +566,7 @@ export class ExecutionManager {
    * - 완료된 order(worktree 존재): followup 모드로 추가 요청 처리
    */
   private async handleOrderInput(orderId: string, message: string): Promise<void> {
-    if (!this.baristaEngine) {
+    if (!this.executionFacade) {
       logger.error('Barista engine not initialized');
       return;
     }
@@ -564,13 +592,13 @@ export class ExecutionManager {
           const cafeId = order.cafeId || 'default';
 
           // Session 복원
-          await this.baristaEngine.restoreSessionForFollowup(order, barista, cafeId, cwd);
+          await this.executionFacade.restoreSessionForFollowup(order, barista, cafeId, cwd);
           this.activeExecutions.set(orderId, { baristaId: barista.id });
 
           logger.info(`Session restored for order ${orderId}, executing followup`);
 
           // Followup 실행
-          await this.baristaEngine.executeFollowup(orderId, message);
+          await this.executionFacade.executeFollowup(orderId, message);
 
           // UI에 알림
           this.sendToRenderer('order:execution-progress', {
@@ -593,7 +621,7 @@ export class ExecutionManager {
     }
 
     // activeExecutions에 있는 경우 - 세션 상태에 따라 처리
-    const sessionStatus = this.baristaEngine.getOrderSessionStatus(orderId);
+    const sessionStatus = this.executionFacade.getOrderSessionStatus(orderId);
     const order = this.orchestrator.getOrder(orderId);
 
     // 완료된 order (worktree 존재) - followup으로 처리
@@ -608,7 +636,7 @@ export class ExecutionManager {
       logger.info(`Order ${orderId} is in ${sessionStatus || 'restored'} state, executing followup`);
 
       try {
-        await this.baristaEngine.executeFollowup(orderId, message);
+        await this.executionFacade.executeFollowup(orderId, message);
 
         // UI에 알림
         this.sendToRenderer('order:execution-progress', {
@@ -625,7 +653,7 @@ export class ExecutionManager {
 
     // 실행 중인 order - 터미널에 직접 입력
     try {
-      await this.baristaEngine.sendInput(orderId, message);
+      await this.executionFacade.sendInput(orderId, message);
       logger.info('Input sent to order', { orderId });
 
       // UI에 입력 전송 알림
@@ -653,17 +681,17 @@ export class ExecutionManager {
    * Session 상태 조회
    */
   getSessionStatus(): SessionStatusSummary | { error: string } {
-    if (!this.baristaEngine) {
+    if (!this.executionFacade) {
       return { error: 'Engine not initialized' };
     }
-    return this.baristaEngine.getSessionStatus();
+    return this.executionFacade.getSessionStatus();
   }
 
   /**
    * BaristaEngine 조회
    */
-  getBaristaEngine(): BaristaEngineV2 | null {
-    return this.baristaEngine;
+  getBaristaEngine(): ExecutionFacade | null {
+    return this.executionFacade;
   }
 
   /**
@@ -671,7 +699,7 @@ export class ExecutionManager {
    * 앱 재시작 후 worktree가 존재하는 order에 추가 요청을 보낼 수 있도록 함
    */
   private async restoreSessionsForWorktreeOrders(): Promise<void> {
-    if (!this.baristaEngine) {
+    if (!this.executionFacade) {
       logger.warn('Barista engine not initialized, skipping session restore');
       return;
     }
@@ -721,7 +749,7 @@ export class ExecutionManager {
           const cafeId = order.cafeId || 'default';
 
           // Session 복원 (이미 completed 상태로 복원됨)
-          await this.baristaEngine.restoreSessionForFollowup(order, barista, cafeId, cwd);
+          await this.executionFacade.restoreSessionForFollowup(order, barista, cafeId, cwd);
 
           // activeExecutions에 등록 (worktree가 존재하는 한 계속 유지)
           // 복원된 세션은 completed 상태이지만 followup이 가능하므로 activeExecutions에 유지
