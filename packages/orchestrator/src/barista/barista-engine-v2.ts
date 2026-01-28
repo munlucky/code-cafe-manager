@@ -39,6 +39,22 @@ interface ActiveExecution {
 }
 
 /**
+ * Skill Cache Entry with TTL
+ */
+interface SkillCacheEntry {
+  content: string;
+  timestamp: number;
+}
+
+/**
+ * Skill Cache Statistics
+ */
+interface SkillCacheStats {
+  hits: number;
+  misses: number;
+}
+
+/**
  * Barista Engine V2 - Session-based multi-terminal orchestration
  */
 export class BaristaEngineV2 extends EventEmitter {
@@ -46,6 +62,12 @@ export class BaristaEngineV2 extends EventEmitter {
   private readonly sessionManager: CafeSessionManager;
   private readonly activeExecutions = new Map<string, ActiveExecution>();
   private readonly listenerManager = new EventListenerManager();
+
+  // Skill caching (Phase 3 optimization)
+  private readonly skillCache = new Map<string, SkillCacheEntry>();
+  private readonly skillCacheStats: SkillCacheStats = { hits: 0, misses: 0 };
+  private readonly SKILL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly SKILL_CACHE_MAX_SIZE = 100;
 
   constructor(terminalPool: TerminalPool) {
     super();
@@ -184,8 +206,22 @@ export class BaristaEngineV2 extends EventEmitter {
 
   /**
    * Load skill content from desktop/skills/*.json (instructions field)
+   * Uses TTL-based caching to avoid repeated file reads
    */
   private async loadSkillContent(skillName: string, projectRoot: string): Promise<string | null> {
+    const cacheKey = `${skillName}:${projectRoot}`;
+    const now = Date.now();
+
+    // Check cache
+    const cached = this.skillCache.get(cacheKey);
+    if (cached && (now - cached.timestamp) < this.SKILL_CACHE_TTL) {
+      this.skillCacheStats.hits++;
+      logger.debug(`Skill cache hit: ${skillName}`, { cacheKey });
+      return cached.content;
+    }
+
+    this.skillCacheStats.misses++;
+
     // Map workflow skill names to JSON file names
     const skillNameMap: Record<string, string> = {
       'classify-task': 'classify-task',
@@ -213,7 +249,9 @@ export class BaristaEngineV2 extends EventEmitter {
         const content = await fs.readFile(skillPath, 'utf-8');
         const skillData = JSON.parse(content) as { instructions?: string };
         if (skillData.instructions) {
-          logger.debug(`Loaded skill instructions: ${skillName}`, { skillPath });
+          // Cache the result
+          this.cacheSkillContent(cacheKey, skillData.instructions);
+          logger.debug(`Loaded and cached skill instructions: ${skillName}`, { skillPath });
           return skillData.instructions;
         }
       } catch (error: unknown) {
@@ -228,6 +266,68 @@ export class BaristaEngineV2 extends EventEmitter {
 
     logger.warn(`Skill not found or no instructions: ${skillName}`);
     return null;
+  }
+
+  /**
+   * Cache skill content with LRU eviction
+   */
+  private cacheSkillContent(cacheKey: string, content: string): void {
+    // Evict oldest entries if cache is full
+    if (this.skillCache.size >= this.SKILL_CACHE_MAX_SIZE) {
+      const oldestKey = this.findOldestCacheEntry();
+      if (oldestKey) {
+        this.skillCache.delete(oldestKey);
+      }
+    }
+
+    this.skillCache.set(cacheKey, {
+      content,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * Find oldest cache entry for eviction
+   */
+  private findOldestCacheEntry(): string | null {
+    let oldestKey: string | null = null;
+    let oldestTimestamp = Infinity;
+
+    for (const [key, entry] of this.skillCache.entries()) {
+      if (entry.timestamp < oldestTimestamp) {
+        oldestTimestamp = entry.timestamp;
+        oldestKey = key;
+      }
+    }
+
+    return oldestKey;
+  }
+
+  /**
+   * Get skill cache statistics
+   */
+  get skillCacheStatistics(): { hits: number; misses: number; hitRate: string; size: number } {
+    const total = this.skillCacheStats.hits + this.skillCacheStats.misses;
+    const hitRate = total > 0
+      ? ((this.skillCacheStats.hits / total) * 100).toFixed(1) + '%'
+      : '0%';
+
+    return {
+      hits: this.skillCacheStats.hits,
+      misses: this.skillCacheStats.misses,
+      hitRate,
+      size: this.skillCache.size,
+    };
+  }
+
+  /**
+   * Clear skill cache (useful for testing or manual refresh)
+   */
+  clearSkillCache(): void {
+    this.skillCache.clear();
+    this.skillCacheStats.hits = 0;
+    this.skillCacheStats.misses = 0;
+    logger.debug('Skill cache cleared');
   }
 
   /**

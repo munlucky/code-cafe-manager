@@ -11,7 +11,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as os from 'os';
 import * as fs from 'fs';
 import { ProviderType } from '@codecafe/core';
-import { IProviderAdapter, IPty } from '../provider-adapter';
+import type { IProviderAdapter, IPty } from '../interfaces/index.js';
 import { ProviderSpawnError } from '../errors';
 import { STDERR_MARKER, JSON_MARKER } from '../output-markers.js';
 

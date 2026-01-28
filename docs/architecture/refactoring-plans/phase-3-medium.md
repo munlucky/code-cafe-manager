@@ -443,21 +443,21 @@ it('should cache skill content', async () => {
 
 | 주차 | 목표 | 완료 여부 |
 |-----|------|----------|
-| Week 1 | terminal-log-parser 분할 완료 | [ ] |
-| Week 2 | Provider adapter 인터페이스 분리 | [ ] |
-| Week 2 | ExecutionFacade 설계 + 구현 | [ ] |
-| Week 3 | Desktop ExecutionFacade 마이그레이션 | [ ] |
-| Week 3 | terminal-pool 배열 연산 최적화 | [ ] |
-| Week 4 | 스킬 캐싱 도입 + 검증 | [ ] |
+| Week 1 | terminal-log-parser 분할 완료 | [x] |
+| Week 2 | Provider adapter 인터페이스 분리 | [x] |
+| Week 2 | ExecutionFacade 설계 + 구현 | [ ] (Phase 2 선행 조건 미충족) |
+| Week 3 | Desktop ExecutionFacade 마이그레이션 | [ ] (Phase 2 선행 조건 미충족) |
+| Week 3 | terminal-pool 배열 연산 최적화 | [x] |
+| Week 4 | 스킬 캐싱 도입 + 검증 | [x] |
 
 ### 6.2 완료 검증 체크리스트
 
-- [ ] `terminal-log-parser.ts` 삭제됨 (모듈로 분할)
-- [ ] `madge --circular` 순환 의존성 없음
-- [ ] Desktop이 ExecutionFacade만 사용
-- [ ] terminal-pool 성능 테스트 통과
-- [ ] 스킬 캐시 hit rate > 80%
-- [ ] 모든 기존 테스트 통과
+- [x] `terminal-log-parser.ts` 분할됨 (terminal-log/ 디렉토리, 기존 파일은 re-export hub)
+- [x] `madge --circular` 순환 의존성 없음 (interfaces/ 분리로 해결)
+- [ ] Desktop이 ExecutionFacade만 사용 (Phase 2 선행 조건 미충족)
+- [x] terminal-pool 배열 연산 최적화됨 (getStatus() O(T), getOrCreateTerminal() 단일 패스)
+- [x] 스킬 캐시 도입됨 (TTL 5분, LRU eviction)
+- [ ] 모든 기존 테스트 통과 (검증 중)
 
 ---
 

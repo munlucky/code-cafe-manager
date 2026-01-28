@@ -1,101 +1,16 @@
 /**
- * Terminal Provider Adapter Interface
+ * Terminal Provider Adapter
  * Gap 1 해결: Terminal 실행 계약 및 Provider 매핑 정의
+ *
+ * 리팩토링: 인터페이스는 ./interfaces/에서 re-export
  */
 
 import { ProviderType } from '@codecafe/core';
-import { ClaudeCodeAdapter } from './adapters/claude-code-adapter.js';
-import { CodexAdapter } from './adapters/codex-adapter.js';
 import { AdapterNotFoundError } from './errors.js';
 
-/**
- * Minimal interface for node-pty process to ensure type safety
- */
-export interface IPty {
-  pid: number;
-  write(data: string): void;
-  on(event: string, listener: (...args: any[]) => void): void;
-  once(event: string, listener: (...args: any[]) => void): void;
-  removeListener(event: string, listener: (...args: any[]) => void): void;
-  kill(signal?: string): void;
-  resize?(cols: number, rows: number): void;
-}
-
-export interface IProviderAdapter {
-  /**
-   * Provider type identifier
-   */
-  readonly providerType: ProviderType;
-
-  /**
-   * Create a new PTY process
-   * @param options - Spawn options (cwd, etc.)
-   * @returns node-pty IPty instance
-   */
-  spawn(options?: { cwd?: string }): Promise<IPty>;
-
-  /**
-   * Send prompt to the terminal
-   * @param process - node-pty process
-   * @param prompt - Prompt to send (already rendered)
-   * @returns True if sent successfully
-   */
-  sendPrompt(process: IPty, prompt: string): Promise<boolean>;
-
-  /**
-   * Read output from the terminal
-   * @param process - node-pty process
-   * @param timeout - Read timeout in ms
-   * @returns Output string
-   */
-  /**
-   * Read output from the terminal
-   * @param process - node-pty process
-   * @param timeout - Read timeout in ms
-   * @param onData - Optional callback for streaming data chunks
-   * @returns Output string
-   */
-  readOutput(process: IPty, timeout: number, onData?: (data: string) => void): Promise<string>;
-
-  /**
-   * Wait for process to exit
-   * @param process - node-pty process
-   * @param timeout - Timeout in ms
-   * @returns Exit code (0 = success)
-   */
-  waitForExit(process: IPty, timeout: number): Promise<number>;
-
-  /**
-   * Terminate the process
-   * @param process - node-pty process
-   */
-  kill(process: IPty): Promise<void>;
-
-  /**
-   * Check if process is running
-   * @param process - node-pty process
-   */
-  isAlive(process: IPty): boolean;
-
-  /**
-   * Execute command with context
-   * @param process - node-pty process
-   * @param context - Execution context
-   * @param onData - Optional callback for streaming output
-   */
-  execute(
-    process: IPty,
-    context: any,
-    onData?: (data: string) => void
-  ): Promise<{ success: boolean; output?: string; error?: string }>;
-
-  /**
-   * Register exit handler
-   * @param process - node-pty process
-   * @param handler - Function to call on exit
-   */
-  onExit(process: IPty, handler: (event: { exitCode: number }) => void): void;
-}
+// Re-export interfaces from the interfaces module
+export type { IPty, IProviderAdapter } from './interfaces/index.js';
+import type { IPty, IProviderAdapter } from './interfaces/index.js';
 
 /**
  * Mock Provider Adapter for testing
@@ -114,25 +29,25 @@ export class MockProviderAdapter implements IProviderAdapter {
     this.mockResponses.set(prompt, response);
   }
 
-  async spawn(options?: { cwd?: string }): Promise<IPty> {
+  async spawn(_options?: { cwd?: string }): Promise<IPty> {
     const mockPty: IPty = {
       pid: Math.floor(Math.random() * 10000),
-      on: (event: string, listener: Function) => {
+      on: (_event: string, _listener: (...args: unknown[]) => void) => {
         // Mock event listener
       },
-      once: (event: string, listener: Function) => {
+      once: (_event: string, _listener: (...args: unknown[]) => void) => {
         // Mock once listener
       },
-      removeListener: (event: string, listener: Function) => {
+      removeListener: (_event: string, _listener: (...args: unknown[]) => void) => {
         // Mock remove listener
       },
-      write: (data: string) => {
+      write: (_data: string) => {
         // Mock write
       },
       kill: () => {
         // Mock kill
       },
-      resize: (cols: number, rows: number) => {
+      resize: (_cols: number, _rows: number) => {
         // Mock resize
       },
     };
@@ -143,11 +58,11 @@ export class MockProviderAdapter implements IProviderAdapter {
     return mockPty;
   }
 
-  async sendPrompt(process: IPty, prompt: string): Promise<boolean> {
+  async sendPrompt(_process: IPty, _prompt: string): Promise<boolean> {
     return true;
   }
 
-  async readOutput(process: IPty, timeout: number, onData?: (data: string) => void): Promise<string> {
+  async readOutput(_process: IPty, _timeout: number, onData?: (data: string) => void): Promise<string> {
     const mockResponse = this.mockResponses.get('default') || 'Mock output';
     if (onData) onData(mockResponse);
     return new Promise((resolve) => {
@@ -155,23 +70,23 @@ export class MockProviderAdapter implements IProviderAdapter {
     });
   }
 
-  async waitForExit(process: IPty, timeout: number): Promise<number> {
+  async waitForExit(_process: IPty, _timeout: number): Promise<number> {
     return new Promise((resolve) => {
       setTimeout(() => resolve(0), 100);
     });
   }
 
-  async kill(process: IPty): Promise<void> {
+  async kill(_process: IPty): Promise<void> {
     // No-op for mock
   }
 
-  isAlive(process: IPty): boolean {
+  isAlive(_process: IPty): boolean {
     return true;
   }
 
   async execute(
-    process: IPty,
-    context: any,
+    _process: IPty,
+    _context: unknown,
     onData?: (data: string) => void
   ): Promise<{ success: boolean; output?: string; error?: string }> {
     if (onData) onData('Mock execution started\n');
@@ -181,17 +96,19 @@ export class MockProviderAdapter implements IProviderAdapter {
 
   onExit(process: IPty, handler: (event: { exitCode: number }) => void): void {
     // Store handler if needed for testing scenarios
-    (process as any)._exitHandler = handler;
+    (process as unknown as { _exitHandler: typeof handler })._exitHandler = handler;
   }
 }
 
 /**
  * Provider Adapter Factory
  * Manages provider adapter instances and registration
+ * Uses dynamic import to avoid circular dependencies
  */
 export class ProviderAdapterFactory {
   private static adapters: Map<ProviderType, IProviderAdapter> = new Map();
   private static initialized = false;
+  private static initPromise: Promise<void> | null = null;
 
   static register(providerType: ProviderType, adapter: IProviderAdapter): void {
     this.adapters.set(providerType, adapter);
@@ -229,21 +146,53 @@ export class ProviderAdapterFactory {
   }
 
   /**
-   * Initialize and register default adapters
+   * Initialize and register default adapters using dynamic import
+   * This prevents circular dependencies between provider-adapter and adapters
    */
   static initialize(): void {
     if (this.initialized) {
       return;
     }
 
-    try {
-      this.register('claude-code', new ClaudeCodeAdapter());
-      this.register('codex', new CodexAdapter());
-      this.initialized = true;
-    } catch (error) {
-      // Re-throw with clear context
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to initialize provider adapters: ${message}`);
+    // Synchronous initialization for backward compatibility
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { ClaudeCodeAdapter } = require('./adapters/claude-code-adapter.js');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { CodexAdapter } = require('./adapters/codex-adapter.js');
+
+    this.register('claude-code', new ClaudeCodeAdapter());
+    this.register('codex', new CodexAdapter());
+    this.initialized = true;
+  }
+
+  /**
+   * Async initialization with dynamic import (preferred for ESM)
+   */
+  static async initializeAsync(): Promise<void> {
+    if (this.initialized) {
+      return;
     }
+
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+
+    this.initPromise = (async () => {
+      try {
+        const [claudeModule, codexModule] = await Promise.all([
+          import('./adapters/claude-code-adapter.js'),
+          import('./adapters/codex-adapter.js'),
+        ]);
+
+        this.register('claude-code', new claudeModule.ClaudeCodeAdapter());
+        this.register('codex', new codexModule.CodexAdapter());
+        this.initialized = true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to initialize provider adapters: ${message}`);
+      }
+    })();
+
+    return this.initPromise;
   }
 }

@@ -9,13 +9,12 @@ const logger = createLogger({ context: 'TerminalPool', json: true });
 import {
   Terminal,
   TerminalPoolConfig,
-  ProviderTerminalConfig,
   PoolStatus,
   LeaseToken,
   PoolMetrics
 } from '@codecafe/core';
 import { PoolSemaphore, TerminalLeaseTimeoutError } from './pool-semaphore';
-import { IProviderAdapter, ProviderAdapterFactory } from './provider-adapter';
+import { ProviderAdapterFactory } from './provider-adapter';
 import {
   ProviderNotFoundError,
   SemaphoreNotFoundError,
@@ -234,20 +233,29 @@ export class TerminalPool {
 
   /**
    * Get pool status
+   * Optimized: O(T) single pass instead of O(P×T×4)
    */
   getStatus(): PoolStatus {
     const status: PoolStatus = {};
 
-    for (const [provider, _] of Object.entries(this.config.perProvider)) {
-      const terminals = Array.from(this.terminals.values())
-        .filter(t => t.provider === provider);
+    // Initialize status for all configured providers
+    for (const provider of Object.keys(this.config.perProvider)) {
+      status[provider] = { total: 0, idle: 0, busy: 0, crashed: 0 };
+    }
 
-      status[provider] = {
-        total: terminals.length,
-        idle: terminals.filter(t => t.status === 'idle').length,
-        busy: terminals.filter(t => t.status === 'busy').length,
-        crashed: terminals.filter(t => t.status === 'crashed').length,
-      };
+    // Single pass through all terminals
+    for (const terminal of this.terminals.values()) {
+      const providerStatus = status[terminal.provider];
+      if (providerStatus) {
+        providerStatus.total++;
+        if (terminal.status === 'idle') {
+          providerStatus.idle++;
+        } else if (terminal.status === 'busy') {
+          providerStatus.busy++;
+        } else if (terminal.status === 'crashed') {
+          providerStatus.crashed++;
+        }
+      }
     }
 
     return status;
@@ -271,8 +279,9 @@ export class TerminalPool {
     // Remove all exit handlers before killing terminals
     for (const [terminalId, handlerEntry] of this.exitHandlers) {
       const terminal = this.terminals.get(terminalId);
-      if (terminal?.process) {
-        terminal.process.removeListener('exit', handlerEntry.handler as (...args: unknown[]) => void);
+      if (terminal?.process && typeof terminal.process.removeListener === 'function') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        terminal.process.removeListener('exit', handlerEntry.handler as any);
       }
     }
     this.exitHandlers.clear();
@@ -298,8 +307,9 @@ export class TerminalPool {
   private async killTerminal(terminal: Terminal): Promise<void> {
     // Remove exit handler before killing to prevent double handling
     const handlerEntry = this.exitHandlers.get(terminal.id);
-    if (handlerEntry && terminal.process) {
-      terminal.process.removeListener('exit', handlerEntry.handler as (...args: unknown[]) => void);
+    if (handlerEntry && terminal.process && typeof terminal.process.removeListener === 'function') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      terminal.process.removeListener('exit', handlerEntry.handler as any);
       this.exitHandlers.delete(terminal.id);
     }
 
@@ -312,22 +322,36 @@ export class TerminalPool {
 
   private async getOrCreateTerminal(provider: ProviderType, cwd?: string): Promise<Terminal> {
     const effectiveCwd = cwd || this.config.cwd || process.cwd();
-    
-    // Find idle terminal with matching CWD
-    const idleTerminal = Array.from(this.terminals.values())
-      .find(t => t.provider === provider && t.status === 'idle' && (t.cwd === effectiveCwd));
 
-    if (idleTerminal) {
-      return idleTerminal;
+    // Single pass: find matching idle terminal and count provider terminals
+    let idleTerminalWithMatchingCwd: Terminal | undefined;
+    let anyIdleTerminal: Terminal | undefined;
+    let providerTerminalCount = 0;
+
+    for (const terminal of this.terminals.values()) {
+      if (terminal.provider !== provider) continue;
+
+      providerTerminalCount++;
+
+      if (terminal.status === 'idle') {
+        if (terminal.cwd === effectiveCwd) {
+          idleTerminalWithMatchingCwd = terminal;
+        } else if (!anyIdleTerminal) {
+          anyIdleTerminal = terminal;
+        }
+      }
+    }
+
+    if (idleTerminalWithMatchingCwd) {
+      return idleTerminalWithMatchingCwd;
     }
 
     // No matching idle terminal. Check if we need to make room.
-    const providerTerminals = Array.from(this.terminals.values()).filter(t => t.provider === provider);
     const maxTerminals = this.config.perProvider[provider].size;
 
-    if (providerTerminals.length >= maxTerminals) {
+    if (providerTerminalCount >= maxTerminals) {
       // Find an idle terminal to recycle (even if CWD didn't match above)
-      const victim = providerTerminals.find(t => t.status === 'idle');
+      const victim = anyIdleTerminal;
       if (victim) {
         logger.info(` Recycling terminal ${victim.id} (CWD mismatch: ${victim.cwd} != ${effectiveCwd})`);
         await this.killTerminal(victim);

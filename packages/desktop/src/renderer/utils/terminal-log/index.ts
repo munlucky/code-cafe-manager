@@ -1,31 +1,41 @@
 /**
- * Terminal Log Parser
+ * Terminal Log Parser Module
  * 터미널 출력을 파싱하여 구조화된 로그 엔트리로 변환
  *
- * @deprecated Use imports from './terminal-log' instead.
- * This file is kept for backward compatibility.
+ * @module terminal-log
  */
 
-// Re-export all from the new modular structure
+// Content Detection
 export {
-  // Content Detection
   isFileContent,
   isJSONContent,
   isCodeContent,
   isActualError,
   detectContentType,
-  // Summarization
+} from './content-detector';
+
+// Summarization
+export {
   summarizeFileContent,
   summarizeJSONContent,
   generateSummary,
-  // Tool Extraction
+} from './summarizer';
+
+// Tool Extraction
+export {
   extractToolDetails,
   extractToolInfoFromRawText,
-  // Formatting
+} from './tool-extractor';
+
+// Formatting
+export {
   getBadgeType,
   getGroupType,
-  // Main Parser
+} from './formatter';
+
+// Main Parser
+export {
   generateId,
   parseTerminalOutput,
   groupLogs,
-} from './terminal-log';
+} from './parser';

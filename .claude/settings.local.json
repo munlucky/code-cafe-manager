@@ -83,7 +83,8 @@
       "Bash(cmd //c taskkill:*)",
       "Bash(powershell.exe:*)",
       "Bash(wc:*)",
-      "Bash(git check-ignore:*)"
+      "Bash(git check-ignore:*)",
+      "Bash(npx vitest:*)"
     ],
     "deny": [],
     "ask": []

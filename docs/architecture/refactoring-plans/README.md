@@ -77,11 +77,11 @@ Phase 1 (Critical) ──► Phase 2 (High) ──► Phase 3 (Medium) ──►
 
 ### Phase 3: Medium
 
-- [ ] terminal-log-parser.ts 분할 (844줄 → 5모듈)
-- [ ] Provider adapter 인터페이스 분리
-- [ ] ExecutionFacade 도입
-- [ ] 배열 연산 최적화
-- [ ] 스킬 캐싱 도입
+- [x] terminal-log-parser.ts 분할 (844줄 → 5모듈)
+- [x] Provider adapter 인터페이스 분리
+- [ ] ExecutionFacade 도입 (Phase 2 선행 조건 미충족)
+- [x] 배열 연산 최적화
+- [x] 스킬 캐싱 도입
 
 ### Phase 4: Maintenance
 

@@ -5,18 +5,8 @@
 
 import * as pty from 'node-pty';
 import { ProviderType } from '@codecafe/core';
-import { IProviderAdapter } from '../provider-adapter';
+import type { IProviderAdapter, IPty } from '../interfaces/index.js';
 import { ProviderSpawnError } from '../errors';
-
-// Define minimal interface for node-pty to improve type safety
-interface IPtyProcess {
-  pid: number;
-  write(data: string): void;
-  on(event: string, listener: (...args: any[]) => void): void;
-  once(event: string, listener: (...args: any[]) => void): void;
-  removeListener(event: string, listener: (...args: any[]) => void): void;
-  kill(signal?: string): void;
-}
 
 // Configuration constants
 const CONFIG = {
@@ -41,7 +31,7 @@ export class CodexAdapter implements IProviderAdapter {
   /**
    * Spawn codex CLI process in interactive mode
    */
-  async spawn(options?: { cwd?: string }): Promise<IPtyProcess> {
+  async spawn(options?: { cwd?: string }): Promise<IPty> {
     try {
       const ptyProcess = pty.spawn('codex', ['--interactive'], {
         name: 'xterm-color',
@@ -51,7 +41,7 @@ export class CodexAdapter implements IProviderAdapter {
         },
         cols: CONFIG.TERM_COLS,
         rows: CONFIG.TERM_ROWS,
-      }) as unknown as IPtyProcess;
+      }) as unknown as IPty;
 
       // Wait for initialization
       await this.waitForReady(ptyProcess, CONFIG.INIT_TIMEOUT);
@@ -68,7 +58,7 @@ export class CodexAdapter implements IProviderAdapter {
   /**
    * Send prompt as JSON message
    */
-  async sendPrompt(ptyProcess: IPtyProcess, prompt: string): Promise<boolean> {
+  async sendPrompt(ptyProcess: IPty, prompt: string): Promise<boolean> {
     const messageId = this.generateId();
     this.lastMessageId = messageId;
 
@@ -108,7 +98,7 @@ export class CodexAdapter implements IProviderAdapter {
   /**
    * Read output with JSON framing
    */
-  async readOutput(ptyProcess: IPtyProcess, timeout: number, onDataCallback?: (data: string) => void): Promise<string> {
+  async readOutput(ptyProcess: IPty, timeout: number, onDataCallback?: (data: string) => void): Promise<string> {
     const expectedMessageId = this.lastMessageId;
 
     return new Promise((resolve, reject) => {
@@ -161,7 +151,7 @@ export class CodexAdapter implements IProviderAdapter {
   /**
    * Wait for process exit
    */
-  async waitForExit(ptyProcess: IPtyProcess, timeout: number): Promise<number> {
+  async waitForExit(ptyProcess: IPty, timeout: number): Promise<number> {
     return new Promise((resolve, reject) => {
       const cleanup = () => {
         ptyProcess.removeListener('exit', onExit);
@@ -185,14 +175,14 @@ export class CodexAdapter implements IProviderAdapter {
   /**
    * Kill process
    */
-  async kill(ptyProcess: IPtyProcess): Promise<void> {
+  async kill(ptyProcess: IPty): Promise<void> {
     ptyProcess.kill();
   }
 
   /**
    * Check if process is alive
    */
-  isAlive(ptyProcess: IPtyProcess): boolean {
+  isAlive(ptyProcess: IPty): boolean {
     return ptyProcess.pid > 0;
   }
 
@@ -200,7 +190,7 @@ export class CodexAdapter implements IProviderAdapter {
    * Execute command with context
    */
   async execute(
-    ptyProcess: IPtyProcess,
+    ptyProcess: IPty,
     context: any,
     onDataCallback?: (data: string) => void
   ): Promise<{ success: boolean; output?: string; error?: string }> {
@@ -220,7 +210,7 @@ export class CodexAdapter implements IProviderAdapter {
   /**
    * Setup exit handler
    */
-  onExit(ptyProcess: IPtyProcess, handler: (event: { exitCode: number }) => void): void {
+  onExit(ptyProcess: IPty, handler: (event: { exitCode: number }) => void): void {
     ptyProcess.on('exit', (exitCode: number) => {
       handler({ exitCode });
     });
@@ -229,7 +219,7 @@ export class CodexAdapter implements IProviderAdapter {
   /**
    * Wait for ready signal
    */
-  private async waitForReady(ptyProcess: IPtyProcess, timeout: number): Promise<void> {
+  private async waitForReady(ptyProcess: IPty, timeout: number): Promise<void> {
     return new Promise((resolve, reject) => {
       const cleanup = () => {
         ptyProcess.removeListener('data', onData);
@@ -293,7 +283,7 @@ export class CodexAdapter implements IProviderAdapter {
   /**
    * Write JSON message to terminal
    */
-  private writeJson(ptyProcess: IPtyProcess, message: CodexMessage): void {
+  private writeJson(ptyProcess: IPty, message: CodexMessage): void {
     ptyProcess.write(JSON.stringify(message) + '\n');
   }
 }
