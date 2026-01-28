@@ -256,15 +256,15 @@ export class CafeSessionManager extends EventEmitter {
       return 0;
     }
 
-    let cancelledCount = 0;
-    for (const session of cafe.sessions.values()) {
-      if (session.getStatus().status === 'running') {
-        await session.cancel();
-        cancelledCount++;
-      }
-    }
+    // Filter running sessions and cancel them in parallel
+    const runningSessions = Array.from(cafe.sessions.values()).filter(
+      (session) => session.getStatus().status === 'running'
+    );
 
-    return cancelledCount;
+    const cancellations = runningSessions.map((session) => session.cancel());
+    await Promise.allSettled(cancellations);
+
+    return runningSessions.length;
   }
 
   /**
@@ -296,8 +296,14 @@ export class CafeSessionManager extends EventEmitter {
    * 완료된 세션 정리
    */
   async cleanupCompletedSessions(olderThanMs: number = 3600000): Promise<number> {
-    let cleanedCount = 0;
     const now = Date.now();
+
+    // Collect all sessions to cleanup across all cafes
+    const sessionsToCleanup: Array<{
+      cafe: CafeSessionInfo;
+      orderId: string;
+      session: OrderSession;
+    }> = [];
 
     for (const cafe of this.cafes.values()) {
       for (const [orderId, session] of cafe.sessions) {
@@ -307,22 +313,28 @@ export class CafeSessionManager extends EventEmitter {
         if (isTerminal && status.completedAt) {
           const completedTime = new Date(status.completedAt).getTime();
           if (now - completedTime > olderThanMs) {
-            // 세션 리스너 정리
-            const listenerManager = this.sessionListeners.get(orderId);
-            if (listenerManager) {
-              listenerManager.detachAll();
-              this.sessionListeners.delete(orderId);
-            }
-            await session.dispose();
-            cafe.sessions.delete(orderId);
-            cleanedCount++;
+            sessionsToCleanup.push({ cafe, orderId, session });
           }
         }
       }
     }
 
-    logger.info(` Cleaned up ${cleanedCount} completed sessions`);
-    return cleanedCount;
+    // Cleanup all sessions in parallel
+    const cleanupPromises = sessionsToCleanup.map(async ({ cafe, orderId, session }) => {
+      // 세션 리스너 정리
+      const listenerManager = this.sessionListeners.get(orderId);
+      if (listenerManager) {
+        listenerManager.detachAll();
+        this.sessionListeners.delete(orderId);
+      }
+      await session.dispose();
+      cafe.sessions.delete(orderId);
+    });
+
+    await Promise.allSettled(cleanupPromises);
+
+    logger.info(` Cleaned up ${sessionsToCleanup.length} completed sessions`);
+    return sessionsToCleanup.length;
   }
 
   /**

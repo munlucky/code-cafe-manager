@@ -367,24 +367,32 @@ export class TerminalGroup extends EventEmitter {
 
     this.isDisposed = true;
 
-    // 병렬 터미널 해제
-    for (const [key, terminalInfo] of this.parallelTerminals) {
-      try {
-        await terminalInfo.lease.release();
-      } catch (error) {
-        logger.error(`Failed to release parallel terminal ${key}`, { error });
+    // 병렬 터미널 해제 (Promise.allSettled로 모든 해제 시도)
+    const parallelReleases = Array.from(this.parallelTerminals.entries()).map(
+      async ([key, terminalInfo]) => {
+        try {
+          await terminalInfo.lease.release();
+        } catch (error) {
+          logger.error(`Failed to release parallel terminal ${key}`, { error });
+        }
       }
-    }
-    this.parallelTerminals.clear();
+    );
 
-    // 메인 터미널 해제
-    for (const [provider, terminalInfo] of this.terminalsByProvider) {
-      try {
-        await terminalInfo.lease.release();
-      } catch (error) {
-        logger.error(`Failed to release terminal for ${provider}`, { error });
+    // 메인 터미널 해제 (Promise.allSettled로 모든 해제 시도)
+    const mainReleases = Array.from(this.terminalsByProvider.entries()).map(
+      async ([provider, terminalInfo]) => {
+        try {
+          await terminalInfo.lease.release();
+        } catch (error) {
+          logger.error(`Failed to release terminal for ${provider}`, { error });
+        }
       }
-    }
+    );
+
+    // 모든 터미널 해제를 병렬로 실행
+    await Promise.allSettled([...parallelReleases, ...mainReleases]);
+
+    this.parallelTerminals.clear();
     this.terminalsByProvider.clear();
 
     this.removeAllListeners();

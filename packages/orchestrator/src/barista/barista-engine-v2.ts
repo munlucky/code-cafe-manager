@@ -348,15 +348,14 @@ IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
 
           logger.debug('Stage config', { stageId, skills: stageConfig.skills, provider: stageConfig.provider, role: stageConfig.role });
 
-          // Load skill contents for this stage
-          const skillContents: string[] = [];
+          // Load skill contents for this stage (parallel)
+          let skillContents: string[] = [];
           if (stageConfig.skills && stageConfig.skills.length > 0) {
-            for (const skillName of stageConfig.skills) {
-              const skillContent = await this.loadSkillContent(skillName, projectRoot);
-              if (skillContent) {
-                skillContents.push(skillContent);
-              }
-            }
+            const skillPromises = stageConfig.skills.map(skillName =>
+              this.loadSkillContent(skillName, projectRoot)
+            );
+            const loadedSkills = await Promise.all(skillPromises);
+            skillContents = loadedSkills.filter((content): content is string => content !== null);
           }
 
           // Build stage prompt with role instructions and skill contents

@@ -380,16 +380,20 @@ export class OrderService {
    * Delete multiple orders with worktree cleanup
    */
   async deleteOrders(orderIds: string[]): Promise<{ deleted: string[]; failed: string[] }> {
-    for (const orderId of orderIds) {
+    // Remove worktrees in parallel
+    const worktreeRemovals = orderIds.map(async (orderId) => {
       const order = this.orchestrator.getOrder(orderId);
       if (order) {
         try {
           await this.removeWorktree(order);
-        } catch (wtError: any) {
-          logger.error('Failed to remove worktree', { orderId, error: wtError.message });
+        } catch (wtError: unknown) {
+          const errorMsg = wtError instanceof Error ? wtError.message : String(wtError);
+          logger.error('Failed to remove worktree', { orderId, error: errorMsg });
         }
       }
-    }
+    });
+
+    await Promise.allSettled(worktreeRemovals);
 
     return await this.orchestrator.deleteOrders(orderIds);
   }
