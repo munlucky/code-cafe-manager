@@ -9,7 +9,7 @@
         │
         ▼
 ┌───────────────────────────────────────────────────────────────────────┐
-│  facades/execution-facade.ts:41-229                                   │
+│  facades/execution-facade.ts (482 lines)                              │
 │  ExecutionFacade (Public API)                                         │
 │  - executeOrder(), cancelOrder(), sendInput()                         │
 │  - retryFromStage(), enterFollowup(), executeFollowup()               │
@@ -30,20 +30,20 @@
 ┌─────────────────────────┐      ┌─────────────────────────────────────┐
 │  session/               │      │  terminal/                          │
 │                         │      │                                     │
-│  cafe-session-manager   │      │  terminal-pool.ts:50-200            │
-│  :40-150                │      │  TerminalPool                       │
+│  cafe-session-manager   │      │  terminal-pool.ts (533 lines)       │
+│  CafeSessionManager     │      │  TerminalPool                       │
 │  - Cafe별 세션 관리      │      │  - Provider별 터미널 풀              │
 │                         │      │  - Lease 기반 할당/반환              │
 │  order-session.ts       │      │                                     │
-│  :30-180                │      │  pool-semaphore.ts                  │
+│  OrderSession           │      │  pool-semaphore.ts                  │
 │  - Order 실행 세션      │      │  - 동시성 제어                        │
 │                         │      │                                     │
 │  terminal-group.ts      │      │  provider-adapter.ts                │
-│  :20-120                │      │  - Provider 추상화                   │
+│  TerminalGroup          │      │  - Provider 추상화                   │
 │  - 다중 터미널 그룹      │      │                                     │
 │                         │      │  adapters/claude-code-adapter.ts    │
 │  shared-context.ts      │      │  adapters/codex-adapter.ts          │
-│  :15-100                │      │  - 구체 어댑터 구현                   │
+│  SharedContext          │      │  - 구체 어댑터 구현                   │
 │  - 터미널 간 컨텍스트    │      │                                     │
 └─────────────────────────┘      └─────────────────────────────────────┘
         │
@@ -59,6 +59,7 @@
 ┌───────────────────────────────────────────────────────────────────────┐
 │  provider/                                                            │
 │                                                                       │
+│  adapter.ts       : ProviderAdapter (Provider 어댑터)                  │
 │  executor.ts      : ProviderExecutor (통합 실행자)                     │
 │  assisted.ts      : AssistedExecutor (대화형 실행)                     │
 │  headless.ts      : HeadlessExecutor (비대화형 실행)                   │
@@ -71,44 +72,66 @@
 |------|------|-------------|
 | `src/index.ts` | 패키지 진입점 | 모든 public API (90+ exports) |
 | **facades/** | | |
-| `execution-facade.ts` | 외부 공개 API | `ExecutionFacade` |
+| `index.ts` | Facade 모듈 진입점 | `ExecutionFacade` |
+| `execution-facade.ts` | 외부 공개 API | `ExecutionFacade`, `ExecutionFacadeConfig` |
 | **barista/** | | |
 | `barista-engine-v2.ts` | 실행 엔진 코어 | `BaristaEngineV2` |
+| `barista-manager.ts` | Barista 관리 | `BaristaManager` |
 | **session/** | | |
 | `index.ts` | 세션 모듈 진입점 | 세션 관련 전체 export |
 | `cafe-session-manager.ts` | Cafe별 세션 관리 | `CafeSessionManager` |
 | `order-session.ts` | Order 실행 세션 | `OrderSession` |
 | `terminal-group.ts` | 다중 터미널 그룹 | `TerminalGroup` |
 | `shared-context.ts` | 터미널 간 컨텍스트 | `SharedContext` |
-| `stage-orchestrator.ts` | Stage 실행 | `StageOrchestrator` |
-| `stage-signals.ts` | 재시도/스킵 신호 | `StageSignals` |
+| `stage-orchestrator.ts` | Stage 실행 | `StageOrchestrator`, `createOrchestrator` |
+| `stage-signals.ts` | 재시도/스킵 신호 | `StageSignals`, `DEFAULT_SIGNALS` |
+| `signal-parser.ts` | 신호 파싱 | `SignalParser`, `signalParser` |
+| `events/*.ts` | 세션 이벤트 | `EventPropagator`, `SessionEvents` |
+| `execution/*.ts` | 실행 계획 | `ExecutionPlanner`, `StageCoordinator` |
+| `lifecycle/*.ts` | 세션 라이프사이클 | `SessionLifecycle` |
+| `resources/*.ts` | 리소스 관리 | `ContextManager` |
 | **terminal/** | | |
 | `index.ts` | 터미널 모듈 진입점 | 터미널 관련 전체 export |
 | `terminal-pool.ts` | 터미널 풀 관리 | `TerminalPool`, `TerminalLease` |
 | `pool-semaphore.ts` | 동시성 제어 | `PoolSemaphore`, `LeaseRequest` |
-| `provider-adapter.ts` | Provider 추상화 | `ProviderAdapterFactory`, `IProviderAdapter` |
+| `provider-adapter.ts` | Provider 추상화 | `ProviderAdapterFactory`, `IProviderAdapter`, `MockProviderAdapter` |
 | `adapters/*.ts` | 구체 어댑터 | `ClaudeCodeAdapter`, `CodexAdapter` |
+| `interfaces/*.ts` | 인터페이스 정의 | `IProviderAdapter` interface |
 | `errors.ts` | 에러 정의 | 11개 에러 클래스 |
+| `output-markers.ts` | 출력 마커 | 마커 상수 |
 | **engine/** | | |
 | `fsm.ts` | 상태 머신 | `FSMEngine` |
-| `dag-executor.ts` | DAG 실행 | `DAGExecutor` |
+| `dag-executor.ts` | DAG 실행 | `DAGExecutor`, `NodeContext`, `DAGExecutorOptions` |
 | **provider/** | | |
+| `adapter.ts` | Provider 어댑터 | `ProviderAdapter` |
 | `executor.ts` | 통합 실행자 | `ProviderExecutor` |
 | `assisted.ts` | 대화형 실행 | `AssistedExecutor` |
 | `headless.ts` | 비대화형 실행 | `HeadlessExecutor` |
 | **workflow/** | | |
-| `workflow-executor.ts` | 워크플로우 실행 | `WorkflowExecutor` |
+| `workflow-executor.ts` | 워크플로우 실행 | `WorkflowExecutor`, `WorkflowExecutionOptions` |
 | `run-registry.ts` | 실행 레지스트리 | `RunRegistry` |
 | **role/** | | |
 | `role-manager.ts` | Role 관리 | `RoleManager` |
-| `template.ts` | Handlebars 템플릿 | `TemplateEngine` |
+| `template.ts` | Handlebars 템플릿 | `TemplateEngine`, `templateEngine` |
 | **cli/commands/** (UI Layer 연동) | | |
-| `init.ts`, `run.ts`, etc. | CLI 명령어 구현 | `initOrchestrator`, `runWorkflow`, etc. |
+| `init.ts` | 초기화 | `initOrchestrator` |
+| `run.ts` | 워크플로우 실행 | `runWorkflow`, `resumeWorkflow` |
+| `resume.ts` | 재개 | `resumeRun` |
+| `status.ts` | 상태 조회 | `showRunStatus` |
+| `logs.ts` | 로그 조회 | `showRunLogs` |
+| `profile.ts` | 프로필 관리 | `setProfile`, `getProfile`, `listProfiles` |
+| `assign.ts` | 역할 할당 | `setAssignment`, `getAssignment`, `listRoles` |
+| `role.ts` | Role 관리 | Role 관련 exports |
 | **storage/** | | |
 | `run-state.ts` | 실행 상태 저장 | `RunStateManager` |
 | `event-logger.ts` | 이벤트 로깅 | `EventLogger` |
+| **schema/** | | |
+| `validator.ts` | 스키마 검증 | Schema validation exports |
 | **ui/** (UI Layer 연동) | | |
 | `electron-api.ts` | Electron IPC 어댑터 | `registerElectronHandlers` |
+| `types.ts` | UI 타입 정의 | `WorkflowInfo`, `RunProgress`, `ElectronIPCMessages` |
+| **constants/** | | |
+| `thresholds.ts` | 임계값 상수 | Threshold constants |
 
 ## Event Flow
 

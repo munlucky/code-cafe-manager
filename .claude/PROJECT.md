@@ -22,6 +22,40 @@ CodeCafe manages AI CLI workflows using a "café" metaphor:
 - **Counter**: Target project for execution
 - **Receipt**: Execution result summary
 
+## Core Data Flow
+
+```
+User Request
+     │
+     ▼
+┌─────────┐    ┌────────────┐    ┌──────────────┐    ┌─────────────┐
+│   CLI   │───▶│Execution   │───▶│BaristaEngine │───▶│  Provider   │
+│         │    │  Facade    │    │    V2        │    │ (PTY Proc)  │
+└─────────┘    └────────────┘    └──────────────┘    └─────────────┘
+                     │                   │                   │
+                     ▼                   ▼                   ▼
+              ┌────────────┐    ┌──────────────┐    ┌─────────────┐
+              │   Order    │    │TerminalPool  │    │  AI Output  │
+              │  Manager   │    │   Session    │    │             │
+              └────────────┘    └──────────────┘    └─────────────┘
+```
+
+## Execution Event Flow
+
+```
+BaristaEngineV2
+      │
+      ├──▶ 'order:started'    { orderId, cafeId }
+      ├──▶ 'order:output'     { orderId, data }
+      ├──▶ 'stage:started'    { orderId, stageId, provider, skills }
+      ├──▶ 'stage:completed'  { orderId, stageId, output, duration }
+      ├──▶ 'stage:failed'     { orderId, stageId, error }
+      ├──▶ 'order:completed'  { orderId, cafeId, output }
+      ├──▶ 'order:failed'     { orderId, cafeId, error, canRetry }
+      ├──▶ 'order:awaiting-input' { orderId, stageId, questions }
+      └──▶ 'order:followup*'  (followup 관련 이벤트들)
+```
+
 ## Directory Structure
 
 ```
@@ -35,28 +69,65 @@ codecafe/
 │   ├── roles/              # User-defined custom roles
 │   └── skills/             # Skill definitions (JSON)
 ├── packages/
-│   ├── core/           # Domain models, recipe engine, types
-│   │   └── types/          # Type exports (terminal, role)
+│   ├── core/           # Domain models, types, schemas, errors
+│   │   ├── types/          # Type exports (terminal, role, cafe, step)
+│   │   ├── schema/         # Zod schemas (cafe, role, terminal, workflow, provider)
+│   │   ├── errors/         # Error classes (base-error, error-codes, specific-errors)
+│   │   ├── logging/        # Logger utilities
+│   │   ├── utils/          # Utilities (event-emitter, type-guards)
+│   │   └── constants/      # Constants (timeouts)
 │   ├── cli/            # codecafe CLI commands
+│   │   └── commands/       # Command implementations (init, doctor, run, status, ui, orch)
 │   ├── desktop/        # Electron UI (Manager)
 │   │   ├── src/main/       # Electron main process
-│   │   │   └── ipc/        # IPC handlers (cafe, order, workflow, skill, orchestrator, etc.)
+│   │   │   ├── ipc/        # IPC handlers (cafe, order, workflow, terminal, provider, ...)
+│   │   │   │   ├── handlers/   # Modular handlers (workflow.handler, order.handler)
+│   │   │   │   └── utils/      # IPC utilities (output-interval-manager)
+│   │   │   ├── services/   # Service layer (workflow-service, order-service)
+│   │   │   └── config/     # Configuration (terminal-pool.config)
 │   │   ├── src/preload/    # Preload scripts (CommonJS)
-│   │   └── src/renderer/   # React UI
+│   │   ├── src/renderer/   # React UI
+│   │   │   ├── store/      # Zustand stores
+│   │   │   ├── hooks/      # React hooks
+│   │   │   ├── components/ # UI components (terminal, views)
+│   │   │   ├── utils/      # Utilities (terminal-log parser/summarizer)
+│   │   │   ├── types/      # Type definitions
+│   │   │   └── i18n/       # Internationalization
+│   │   └── src/common/     # Shared types (ipc-types, output-markers)
 │   ├── orchestrator/   # Integrated orchestrator engine
-│   │   ├── src/            # Source code
+│   │   ├── src/
+│   │   │   ├── facades/    # Public API (ExecutionFacade)
+│   │   │   ├── barista/    # BaristaEngineV2, BaristaManager
+│   │   │   ├── session/    # Multi-terminal session
+│   │   │   │   ├── events/     # Session events
+│   │   │   │   ├── execution/  # Execution planning
+│   │   │   │   ├── lifecycle/  # Session lifecycle
+│   │   │   │   └── resources/  # Resource management
+│   │   │   ├── terminal/   # Terminal pool
+│   │   │   │   ├── adapters/   # Provider adapters
+│   │   │   │   └── interfaces/ # Interface definitions
+│   │   │   ├── engine/     # FSM, DAG executor
+│   │   │   ├── provider/   # Provider executors
+│   │   │   ├── workflow/   # Workflow execution
+│   │   │   ├── role/       # Role management
+│   │   │   ├── storage/    # State persistence
+│   │   │   ├── cli/commands/   # CLI command implementations
+│   │   │   ├── ui/         # Electron IPC adapter
+│   │   │   ├── schema/     # Schema validation
+│   │   │   └── constants/  # Constants (thresholds)
 │   │   └── test/           # Vitest tests
 │   ├── providers/
-│   │   ├── common/         # Shared provider interfaces
+│   │   ├── common/         # Shared provider interfaces (IProvider, IProviderStatic)
 │   │   ├── claude-code/    # Claude Code Provider (PTY)
 │   │   └── codex/          # Codex Provider
 │   ├── roles/          # Built-in role definitions (Handlebars templates)
-│   ├── git-worktree/   # Git worktree management
-│   └── schema/         # YAML/JSON schema and validation
+│   ├── git-worktree/   # Git worktree management (WorktreeManager)
+│   └── schema/         # YAML/JSON schema and validation (향후 확장)
 ├── agents/             # Agent definitions (PM, design-spec, docs, impl, etc.)
 ├── recipes/
 │   └── house-blend/    # Default recipe templates
 └── docs/
+    ├── module-specs/       # Module specifications (README.md)
     ├── architecture/       # Architecture diagrams and docs
     ├── claude-cli-terminal/ # Terminal execution documentation
     ├── old/                # Archived documentation
@@ -97,67 +168,170 @@ codecafe/
 - **State persistence**: Manage JSON files via `Storage` class
 - **IPC responses**: All Electron IPC handlers return structured responses
 
+## Package Architecture
+
+> 상세 모듈 스펙은 `docs/module-specs/README.md` 참조
+
+### Package Dependency Graph
+
+```
+                    ┌─────────────────────────────────────────────────┐
+                    │                   cli                           │
+                    │  (codecafe CLI 진입점)                          │
+                    └─────────────────┬───────────────────────────────┘
+                                      │
+          ┌───────────────────────────┼───────────────────────────┐
+          │                           │                           │
+          ▼                           ▼                           ▼
+┌─────────────────┐       ┌───────────────────┐       ┌─────────────────┐
+│    desktop      │       │   orchestrator    │       │  git-worktree   │
+│  (Electron UI)  │──────▶│   (핵심 엔진)      │◀──────│  (Worktree 관리) │
+└────────┬────────┘       └─────────┬─────────┘       └────────┬────────┘
+         │                          │                          │
+         └──────────────────────────┼──────────────────────────┘
+                                    │
+                                    ▼
+                          ┌─────────────────┐
+                          │      core       │
+                          │  (도메인 모델)   │
+                          └────────┬────────┘
+                                   │
+         ┌─────────────────────────┼─────────────────────────┐
+         │                         │                         │
+         ▼                         ▼                         ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│ provider-       │     │   providers-    │     │ provider-       │
+│ claude-code     │────▶│   common        │◀────│ codex           │
+└─────────────────┘     │  (IProvider)    │     └─────────────────┘
+                        └─────────────────┘
+```
+
+### Layer Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  UI Layer                                                               │
+│  ├── cli/         : Commander 기반 CLI                                  │
+│  └── desktop/     : Electron + React GUI                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Application Layer                                                      │
+│  └── orchestrator/                                                      │
+│      ├── facades/         : Public API (ExecutionFacade)                │
+│      ├── session/         : Multi-terminal Session (Phase 3)            │
+│      │   ├── events/      : Session Events                              │
+│      │   ├── execution/   : Execution Planning                          │
+│      │   ├── lifecycle/   : Session Lifecycle                           │
+│      │   └── resources/   : Resource Management                         │
+│      ├── terminal/        : Terminal Pool (Phase 2)                     │
+│      │   ├── adapters/    : Provider Adapters                           │
+│      │   └── interfaces/  : Interface Definitions                       │
+│      ├── barista/         : BaristaEngineV2 실행 엔진                    │
+│      ├── engine/          : FSM, DAG Executor                           │
+│      ├── provider/        : Provider Executors                          │
+│      ├── workflow/        : Workflow Execution                          │
+│      ├── role/            : Role Management                             │
+│      ├── storage/         : State Persistence                           │
+│      ├── cli/commands/    : CLI 명령어 구현 (UI Layer 연동)               │
+│      └── ui/              : Electron IPC 어댑터 (UI Layer 연동)           │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Domain Layer                                                           │
+│  ├── core/                                                              │
+│  │   ├── Barista, Order, Receipt    : 도메인 엔티티                      │
+│  │   ├── BaristaManager, OrderManager : 매니저 클래스                    │
+│  │   ├── Storage, LogManager        : 저장소 및 로깅                     │
+│  │   ├── schema/                    : Zod 스키마 검증                    │
+│  │   ├── errors/                    : 에러 클래스 정의                   │
+│  │   └── utils/                     : 유틸리티                          │
+│  └── schema/              : 중앙화된 스키마 검증 (향후 확장 예정)          │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Infrastructure Layer                                                   │
+│  ├── providers/                                                         │
+│  │   ├── common/         : Provider 공통 인터페이스                      │
+│  │   ├── claude-code/    : Claude Code CLI Provider                     │
+│  │   └── codex/          : Codex CLI Provider                           │
+│  └── git-worktree/       : Git Worktree 유틸리티                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
 ## Key Packages
 
+> 각 패키지의 상세 스펙은 `packages/<name>/CLAUDE.md` 참조
+
 ### @codecafe/core
-- **Role**: Domain models, recipe engine, event system
+- **Role**: 도메인 모델, 타입, 스키마, 에러
+- **Key exports**: `Barista`, `Order`, `BaristaManager`, `OrderManager`, `Storage`, `LogManager`
 - **Key files**:
-  - `barista.ts`: Barista class (execution unit)
-  - `recipe.ts`: Recipe class (YAML parsing)
-  - `order.ts`: Order class (execution instance)
-  - `executor/`: Execution engine
-  - `orchestrator.ts`: Integrated orchestrator
-  - `storage.ts`: JSON storage
-  - `log-manager.ts`: Log management
-  - `types/terminal.ts`: Terminal type definitions
-  - `types/role.ts`: Role type definitions
-- **Exports**:
-  - `.`: Main exports
-  - `./types`: Type definitions
-  - `./types/terminal`: Terminal types
-  - `./types/role`: Role types
+  - `types.ts`: 도메인 타입 (`Barista`, `Order`, `Receipt`, 상태 Enum)
+  - `barista.ts`: `BaristaManager` 클래스
+  - `order.ts`: `OrderManager` 클래스
+  - `storage.ts`: `Storage` 저장소
+  - `log-manager.ts`: `LogManager` 로깅
+  - `types/*.ts`: Terminal, Role, Cafe, Step 타입
+  - `schema/*.ts`: Zod 스키마 (`CafeSchema`, `RoleSchema`, `WorkflowSchema`, etc.)
+  - `errors/`: 에러 클래스 (`BaseError`, `ErrorCode`)
+  - `utils/`: `TypedEventEmitter`, `TypeGuards`, `EventListenerManager`
 - **Dependencies**: `yaml`, `zod`
 
 ### @codecafe/cli
-- **Role**: `codecafe` CLI commands
+- **Role**: `codecafe` CLI 진입점
 - **Main commands**:
-  - `init`: Initialize environment
-  - `run`: Execute recipe
-  - `doctor`: Check environment
-  - `status`: Query status
-  - `ui`: Launch Desktop UI
+  - `init`: 프로젝트 초기화
+  - `doctor`: 환경 검증
+  - `run`: 워크플로우 실행
+  - `status`: 실행 상태 조회
+  - `ui`: Desktop UI 실행
+  - `orch`: 내부 오케스트레이션 명령
 - **Dependencies**: `commander`, `chalk`, `ora`, `inquirer`
 
 ### @codecafe/desktop
-- **Role**: Electron-based Manager UI
-- **Main views**:
-  - Dashboard: Overall status
-  - New Order: Create new order
-  - Order Detail: Detailed execution status with session/stage tracking
-  - Baristas: Barista list
-- **Tech stack**: Electron 28, React 18, TailwindCSS 3, Zustand 4, Framer Motion 10, webpack 5
-- **IPC Architecture**: main ↔ renderer communication via contextBridge
-  - `preload/index.cts`: Exposes IPC API to renderer (CommonJS)
-  - `main/ipc/*.ts`: IPC handlers (cafe, orchestrator, order, workflow, skill, terminal, worktree, provider)
-  - Registry: Manages cafe metadata in `~/.codecafe/cafes.json`
-- **Additional UI deps**: Radix UI, Lucide icons, ansi-to-html, shadcn
+- **Role**: Electron 기반 데스크톱 GUI
+- **Main Process**:
+  - `index.ts`: app lifecycle, `initExecutionFacade()`, `setupIpcHandlers()`
+  - `execution-manager.ts`: `BaristaEngineV2` 연동
+  - `ipc/*.ts`: IPC 핸들러 (cafe, order, workflow, terminal, provider, worktree, skill, dialog, system, execution-facade)
+  - `ipc/handlers/`: 모듈화된 핸들러 (`workflow.handler.ts`, `order.handler.ts`)
+  - `services/`: 서비스 레이어 (`workflow-service.ts`, `order-service.ts`)
+- **Renderer Process**:
+  - Zustand stores: `useCafeStore`, `useOrderStore`, `useBaristaStore`, `useTerminalStore`, `useSettingsStore`, `useViewStore`
+  - Hooks: `useBaristas`, `useOrders`, `useCafeHandlers`, `useOrderHandlers`, etc.
+  - Utils: `terminal-log/` (parser, summarizer, tool-extractor, formatter)
+- **Tech stack**: Electron 28, React 18, TailwindCSS 3, Zustand 4, Radix UI, i18next
 
 ### @codecafe/orchestrator
-- **Role**: Multi AI CLI orchestrator engine
-- **Key features**: Workflow execution, prompt templates, terminal pool, UI (ink), storage
-- **Dependencies**: ajv, handlebars, gray-matter, jsonpath-plus, chalk, ora, commander, node-pty
-- **Testing**: vitest configured with v8 coverage
+- **Role**: 다중 터미널 오케스트레이션, 워크플로우 실행 엔진
+- **Key modules**:
+  - `facades/`: `ExecutionFacade` (Public API)
+  - `barista/`: `BaristaEngineV2`, `BaristaManager`
+  - `session/`: `CafeSessionManager`, `OrderSession`, `TerminalGroup`, `SharedContext`, `StageOrchestrator`
+  - `terminal/`: `TerminalPool`, `TerminalLease`, `PoolSemaphore`, Provider Adapters
+  - `engine/`: `FSMEngine`, `DAGExecutor`
+  - `provider/`: `ProviderAdapter`, `ProviderExecutor`, `AssistedExecutor`, `HeadlessExecutor`
+  - `workflow/`: `WorkflowExecutor`, `RunRegistry`
+  - `role/`: `RoleManager`, `TemplateEngine`
+  - `cli/commands/`: CLI 명령어 구현 (`init`, `run`, `resume`, `status`, `logs`, `profile`, `assign`, `role`)
+  - `storage/`: `RunStateManager`, `EventLogger`
+  - `ui/`: `registerElectronHandlers`, UI 타입
+- **Dependencies**: commander, handlebars, node-pty, chalk, ora
+- **Testing**: vitest with v8 coverage
 
 ### @codecafe/providers
-- **common**: Shared provider interfaces and utilities
-- **claude-code**: PTY-based Claude Code provider
-- **codex**: Codex CLI provider (M2)
+- **common**: Provider 공통 인터페이스 (`IProvider`, `IProviderStatic`, `ProviderConfig`, `SchemaExecutionConfig`)
+- **claude-code**: `ClaudeCodeProvider` (PTY 기반)
+  - Interactive: `claude "<prompt>"`
+  - Headless: `claude -p @file --output-format json`
+- **codex**: `CodexProvider`
+  - Interactive: `codex "<prompt>"`
+  - Headless: `codex exec --json --output-schema <schema> -i <file>`
 
 ### @codecafe/schema
-- **Role**: YAML/JSON schema definition and zod validation
+- **Role**: YAML/JSON 스키마 검증 (향후 확장 예정)
+- **Current state**: 스키마 검증은 현재 `@codecafe/core/schema/`에서 수행
 
 ### @codecafe/git-worktree
-- **Role**: Git worktree parallel execution management
+- **Role**: Git Worktree 관리 유틸리티
+- **Key exports**: `WorktreeManager` (static methods)
+- **Methods**: `createWorktree`, `removeWorktree`, `mergeToTarget`, `listWorktrees`, `getWorktreeInfo`, `exportPatch`
+- **Security**: `execFile` 사용 (command injection 방지)
 
 ### packages/roles/
 - **Role**: Built-in role definitions with Handlebars templates
@@ -344,6 +518,8 @@ Electron IPC channels exposed via `window.codecafe`:
 ## Documentation
 
 - `README.md`: Project overview and usage
+- `docs/module-specs/README.md`: **모듈 아키텍처 개요** (Package Dependency Graph, Layer Architecture)
+- `packages/*/CLAUDE.md`: **패키지별 상세 스펙** (Flow, File Map, API, Review Checklist)
 - `docs/IMPLEMENTATION_SUMMARY.md`: Implementation summary
 - `docs/desktop-architecture.md`: Electron desktop UI architecture
 - `docs/terminal-execution-flow.md`: Terminal PTY execution flow
@@ -355,6 +531,22 @@ Electron IPC channels exposed via `window.codecafe`:
   - `오케스트레이터-PRD.md`: Orchestrator PRD (Korean)
 - `packages/roles/README.md`: Role system documentation and template syntax
 - `agents/`: Agent definitions for orchestrator workflows
+
+## Review Checklist (Global)
+
+패키지 변경 시 확인:
+- [ ] 해당 패키지 `CLAUDE.md`의 Flow 유지
+- [ ] 의존 패키지 인터페이스 호환성
+- [ ] Export 변경 시 상위 패키지 영향 확인
+- [ ] `docs/module-specs/README.md` 다이어그램과 일치 여부
+
+## Phase Evolution
+
+| Phase | 모듈 | 설명 |
+|-------|------|------|
+| Phase 1 | `barista/`, `workflow/` | 기본 실행 |
+| Phase 2 | `terminal/`, `role/` | Terminal Pool, Role 기반 실행 |
+| Phase 3 | `session/` | Multi-terminal Session |
 
 ## Milestone Progress
 

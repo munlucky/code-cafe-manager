@@ -49,7 +49,6 @@ $ codecafe <command> [options]
 | 파일 | 역할 | 핵심 Export |
 |------|------|-------------|
 | `src/index.ts` | CLI 진입점 | `main()` |
-| `src/config.ts` | 설정 관리 | config utilities |
 | `src/commands/init.ts` | init 명령어 | `registerInitCommand()` |
 | `src/commands/doctor.ts` | doctor 명령어 | `registerDoctorCommand()` |
 | `src/commands/run.ts` | run 명령어 | `registerRunCommand()` |

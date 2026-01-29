@@ -9,9 +9,9 @@
         │
         ▼
 ┌───────────────────────────────────────────────────────────────────────┐
-│  src/main/index.ts:177-199                                            │
+│  src/main/index.ts:185-203                                            │
 │  app.whenReady()                                                      │
-│  1. initOrchestrator() → Orchestrator 초기화                           │
+│  1. initExecutionFacade() → ExecutionFacade 초기화                     │
 │     └─ initExecutionManager() → BaristaEngineV2 연동 (내부 호출)        │
 │  2. setupIpcHandlers() → IPC 핸들러 등록                               │
 │  3. createWindow() → BrowserWindow 생성                               │
@@ -33,7 +33,7 @@
 │  - skill.ts             │            │  - summarizer.ts                │
 │  - dialog.ts            │            │  - tool-extractor.ts            │
 │  - system.ts            │            │                                 │
-│  - orchestrator.ts      │            │                                 │
+│  - execution-facade.ts  │            │                                 │
 └─────────────────────────┘            └─────────────────────────────────┘
         │
         ▼
@@ -58,11 +58,11 @@
 |------|------|-------------|
 | **Main Process** | | |
 | `src/main/index.ts` | Electron 메인 진입점 | app lifecycle |
-| `src/main/execution-manager.ts` | 실행 관리 | `initExecutionManager()`, `getExecutionManager()` |
+| `src/main/execution-manager.ts` | 실행 관리 | `initExecutionManager()`, `getExecutionManager()`, `cleanupExecutionManager()` |
 | `src/main/file-logger.ts` | 파일 로깅 | `setupMainProcessLogger()` |
 | **IPC Handlers** | | |
 | `src/main/ipc/cafe.ts` | Cafe 관리 | `registerCafeHandlers()` |
-| `src/main/ipc/order.ts` | Order 관리 | `registerOrderHandlers()` |
+| `src/main/ipc/order.ts` | Order 관리 | `registerOrderHandlers()`, `cleanupOrderHandlers()` |
 | `src/main/ipc/workflow.ts` | Workflow 관리 | `registerWorkflowHandlers()` |
 | `src/main/ipc/terminal.ts` | Terminal 관리 | `registerTerminalHandlers()` |
 | `src/main/ipc/provider.ts` | Provider 관리 | `registerProviderHandlers()` |
@@ -70,14 +70,34 @@
 | `src/main/ipc/skill.ts` | Skill 관리 | `registerSkillHandlers()` |
 | `src/main/ipc/dialog.ts` | 다이얼로그 | `registerDialogHandlers()` |
 | `src/main/ipc/system.ts` | 시스템 정보 | `registerSystemHandlers()` |
-| `src/main/ipc/orchestrator.ts` | Orchestrator 연동 | `registerOrchestratorHandlers()` |
+| `src/main/ipc/execution-facade.ts` | ExecutionFacade 연동 | `registerExecutionFacadeHandlers()` |
+| `src/main/ipc/types.ts` | IPC 타입 | IPC handler types |
+| `src/main/ipc/handlers/*.ts` | 핸들러 모듈 | `workflow.handler.ts`, `order.handler.ts` |
+| `src/main/ipc/utils/*.ts` | IPC 유틸 | `output-interval-manager.ts` |
+| **Services** | | |
+| `src/main/services/index.ts` | 서비스 모듈 | Service exports |
+| `src/main/services/workflow-service.ts` | Workflow 서비스 | Workflow operations |
+| `src/main/services/order-service.ts` | Order 서비스 | Order operations |
+| **Config** | | |
+| `src/main/config/terminal-pool.config.ts` | Terminal Pool 설정 | Pool configuration |
 | **Preload** | | |
-| `src/preload.ts` | Context Bridge | 보안 브리지 |
+| `src/preload/index.cjs` | Context Bridge | 보안 브리지 |
 | **Renderer** | | |
-| `src/renderer/utils/terminal-log/` | 로그 파싱 | `parser`, `summarizer`, `tool-extractor` |
+| `src/renderer/utils/terminal-log/` | 로그 파싱 | `parser`, `summarizer`, `tool-extractor`, `formatter`, `content-detector` |
+| `src/renderer/utils/terminal-log-parser.ts` | 로그 파서 | Legacy parser |
+| `src/renderer/utils/converters.ts` | 변환 유틸 | Data converters |
+| `src/renderer/utils/formatters.ts` | 포맷 유틸 | Data formatters |
+| `src/renderer/utils/cn.ts` | 클래스 유틸 | `cn()` |
+| `src/renderer/store/*.ts` | Zustand 스토어 | `useCafeStore`, `useOrderStore`, `useBaristaStore`, `useTerminalStore`, `useSettingsStore`, `useViewStore` |
+| `src/renderer/hooks/*.ts` | React Hooks | `useBaristas`, `useOrders`, `useCafeHandlers`, `useOrderHandlers`, `useIpcEffect`, etc. |
+| `src/renderer/i18n/*.ts` | 다국어 지원 | `useTranslation`, `translations` |
+| `src/renderer/types/*.ts` | 타입 정의 | `models.ts`, `terminal.ts`, `design.ts` |
+| `src/renderer/components/terminal/` | Terminal UI | Terminal components |
+| `src/renderer/components/views/` | View UI | View components |
 | **Common** | | |
 | `src/common/ipc-types.ts` | IPC 타입 정의 | IPC 메시지 타입 |
 | `src/common/output-markers.ts` | 출력 마커 | 마커 상수 |
+| `src/common/output-utils.ts` | 출력 유틸 | Output utilities |
 
 ## IPC Channels
 
