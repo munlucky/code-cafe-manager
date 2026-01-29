@@ -84,7 +84,10 @@
       "Bash(powershell.exe:*)",
       "Bash(wc:*)",
       "Bash(git check-ignore:*)",
-      "Bash(npx vitest:*)"
+      "Bash(npx vitest:*)",
+      "Bash(npx @anthropic-ai/memory-mcp:*)",
+      "Bash(npm search:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []
