@@ -87,7 +87,10 @@
       "Bash(npx vitest:*)",
       "Bash(npx @anthropic-ai/memory-mcp:*)",
       "Bash(npm search:*)",
-      "WebSearch"
+      "WebSearch",
+      "mcp__memory__create_entities",
+      "mcp__memory__read_graph",
+      "mcp__memory__create_relations"
     ],
     "deny": [],
     "ask": []
