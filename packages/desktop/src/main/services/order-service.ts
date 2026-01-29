@@ -328,7 +328,7 @@ export class OrderService {
   /**
    * Create simple order
    */
-  createOrder(params: CreateOrderParams): Order {
+  async createOrder(params: CreateOrderParams): Promise<Order> {
     return this.facade.createOrder(
       params.workflowId,
       params.workflowName,
@@ -610,15 +610,15 @@ export class OrderService {
       logger.info('Session not found, attempting to restore for followup');
 
       try {
-        let barista = this.facade.getAllBaristas().find(b => b.provider === order.provider);
+        let barista = this.facade.getAllBaristas().find((b: { provider: string }) => b.provider === order.provider);
         if (!barista) {
-          barista = this.facade.createBarista(order.provider);
+          barista = await this.facade.createBarista(order.provider);
           logger.info('Created barista for followup restore', { provider: order.provider });
         }
 
         const cwd = order.worktreeInfo!.path;
         const cafeId = order.cafeId || order.counter;
-        await baristaEngine.restoreSessionForFollowup(order, barista, cafeId, cwd);
+        await baristaEngine.restoreSessionForFollowup(order, barista!, cafeId, cwd);
         logger.info('Session restored for order', { orderId });
         return true;
       } catch (restoreError: unknown) {

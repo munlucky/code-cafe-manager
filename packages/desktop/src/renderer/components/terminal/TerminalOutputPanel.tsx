@@ -7,6 +7,13 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import Ansi from 'ansi-to-html';
 
+// Security: Conditional logging - only in development mode
+const isDev = process.env.NODE_ENV === 'development';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const devLog: (...args: any[]) => void = isDev ? console.log.bind(console) : () => {};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const devError: (...args: any[]) => void = isDev ? console.error.bind(console) : () => {};
+
 interface OrderOutputEvent {
   orderId: string;
   timestamp: string;
@@ -53,7 +60,7 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
         (now - lastLogTimeRef.current > 5000 && logCounterRef.current > 0);
 
       if (shouldLog) {
-        console.log(`[TerminalOutputPanel] Received ${logCounterRef.current} chunks for order ${orderId}`);
+        devLog(`[TerminalOutputPanel] Received ${logCounterRef.current} chunks for order ${orderId}`);
         lastLogTimeRef.current = now;
       }
 
@@ -88,11 +95,11 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
         if (history.length > 0) {
           setOutput(history as OrderOutputEvent[]);
         }
-        console.log('[TerminalOutputPanel] Subscribed to order:', orderId);
+        devLog('[TerminalOutputPanel] Subscribed to order:', orderId);
         setLoading(false);
         setStatus('ready');
       } else {
-        console.error('[TerminalOutputPanel] Failed to subscribe:', result.error);
+        devError('[TerminalOutputPanel] Failed to subscribe:', result.error);
         setLoading(false);
         setStatus('ready'); // 실패해도 ready로 표시 (error 표시는 별도)
       }
@@ -107,14 +114,14 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
     // 완료/실패 이벤트 리스너
     const handleCompleted = (data: any) => {
       if (data.orderId === orderId) {
-        console.log('[TerminalOutputPanel] Order completed:', orderId);
+        devLog('[TerminalOutputPanel] Order completed:', orderId);
         setStatus('completed');
       }
     };
 
     const handleFailed = (data: any) => {
       if (data.orderId === orderId) {
-        console.error('[TerminalOutputPanel] Order failed:', orderId, data.error);
+        devError('[TerminalOutputPanel] Order failed:', orderId, data.error);
         setStatus('failed');
       }
     };
@@ -129,7 +136,7 @@ export function TerminalOutputPanel({ orderId }: TerminalOutputPanelProps): JSX.
       if (cleanupListener) cleanupListener();
       if (cleanupCompleted) cleanupCompleted();
       if (cleanupFailed) cleanupFailed();
-      console.log('[TerminalOutputPanel] Cleanup for order:', orderId);
+      devLog('[TerminalOutputPanel] Cleanup for order:', orderId);
     };
   }, [orderId, handleOutput]);
 

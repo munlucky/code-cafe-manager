@@ -75,11 +75,11 @@ function renderView(viewName) {
 }
 
 // Helper: Create element with text content
+// Security: Removed innerHTML option to prevent potential XSS
 function createEl(tag, options = {}) {
   const el = document.createElement(tag);
   if (options.className) el.className = options.className;
   if (options.text) el.textContent = options.text;
-  if (options.html) el.innerHTML = options.html; // Used only for trusted content
   if (options.style) Object.assign(el.style, options.style);
   if (options.onclick) el.onclick = options.onclick;
   return el;
@@ -95,11 +95,19 @@ async function renderDashboard(container) {
 
   const baristasCard = createEl("div", { className: "card" });
   baristasCard.id = "dashboard-baristas";
-  baristasCard.innerHTML = '<h3>Baristas</h3><div class="loading">Loading...</div>';
+  // Security: Use DOM API instead of innerHTML
+  const baristasH3 = createEl("h3", { text: "Baristas" });
+  const baristasLoading = createEl("div", { className: "loading", text: "Loading..." });
+  baristasCard.appendChild(baristasH3);
+  baristasCard.appendChild(baristasLoading);
 
   const ordersCard = createEl("div", { className: "card" });
   ordersCard.id = "dashboard-orders";
-  ordersCard.innerHTML = '<h3>Recent Orders</h3><div class="loading">Loading...</div>';
+  // Security: Use DOM API instead of innerHTML
+  const ordersH3 = createEl("h3", { text: "Recent Orders" });
+  const ordersLoading = createEl("div", { className: "loading", text: "Loading..." });
+  ordersCard.appendChild(ordersH3);
+  ordersCard.appendChild(ordersLoading);
 
   grid.appendChild(baristasCard);
   grid.appendChild(ordersCard);

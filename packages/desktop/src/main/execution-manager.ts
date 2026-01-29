@@ -537,17 +537,17 @@ export class ExecutionManager {
 
         try {
           // Barista 확인
-          let barista = this.facade.getAllBaristas().find(b => b.provider === order.provider);
+          let barista = this.facade.getAllBaristas().find((b: { provider: string }) => b.provider === order.provider);
           if (!barista) {
-            barista = this.facade.createBarista(order.provider);
+            barista = await this.facade.createBarista(order.provider);
           }
 
           const cwd = order.worktreeInfo!.path;
           const cafeId = order.cafeId || 'default';
 
           // Session 복원
-          await this.facade.restoreSessionForFollowup(order, barista, cafeId, cwd);
-          this.activeExecutions.set(orderId, { baristaId: barista.id });
+          await this.facade.restoreSessionForFollowup(order, barista!, cafeId, cwd);
+          this.activeExecutions.set(orderId, { baristaId: barista!.id });
 
           logger.info(`Session restored for order ${orderId}, executing followup`);
 
@@ -691,10 +691,10 @@ export class ExecutionManager {
       for (const order of restorableOrders) {
         try {
           // Order의 provider와 일치하는 Barista 획득 (없으면 생성)
-          let barista = this.facade.getAllBaristas().find(b => b.provider === order.provider);
+          let barista = this.facade.getAllBaristas().find((b: { provider: string }) => b.provider === order.provider);
           if (!barista) {
             // 일치하는 Barista가 없으면 생성
-            barista = this.facade.createBarista(order.provider);
+            barista = await this.facade.createBarista(order.provider);
             logger.info(`Created barista with provider ${order.provider} for session restore`);
           }
 
@@ -703,11 +703,11 @@ export class ExecutionManager {
           const cafeId = order.cafeId || 'default';
 
           // Session 복원 (이미 completed 상태로 복원됨)
-          await this.facade.restoreSessionForFollowup(order, barista, cafeId, cwd);
+          await this.facade.restoreSessionForFollowup(order, barista!, cafeId, cwd);
 
           // activeExecutions에 등록 (worktree가 존재하는 한 계속 유지)
           // 복원된 세션은 completed 상태이지만 followup이 가능하므로 activeExecutions에 유지
-          this.activeExecutions.set(order.id, { baristaId: barista.id });
+          this.activeExecutions.set(order.id, { baristaId: barista!.id });
 
           logger.info(`Restored session for order ${order.id} with worktree ${cwd} (followup ready)`);
         } catch (err: unknown) {
