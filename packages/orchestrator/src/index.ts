@@ -84,6 +84,9 @@ export type {
   ElectronEventEmitters,
 } from './ui/types';
 
+// Export plugin (Claude Code Plugin for Moonbot integration)
+export * from './plugin';
+
 // Export types
 export * from './types';
 
