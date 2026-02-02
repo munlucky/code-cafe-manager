@@ -1,5 +1,8 @@
-import { Barista, BaristaStatus, ProviderType, EventType, BaristaEvent } from './types.js';
+import { Barista, BaristaStatus, ProviderType, EventType, BaristaEvent, BaristaEventPayloads } from './types.js';
 import { EventEmitter } from 'events';
+import { NotFoundError, ValidationError } from './errors/specific-errors.js';
+import { ErrorCode } from './errors/error-codes.js';
+import { BARISTA_DEFAULTS } from './constants/barista.js';
 
 /**
  * Barista Manager
@@ -9,7 +12,19 @@ export class BaristaManager extends EventEmitter {
   private baristas: Map<string, Barista> = new Map();
   private maxBaristas: number;
 
-  constructor(maxBaristas: number = 4) {
+  /**
+   * Valid state transitions for BaristaStatus
+   * STOPPED is a terminal state - no transitions allowed from it
+   */
+  private static readonly VALID_TRANSITIONS: Record<BaristaStatus, BaristaStatus[]> = {
+    [BaristaStatus.IDLE]: [BaristaStatus.RUNNING, BaristaStatus.BUSY, BaristaStatus.STOPPED],
+    [BaristaStatus.RUNNING]: [BaristaStatus.IDLE, BaristaStatus.ERROR, BaristaStatus.STOPPED],
+    [BaristaStatus.BUSY]: [BaristaStatus.IDLE, BaristaStatus.ERROR, BaristaStatus.STOPPED],
+    [BaristaStatus.ERROR]: [BaristaStatus.IDLE, BaristaStatus.STOPPED],
+    [BaristaStatus.STOPPED]: [],
+  };
+
+  constructor(maxBaristas: number = BARISTA_DEFAULTS.MAX_POOL_SIZE) {
     super();
     this.maxBaristas = maxBaristas;
   }
@@ -19,7 +34,10 @@ export class BaristaManager extends EventEmitter {
    */
   createBarista(provider: ProviderType): Barista {
     if (this.baristas.size >= this.maxBaristas) {
-      throw new Error(`Maximum baristas (${this.maxBaristas}) reached`);
+      throw new ValidationError(ErrorCode.MAX_BARISTAS_REACHED, {
+        message: `Maximum baristas (${this.maxBaristas}) reached`,
+        details: { maxBaristas: this.maxBaristas, currentCount: this.baristas.size },
+      });
     }
 
     const barista: Barista = {
@@ -43,8 +61,15 @@ export class BaristaManager extends EventEmitter {
   updateBaristaStatus(baristaId: string, status: BaristaStatus, orderId?: string | null): void {
     const barista = this.baristas.get(baristaId);
     if (!barista) {
-      throw new Error(`Barista ${baristaId} not found`);
+      throw new NotFoundError(ErrorCode.BARISTA_NOT_FOUND, {
+        message: `Barista ${baristaId} not found`,
+        resourceType: 'barista',
+        resourceId: baristaId,
+      });
     }
+
+    // Validate state transition
+    this.validateStateTransition(barista.status, status, baristaId);
 
     barista.status = status;
     barista.lastActivityAt = new Date();
@@ -93,11 +118,18 @@ export class BaristaManager extends EventEmitter {
   removeBarista(baristaId: string): void {
     const barista = this.baristas.get(baristaId);
     if (!barista) {
-      throw new Error(`Barista ${baristaId} not found`);
+      throw new NotFoundError(ErrorCode.BARISTA_NOT_FOUND, {
+        message: `Barista ${baristaId} not found`,
+        resourceType: 'barista',
+        resourceId: baristaId,
+      });
     }
 
     if (barista.status === BaristaStatus.RUNNING) {
-      throw new Error(`Cannot remove running barista ${baristaId}`);
+      throw new ValidationError(ErrorCode.BARISTA_RUNNING, {
+        message: `Cannot remove running barista ${baristaId}`,
+        details: { baristaId, status: barista.status },
+      });
     }
 
     this.baristas.delete(baristaId);
@@ -119,8 +151,40 @@ export class BaristaManager extends EventEmitter {
     return `barista-${Date.now()}-${Math.random().toString(36).substring(7)}`;
   }
 
-  private emitEvent(type: EventType, baristaId: string, data: any): void {
-    const event: BaristaEvent = {
+  /**
+   * Validates that a state transition is allowed
+   * @throws ValidationError if the transition is invalid
+   */
+  private validateStateTransition(
+    currentStatus: BaristaStatus,
+    newStatus: BaristaStatus,
+    baristaId: string
+  ): void {
+    // Same status is always allowed (no-op)
+    if (currentStatus === newStatus) {
+      return;
+    }
+
+    const validTransitions = BaristaManager.VALID_TRANSITIONS[currentStatus];
+    if (!validTransitions.includes(newStatus)) {
+      throw new ValidationError(ErrorCode.INVALID_STATE_TRANSITION, {
+        message: `Invalid state transition from ${currentStatus} to ${newStatus} for barista ${baristaId}`,
+        details: {
+          baristaId,
+          currentStatus,
+          newStatus,
+          allowedTransitions: validTransitions,
+        },
+      });
+    }
+  }
+
+  private emitEvent<T extends keyof BaristaEventPayloads>(
+    type: T,
+    baristaId: string,
+    data: BaristaEventPayloads[T]
+  ): void {
+    const event: BaristaEvent<BaristaEventPayloads[T]> = {
       type,
       timestamp: new Date(),
       baristaId,

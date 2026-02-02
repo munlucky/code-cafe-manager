@@ -4,6 +4,60 @@ import { join } from 'path';
 import { Order, Barista, Receipt } from './types.js';
 
 /**
+ * Raw JSON types for type-safe parsing
+ */
+interface OrderJson {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  baristaId: string | null;
+  status: string;
+  counter: string;
+  provider: string;
+  vars: Record<string, string>;
+  prompt?: string;
+  createdAt: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  error?: string;
+  worktreeInfo?: {
+    path: string;
+    branch: string;
+    baseBranch: string;
+    repoPath?: string;
+    removed?: boolean;
+    merged?: boolean;
+    mergedTo?: string;
+    mergeCommit?: string;
+  };
+  cafeId?: string;
+  recipeId?: string;
+  recipeName?: string;
+}
+
+interface BaristaJson {
+  id: string;
+  status: string;
+  currentOrderId: string | null;
+  provider: string;
+  role?: string;
+  createdAt: string;
+  lastActivityAt: string;
+}
+
+interface ReceiptJson {
+  orderId: string;
+  status: string;
+  startedAt: string;
+  endedAt: string;
+  provider: string;
+  counter: string;
+  errorSummary?: string;
+  changedFiles?: string[];
+  logs?: string;
+}
+
+/**
  * JSON 기반 데이터 저장소
  */
 export class Storage {
@@ -40,6 +94,24 @@ export class Storage {
   }
 
   /**
+   * Generic JSON file loader with transformation
+   */
+  private async loadJsonFile<TRaw, TResult>(
+    filepath: string,
+    transformer: (data: TRaw) => TResult
+  ): Promise<TResult[]> {
+    if (!existsSync(filepath)) {
+      return [];
+    }
+    const content = await readFile(filepath, 'utf-8');
+    if (!content) {
+      return [];
+    }
+    const rawData = JSON.parse(content) as TRaw[];
+    return rawData.map(transformer);
+  }
+
+  /**
    * Orders 저장/로드
    */
   async saveOrders(orders: Order[]): Promise<void> {
@@ -47,21 +119,15 @@ export class Storage {
   }
 
   async loadOrders(): Promise<Order[]> {
-    if (!existsSync(this.ordersFile)) {
-      return [];
-    }
-    const content = await readFile(this.ordersFile, 'utf-8');
-    if (!content) {
-      return [];
-    }
-    const orders = JSON.parse(content);
-    // Date 복원
-    return orders.map((order: any) => ({
-      ...order,
-      createdAt: new Date(order.createdAt),
-      startedAt: order.startedAt ? new Date(order.startedAt) : null,
-      endedAt: order.endedAt ? new Date(order.endedAt) : null,
-    }));
+    return this.loadJsonFile<OrderJson, Order>(
+      this.ordersFile,
+      (order) => ({
+        ...order,
+        createdAt: new Date(order.createdAt),
+        startedAt: order.startedAt ? new Date(order.startedAt) : null,
+        endedAt: order.endedAt ? new Date(order.endedAt) : null,
+      }) as Order
+    );
   }
 
   /**
@@ -72,20 +138,14 @@ export class Storage {
   }
 
   async loadBaristas(): Promise<Barista[]> {
-    if (!existsSync(this.baristasFile)) {
-      return [];
-    }
-    const content = await readFile(this.baristasFile, 'utf-8');
-    if (!content) {
-      return [];
-    }
-    const baristas = JSON.parse(content);
-    // Date 복원
-    return baristas.map((barista: any) => ({
-      ...barista,
-      createdAt: new Date(barista.createdAt),
-      lastActivityAt: new Date(barista.lastActivityAt),
-    }));
+    return this.loadJsonFile<BaristaJson, Barista>(
+      this.baristasFile,
+      (barista) => ({
+        ...barista,
+        createdAt: new Date(barista.createdAt),
+        lastActivityAt: new Date(barista.lastActivityAt),
+      }) as Barista
+    );
   }
 
   /**
@@ -96,20 +156,14 @@ export class Storage {
   }
 
   async loadReceipts(): Promise<Receipt[]> {
-    if (!existsSync(this.receiptsFile)) {
-      return [];
-    }
-    const content = await readFile(this.receiptsFile, 'utf-8');
-    if (!content) {
-      return [];
-    }
-    const receipts = JSON.parse(content);
-    // Date 복원
-    return receipts.map((receipt: any) => ({
-      ...receipt,
-      startedAt: new Date(receipt.startedAt),
-      endedAt: new Date(receipt.endedAt),
-    }));
+    return this.loadJsonFile<ReceiptJson, Receipt>(
+      this.receiptsFile,
+      (receipt) => ({
+        ...receipt,
+        startedAt: new Date(receipt.startedAt),
+        endedAt: new Date(receipt.endedAt),
+      }) as Receipt
+    );
   }
 
   /**

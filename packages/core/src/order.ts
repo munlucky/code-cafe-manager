@@ -1,5 +1,7 @@
-import { Order, OrderStatus, ProviderType, EventType, OrderEvent } from './types.js';
+import { Order, OrderStatus, ProviderType, EventType, OrderEvent, OrderEventPayloads } from './types.js';
 import { EventEmitter } from 'events';
+import { NotFoundError, ValidationError } from './errors/specific-errors.js';
+import { ErrorCode } from './errors/error-codes.js';
 
 /**
  * Order Manager
@@ -7,7 +9,7 @@ import { EventEmitter } from 'events';
  */
 export class OrderManager extends EventEmitter {
   private orders: Map<string, Order> = new Map();
-  private pendingQueue: string[] = [];
+  private pendingQueue: Set<string> = new Set();
 
   /**
    * 새 주문 생성
@@ -36,7 +38,7 @@ export class OrderManager extends EventEmitter {
     };
 
     this.orders.set(order.id, order);
-    this.pendingQueue.push(order.id);
+    this.pendingQueue.add(order.id);
     this.emitEvent(EventType.ORDER_CREATED, order.id, order);
 
     return order;
@@ -48,15 +50,22 @@ export class OrderManager extends EventEmitter {
   assignBarista(orderId: string, baristaId: string): void {
     const order = this.orders.get(orderId);
     if (!order) {
-      throw new Error(`Order ${orderId} not found`);
+      throw new NotFoundError(ErrorCode.ORDER_NOT_FOUND, {
+        message: `Order ${orderId} not found`,
+        resourceType: 'order',
+        resourceId: orderId,
+      });
     }
 
     if (order.status !== OrderStatus.PENDING) {
-      throw new Error(`Order ${orderId} is not pending`);
+      throw new ValidationError(ErrorCode.ORDER_NOT_PENDING, {
+        message: `Order ${orderId} is not pending`,
+        details: { orderId, currentStatus: order.status },
+      });
     }
 
     order.baristaId = baristaId;
-    this.pendingQueue = this.pendingQueue.filter((id) => id !== orderId);
+    this.pendingQueue.delete(orderId);
     this.emitEvent(EventType.ORDER_ASSIGNED, orderId, { baristaId });
   }
 
@@ -66,7 +75,11 @@ export class OrderManager extends EventEmitter {
   startOrder(orderId: string): void {
     const order = this.orders.get(orderId);
     if (!order) {
-      throw new Error(`Order ${orderId} not found`);
+      throw new NotFoundError(ErrorCode.ORDER_NOT_FOUND, {
+        message: `Order ${orderId} not found`,
+        resourceType: 'order',
+        resourceId: orderId,
+      });
     }
 
     order.status = OrderStatus.RUNNING;
@@ -82,7 +95,11 @@ export class OrderManager extends EventEmitter {
   completeOrder(orderId: string, success: boolean, error?: string): void {
     const order = this.orders.get(orderId);
     if (!order) {
-      throw new Error(`Order ${orderId} not found`);
+      throw new NotFoundError(ErrorCode.ORDER_NOT_FOUND, {
+        message: `Order ${orderId} not found`,
+        resourceType: 'order',
+        resourceId: orderId,
+      });
     }
 
     order.status = success ? OrderStatus.COMPLETED : OrderStatus.FAILED;
@@ -103,18 +120,25 @@ export class OrderManager extends EventEmitter {
   cancelOrder(orderId: string): void {
     const order = this.orders.get(orderId);
     if (!order) {
-      throw new Error(`Order ${orderId} not found`);
+      throw new NotFoundError(ErrorCode.ORDER_NOT_FOUND, {
+        message: `Order ${orderId} not found`,
+        resourceType: 'order',
+        resourceId: orderId,
+      });
     }
 
     if (order.status === OrderStatus.COMPLETED || order.status === OrderStatus.FAILED) {
-      throw new Error(`Cannot cancel ${order.status.toLowerCase()} order ${orderId}`);
+      throw new ValidationError(ErrorCode.ORDER_CANNOT_CANCEL, {
+        message: `Cannot cancel ${order.status.toLowerCase()} order ${orderId}`,
+        details: { orderId, currentStatus: order.status },
+      });
     }
 
     order.status = OrderStatus.CANCELLED;
     order.endedAt = new Date();
 
-    // 대기 중인 경우 큐에서 제거
-    this.pendingQueue = this.pendingQueue.filter((id) => id !== orderId);
+    // 대기 중인 경우 큐에서 제거 (O(1) operation with Set)
+    this.pendingQueue.delete(orderId);
 
     this.emitEvent(EventType.ORDER_STATUS_CHANGED, orderId, {
       status: OrderStatus.CANCELLED,
@@ -127,7 +151,11 @@ export class OrderManager extends EventEmitter {
   appendLog(orderId: string, log: string): void {
     const order = this.orders.get(orderId);
     if (!order) {
-      throw new Error(`Order ${orderId} not found`);
+      throw new NotFoundError(ErrorCode.ORDER_NOT_FOUND, {
+        message: `Order ${orderId} not found`,
+        resourceType: 'order',
+        resourceId: orderId,
+      });
     }
 
     this.emitEvent(EventType.ORDER_LOG, orderId, { log });
@@ -139,7 +167,11 @@ export class OrderManager extends EventEmitter {
   updateOrderPrompt(orderId: string, prompt: string, vars: Record<string, string> = {}): void {
     const order = this.orders.get(orderId);
     if (!order) {
-      throw new Error(`Order ${orderId} not found`);
+      throw new NotFoundError(ErrorCode.ORDER_NOT_FOUND, {
+        message: `Order ${orderId} not found`,
+        resourceType: 'order',
+        resourceId: orderId,
+      });
     }
 
     order.prompt = prompt;
@@ -172,7 +204,10 @@ export class OrderManager extends EventEmitter {
 
     // RUNNING/PENDING 상태 주문은 삭제할 수 없음
     if (order.status === OrderStatus.RUNNING || order.status === OrderStatus.PENDING) {
-      throw new Error(`Cannot delete ${order.status.toLowerCase()} order ${orderId}. Cancel it first.`);
+      throw new ValidationError(ErrorCode.ORDER_CANNOT_DELETE, {
+        message: `Cannot delete ${order.status.toLowerCase()} order ${orderId}. Cancel it first.`,
+        details: { orderId, currentStatus: order.status },
+      });
     }
 
     this.orders.delete(orderId);
@@ -207,13 +242,13 @@ export class OrderManager extends EventEmitter {
    */
   restoreOrders(orders: Order[]): void {
     this.orders.clear();
-    this.pendingQueue = [];
+    this.pendingQueue = new Set();
 
     for (const order of orders) {
       this.orders.set(order.id, order);
       // PENDING 상태인 주문은 대기 큐에 추가
       if (order.status === OrderStatus.PENDING) {
-        this.pendingQueue.push(order.id);
+        this.pendingQueue.add(order.id);
       }
     }
   }
@@ -222,7 +257,7 @@ export class OrderManager extends EventEmitter {
    * 대기 중인 주문 조회
    */
   getPendingOrders(): Order[] {
-    return this.pendingQueue
+    return Array.from(this.pendingQueue)
       .map((id) => this.orders.get(id))
       .filter((order): order is Order => order !== undefined);
   }
@@ -244,8 +279,12 @@ export class OrderManager extends EventEmitter {
     return `order-${Date.now()}-${Math.random().toString(36).substring(7)}`;
   }
 
-  private emitEvent(type: EventType, orderId: string, data: any): void {
-    const event: OrderEvent = {
+  private emitEvent<T extends keyof OrderEventPayloads>(
+    type: T,
+    orderId: string,
+    data: OrderEventPayloads[T]
+  ): void {
+    const event: OrderEvent<OrderEventPayloads[T]> = {
       type,
       timestamp: new Date(),
       orderId,

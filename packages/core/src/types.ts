@@ -110,16 +110,36 @@ export enum EventType {
   ORDER_COMPLETED = 'order:completed',
 }
 
-export interface BaristaEvent {
+/**
+ * Event payload types for Barista events
+ */
+export interface BaristaEventPayloads {
+  [EventType.BARISTA_CREATED]: Barista;
+  [EventType.BARISTA_STATUS_CHANGED]: { status: BaristaStatus; orderId: string | null };
+  [EventType.BARISTA_REMOVED]: { baristaId: string };
+}
+
+/**
+ * Event payload types for Order events
+ */
+export interface OrderEventPayloads {
+  [EventType.ORDER_CREATED]: Order;
+  [EventType.ORDER_ASSIGNED]: { baristaId: string };
+  [EventType.ORDER_STATUS_CHANGED]: { status?: OrderStatus; deleted?: boolean };
+  [EventType.ORDER_LOG]: { log: string };
+  [EventType.ORDER_COMPLETED]: { status: OrderStatus; error?: string };
+}
+
+export interface BaristaEvent<T = Record<string, unknown>> {
   type: EventType;
   timestamp: Date;
   baristaId: string;
-  data: any;
+  data: T;
 }
 
-export interface OrderEvent {
+export interface OrderEvent<T = Record<string, unknown>> {
   type: EventType;
   timestamp: Date;
   orderId: string;
-  data: any;
+  data: T;
 }

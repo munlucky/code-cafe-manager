@@ -4,10 +4,28 @@
 
 export type TerminalStatus = 'idle' | 'busy' | 'crashed';
 
+/**
+ * PTY Process interface (subset of IPty from node-pty)
+ * Defined here to avoid adding node-pty as a dependency to core package.
+ * The orchestrator package uses the actual IPty type from node-pty.
+ */
+export interface PtyProcess {
+  readonly pid: number;
+  readonly cols: number;
+  readonly rows: number;
+  write(data: string): void;
+  resize(cols: number, rows: number): void;
+  kill(signal?: string): void;
+  pause(): void;
+  resume(): void;
+  onData: (callback: (data: string) => void) => { dispose: () => void };
+  onExit: (callback: (e: { exitCode: number; signal?: number }) => void) => { dispose: () => void };
+}
+
 export interface Terminal {
   id: string;
   provider: ProviderType;
-  process: any; // IPty (node-pty), main process에서만 사용
+  process: PtyProcess | null;
   status: TerminalStatus;
   currentBarista?: string;
   leaseToken?: LeaseToken; // NEW (Gap 2)
