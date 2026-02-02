@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { Order, Barista, Receipt } from './types.js';
+import { Order, Barista, Receipt, OrderStatus, BaristaStatus, ProviderType } from './types.js';
 
 /**
  * Raw JSON types for type-safe parsing
@@ -107,8 +107,13 @@ export class Storage {
     if (!content) {
       return [];
     }
-    const rawData = JSON.parse(content) as TRaw[];
-    return rawData.map(transformer);
+    try {
+      const rawData = JSON.parse(content) as TRaw[];
+      return rawData.map(transformer);
+    } catch {
+      // JSON 파싱 실패 시 빈 배열 반환하여 애플리케이션 충돌 방지
+      return [];
+    }
   }
 
   /**
@@ -121,12 +126,17 @@ export class Storage {
   async loadOrders(): Promise<Order[]> {
     return this.loadJsonFile<OrderJson, Order>(
       this.ordersFile,
-      (order) => ({
-        ...order,
-        createdAt: new Date(order.createdAt),
-        startedAt: order.startedAt ? new Date(order.startedAt) : null,
-        endedAt: order.endedAt ? new Date(order.endedAt) : null,
-      }) as Order
+      (order: OrderJson): Order => {
+        const { createdAt, startedAt, endedAt, status, provider, ...rest } = order;
+        return {
+          ...rest,
+          status: status as OrderStatus,
+          provider: provider as ProviderType,
+          createdAt: new Date(createdAt),
+          startedAt: startedAt ? new Date(startedAt) : null,
+          endedAt: endedAt ? new Date(endedAt) : null,
+        };
+      }
     );
   }
 
@@ -140,11 +150,16 @@ export class Storage {
   async loadBaristas(): Promise<Barista[]> {
     return this.loadJsonFile<BaristaJson, Barista>(
       this.baristasFile,
-      (barista) => ({
-        ...barista,
-        createdAt: new Date(barista.createdAt),
-        lastActivityAt: new Date(barista.lastActivityAt),
-      }) as Barista
+      (barista: BaristaJson): Barista => {
+        const { createdAt, lastActivityAt, status, provider, ...rest } = barista;
+        return {
+          ...rest,
+          status: status as BaristaStatus,
+          provider: provider as ProviderType,
+          createdAt: new Date(createdAt),
+          lastActivityAt: new Date(lastActivityAt),
+        };
+      }
     );
   }
 
@@ -158,11 +173,16 @@ export class Storage {
   async loadReceipts(): Promise<Receipt[]> {
     return this.loadJsonFile<ReceiptJson, Receipt>(
       this.receiptsFile,
-      (receipt) => ({
-        ...receipt,
-        startedAt: new Date(receipt.startedAt),
-        endedAt: new Date(receipt.endedAt),
-      }) as Receipt
+      (receipt: ReceiptJson): Receipt => {
+        const { startedAt, endedAt, status, provider, ...rest } = receipt;
+        return {
+          ...rest,
+          status: status as OrderStatus,
+          provider: provider as ProviderType,
+          startedAt: new Date(startedAt),
+          endedAt: new Date(endedAt),
+        };
+      }
     );
   }
 
