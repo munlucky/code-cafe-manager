@@ -139,6 +139,37 @@ npx type-coverage --percentage-only                          # > 85%
 
 ---
 
+## 패키지별 상세 계획
+
+각 패키지의 구체적인 리팩토링 항목과 코드 예시는 아래 문서를 참조하세요.
+
+| 패키지 | 문서 | 주요 이슈 | 예상 공수 |
+|--------|------|----------|----------|
+| [@codecafe/core](./package-core.md) | 기반 패키지 | Error 처리, any 타입, Storage 중복 | 8-10시간 |
+| [@codecafe/orchestrator](./package-orchestrator.md) | 핵심 엔진 | 긴 함수, 상태 관리, 이벤트 중복 | 20-25시간 |
+| [@codecafe/desktop](./package-desktop.md) | 데스크톱 앱 | 거대 클래스, 컴포넌트 분해, Zustand 최적화 | 15-20시간 |
+| [Providers & CLI](./package-providers-cli.md) | 프로바이더/CLI | Provider 중복, 설정 헬퍼 통합 | 10-12시간 |
+
+### 패키지별 우선순위 매트릭스
+
+```
+              낮은 복잡도 ◄────────────────► 높은 복잡도
+                   │                              │
+    높은 영향 ─────┼──────────────────────────────┼─────
+                   │  @codecafe/core (P0)         │  @codecafe/orchestrator (P0)
+                   │  - 모든 패키지 의존          │  - 핵심 실행 로직
+                   │  - 에러 처리 표준화          │  - 상태 머신 도입
+                   │                              │
+                   │                              │
+    낮은 영향 ─────┼──────────────────────────────┼─────
+                   │  Providers & CLI (P2)        │  @codecafe/desktop (P1)
+                   │  - BaseProvider 추출         │  - 컴포넌트 분해
+                   │  - 설정 통합                 │  - Zustand 최적화
+                   │                              │
+```
+
+---
+
 ## 관련 문서
 
 - [리팩토링 분석 보고서](../refactoring-analysis.md)
@@ -147,4 +178,4 @@ npx type-coverage --percentage-only                          # > 85%
 
 ---
 
-*마지막 업데이트: 2026-01-27*
+*마지막 업데이트: 2026-02-02*
