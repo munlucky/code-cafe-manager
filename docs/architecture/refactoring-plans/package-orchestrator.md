@@ -599,7 +599,43 @@ export class ResourceLifecycleManager {
 
 ---
 
-## 8. 검증 체크리스트
+## 8. 완료 상태
+
+> **Last updated**: 2026-02-03
+> **Status**: ✅ **ALL COMPLETED** (Week 1-4)
+
+### Week 1: Quick Wins ✅
+- [x] 1.1 상수 파일 추출 (role-instructions, signal-format)
+- [x] 1.2 TerminalStatus enum 생성
+- [x] 1.3 EventForwarder 유틸리티 생성
+- [x] 1.4 SKILL_NAMES 상수 정의
+
+### Week 2: Core Services ✅
+- [x] 2.1 RetryPolicy 서비스 구현
+- [x] 2.2 WorkflowLoader 서비스 추출
+- [x] 2.3 ParallelStageProcessor 클래스 추출
+
+### Week 3: State Management ✅
+- [x] 3.1 SessionStateMachine 구현
+- [x] 3.2 OrderSession 리팩토링 (상태 머신 적용)
+- [x] 3.3 StageEvaluator Strategy 패턴 적용
+
+### Week 4: Resource Management ✅
+- [x] 4.1 통합 테스트 작성 (옵션 A: 기존 구현 검증)
+- [x] 4.2 TerminalPool 리소스 관리 동작 검증
+- [x] 4.3 전체 통합 테스트 통과 (76/76)
+
+### 최종 결과
+| 항목 | 결과 |
+|------|------|
+| 테스트 통과 | 76/76 (100%) |
+| 생성 파일 | 23개 |
+| 수정 파일 | 10개 |
+| 총 소요 시간 | ~2.5시간 (예상 8-12시간) |
+
+---
+
+## 9. 검증 체크리스트
 
 ```bash
 # 긴 함수 검사 (50줄 초과)
