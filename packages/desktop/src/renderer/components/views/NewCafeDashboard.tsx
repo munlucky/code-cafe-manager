@@ -9,6 +9,9 @@ import { OrderDetailHeader } from '../order/OrderDetailHeader';
 import { WorktreeManagementPanel } from '../order/WorktreeManagementPanel';
 import { CreateOrderModal } from '../order/CreateOrderModal';
 import { useOrderStore } from '../../store/useOrderStore';
+import { createDevLog } from '../../utils/logger';
+
+const devLog = createDevLog('NewCafeDashboard');
 
 interface NewCafeDashboardProps {
   cafe: Cafe;
@@ -86,12 +89,12 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
           if (event.type !== 'stage_end') return;
           if (!event.stageInfo?.stageId) return;
 
-          console.log('[NewCafeDashboard] stage_end event:', event);
+          devLog('stage_end event:', event);
 
           // Check if it's a followup stage (pattern: followup-{timestamp})
           const isFollowupStage = /^followup-\d+$/.test(event.stageInfo.stageId);
           if (isFollowupStage) {
-            console.log('[NewCafeDashboard] Resetting isFollowupExecuting for followup stage:', event.stageInfo.stageId);
+            devLog('Resetting isFollowupExecuting for followup stage:', event.stageInfo.stageId);
             setIsFollowupExecuting(false);
           }
         }
@@ -111,7 +114,7 @@ export const NewCafeDashboard: React.FC<NewCafeDashboardProps> = memo(
           setIsFollowupMode(true);
         }
       } catch (error) {
-        console.error('Failed to enter followup mode:', error);
+        devLog('Failed to enter followup mode:', error);
       }
     }, [activeOrder]);
 

@@ -55,22 +55,23 @@ export const NewGlobalLobby: React.FC<NewGlobalLobbyProps> = ({
   const [isInitializingGit, setIsInitializingGit] = useState(false);
 
   // Check environment on mount
-  useEffect(() => {
-    const checkEnv = async () => {
-      setIsCheckingEnv(true);
-      try {
-        const res = await window.codecafe.system.checkEnvironment();
-        if (res.success && res.data) {
-          setEnvStatus(res.data);
-        }
-      } catch (error) {
-        console.error('Failed to check environment:', error);
-      } finally {
-        setIsCheckingEnv(false);
+  const checkEnv = useCallback(async () => {
+    setIsCheckingEnv(true);
+    try {
+      const res = await window.codecafe.system.checkEnvironment();
+      if (res.success && res.data) {
+        setEnvStatus(res.data);
       }
-    };
-    checkEnv();
+    } catch (error) {
+      console.error('Failed to check environment:', error);
+    } finally {
+      setIsCheckingEnv(false);
+    }
   }, []);
+
+  useEffect(() => {
+    checkEnv();
+  }, [checkEnv]);
 
   // Check git status when path changes
   useEffect(() => {

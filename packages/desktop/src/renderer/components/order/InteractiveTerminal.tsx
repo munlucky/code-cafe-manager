@@ -12,6 +12,9 @@ import type { ParsedLogEntry, InteractionGroup } from '../../types/terminal';
 import { parseTerminalOutput, generateId, groupLogs } from '../../utils/terminal-log-parser';
 import { ThinkingBlock, MessageBlock } from '../terminal';
 import { useSmartScroll } from '../../hooks/useSmartScroll';
+import { createDevLog } from '../../utils/logger';
+
+const devLog = createDevLog('InteractiveTerminal');
 
 interface OrderOutputEvent {
   orderId: string;
@@ -166,9 +169,9 @@ export function InteractiveTerminal({
         if (history.length > 0) {
           history.forEach((event) => addOutputEvent(event as OrderOutputEvent));
         }
-        console.log('[InteractiveTerminal] Subscribed to order:', orderId, `(${history.length} history entries)`);
+        devLog('Subscribed to order:', orderId, `(${history.length} history entries)`);
       } else {
-        console.error('[InteractiveTerminal] Failed to subscribe:', result.error);
+        devLog('Failed to subscribe:', result.error);
       }
       // 히스토리 로드 완료 후 실시간 이벤트 수신 시작
       historyLoaded = true;

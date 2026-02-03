@@ -31,14 +31,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // 이벤트 리스너 등록
   window.codecafe.onBaristaEvent((event) => {
-    console.log("Barista Event:", event);
+    // Dev-only logging: logger.debug("Barista Event:", event);
     if (currentView === "baristas" || currentView === "dashboard") {
       renderView(currentView);
     }
   });
 
   window.codecafe.onOrderEvent((event) => {
-    console.log("Order Event:", event);
+    // Dev-only logging: logger.debug("Order Event:", event);
     if (currentView === "orders" || currentView === "dashboard") {
       renderView(currentView);
     }

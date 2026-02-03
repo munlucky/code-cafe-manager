@@ -4,9 +4,8 @@
  * Thin layer that delegates to OrderService for business logic
  */
 
-import { ipcMain } from 'electron';
 import { ExecutionFacade } from '@codecafe/orchestrator';
-import { createLogger, toCodeCafeError } from '@codecafe/core';
+import { createLogger } from '@codecafe/core';
 import { getExecutionManager } from '../../execution-manager.js';
 import {
   OrderService,
@@ -14,57 +13,9 @@ import {
   CreateOrderWithWorktreeResult,
 } from '../../services/order-service.js';
 import { OutputIntervalManager } from '../utils/output-interval-manager.js';
+import { createIpcHandler, type IpcResponse } from '../utils/handler-wrapper.js';
 
 const logger = createLogger({ context: 'IPC:Order' });
-
-/**
- * IPC Response type
- */
-interface IpcResponse<T = void> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
-}
-
-/**
- * Standardized IPC handler wrapper
- */
-async function handleIpc<T>(
-  handler: () => Promise<T>,
-  context: string
-): Promise<IpcResponse<T>> {
-  try {
-    const data = await handler();
-    return { success: true, data };
-  } catch (error: unknown) {
-    const cafeError = toCodeCafeError(error);
-    logger.error(`Error in ${context}`, { error: cafeError.message });
-    return {
-      success: false,
-      error: {
-        code: cafeError.code,
-        message: cafeError.message,
-        details: cafeError.details,
-      },
-    };
-  }
-}
-
-/**
- * Helper to register IPC handler with standard error handling
- */
-function registerHandler<T extends unknown[], R>(
-  channel: string,
-  handler: (...args: T) => R | Promise<R>
-): void {
-  ipcMain.handle(channel, async (_, ...args) =>
-    handleIpc(async () => handler(...args as T), channel)
-  );
-}
 
 /**
  * Order IPC Handlers Registration
@@ -77,11 +28,11 @@ export function registerOrderHandlers(facade: ExecutionFacade): void {
   });
 
   // Order CRUD
-  registerHandler('order:createWithWorktree', (params: CreateOrderWithWorktreeParams) =>
+  createIpcHandler('order:createWithWorktree', (params: CreateOrderWithWorktreeParams) =>
     orderService.createOrderWithWorktree(params)
   );
 
-  registerHandler(
+  createIpcHandler(
     'order:create',
     (params: {
       workflowId: string;
@@ -92,39 +43,39 @@ export function registerOrderHandlers(facade: ExecutionFacade): void {
     }) => orderService.createOrder(params)
   );
 
-  registerHandler('order:get', (orderId: string) => orderService.getOrder(orderId));
+  createIpcHandler('order:get', (orderId: string) => orderService.getOrder(orderId));
 
-  registerHandler('order:getAll', () => orderService.getAllOrders());
+  createIpcHandler('order:getAll', () => orderService.getAllOrders());
 
-  registerHandler('order:cancel', (orderId: string) =>
+  createIpcHandler('order:cancel', (orderId: string) =>
     orderService.cancelOrder(orderId).then(() => ({ cancelled: true }))
   );
 
-  registerHandler('order:delete', (orderId: string) =>
+  createIpcHandler('order:delete', (orderId: string) =>
     orderService.deleteOrder(orderId).then((deleted) => ({ deleted }))
   );
 
-  registerHandler('order:deleteMany', (orderIds: string[]) =>
+  createIpcHandler('order:deleteMany', (orderIds: string[]) =>
     orderService.deleteOrders(orderIds)
   );
 
   // Execution
-  registerHandler(
+  createIpcHandler(
     'order:execute',
     (orderId: string, prompt: string, vars?: Record<string, string>) =>
       orderService.executeOrder(orderId, prompt, vars).then(() => ({ started: true }))
   );
 
-  registerHandler('order:sendInput', (orderId: string, message: string) =>
+  createIpcHandler('order:sendInput', (orderId: string, message: string) =>
     orderService.sendInput(orderId, message).then(() => ({ sent: true }))
   );
 
-  registerHandler('order:getLog', (orderId: string) => orderService.getOrderLog(orderId));
+  createIpcHandler('order:getLog', (orderId: string) => orderService.getOrderLog(orderId));
 
-  registerHandler('receipt:getAll', () => orderService.getReceipts());
+  createIpcHandler('receipt:getAll', () => orderService.getReceipts());
 
   // Output subscription
-  registerHandler('order:subscribeOutput', (orderId: string) => {
+  createIpcHandler('order:subscribeOutput', (orderId: string) => {
     logger.info('Subscribe to order output', { orderId });
     OutputIntervalManager.clear(orderId);
     return orderService.getOutputHistory(orderId).then((history) => ({
@@ -133,14 +84,14 @@ export function registerOrderHandlers(facade: ExecutionFacade): void {
     }));
   });
 
-  registerHandler('order:unsubscribeOutput', (orderId: string) => {
+  createIpcHandler('order:unsubscribeOutput', (orderId: string) => {
     OutputIntervalManager.clear(orderId);
     logger.info('Unsubscribed from order output', { orderId });
     return Promise.resolve({ unsubscribed: true });
   });
 
   // Retry operations
-  registerHandler(
+  createIpcHandler(
     'order:retryWorktree',
     (params: {
       orderId: string;
@@ -149,7 +100,7 @@ export function registerOrderHandlers(facade: ExecutionFacade): void {
     }) => orderService.retryWorktree(params.orderId, params.cafeId, params.worktreeOptions)
   );
 
-  registerHandler(
+  createIpcHandler(
     'order:retryFromStage',
     (params: { orderId: string; fromStageId?: string }) =>
       orderService.retryFromStage(params.orderId, params.fromStageId).then(() => ({
@@ -157,11 +108,11 @@ export function registerOrderHandlers(facade: ExecutionFacade): void {
       }))
   );
 
-  registerHandler('order:getRetryOptions', (orderId: string) =>
+  createIpcHandler('order:getRetryOptions', (orderId: string) =>
     orderService.getRetryOptions(orderId)
   );
 
-  registerHandler(
+  createIpcHandler(
     'order:retryFromBeginning',
     (params: { orderId: string; preserveContext?: boolean }) =>
       orderService
@@ -170,29 +121,29 @@ export function registerOrderHandlers(facade: ExecutionFacade): void {
   );
 
   // Followup mode
-  registerHandler('order:enterFollowup', (orderId: string) =>
+  createIpcHandler('order:enterFollowup', (orderId: string) =>
     orderService.enterFollowup(orderId).then(() => ({ success: true }))
   );
 
-  registerHandler('order:executeFollowup', (orderId: string, prompt: string) => {
+  createIpcHandler('order:executeFollowup', (orderId: string, prompt: string) => {
     logger.info('executeFollowup called', { orderId, prompt });
     return orderService.executeFollowup(orderId, prompt).then(() => ({ started: true }));
   });
 
-  registerHandler('order:finishFollowup', (orderId: string) =>
+  createIpcHandler('order:finishFollowup', (orderId: string) =>
     orderService.finishFollowup(orderId).then(() => ({ success: true }))
   );
 
-  registerHandler('order:canFollowup', (orderId: string) => ({
+  createIpcHandler('order:canFollowup', (orderId: string) => ({
     canFollowup: orderService.canFollowup(orderId),
   }));
 
   // Worktree operations
-  registerHandler('order:cleanupWorktreeOnly', (orderId: string) =>
+  createIpcHandler('order:cleanupWorktreeOnly', (orderId: string) =>
     orderService.cleanupWorktreeOnly(orderId)
   );
 
-  registerHandler(
+  createIpcHandler(
     'order:mergeWorktreeToMain',
     (params: {
       orderId: string;

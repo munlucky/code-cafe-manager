@@ -10,6 +10,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { cn } from '../../utils/cn';
 import type { WorkflowInfo } from '../../types/window';
+import { logger } from '../../utils/logger';
 
 interface NewOrderDialogProps {
   isOpen: boolean;
@@ -42,7 +43,7 @@ export function NewOrderDialog({
       const result = await window.codecafe.workflow.list();
       setWorkflows(result.data || []);
     } catch (error) {
-      console.error('[NewOrderDialog] Failed to load workflows:', error);
+      logger.error('[NewOrderDialog] Failed to load workflows:', error);
     }
   };
 
@@ -68,7 +69,7 @@ export function NewOrderDialog({
       });
 
       if (result.success && result.data) {
-        console.log('[NewOrderDialog] Order created:', result.data);
+        logger.debug('[NewOrderDialog] Order created:', result.data);
         onSuccess(result.data.order.id);
         onClose();
       } else {
@@ -76,7 +77,7 @@ export function NewOrderDialog({
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[NewOrderDialog] Failed to create order:', error);
+      logger.error('[NewOrderDialog] Failed to create order:', error);
       alert(`Failed to create order: ${errorMessage}`);
     } finally {
       setLoading(false);

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { immer } from 'zustand/middleware/immer';
 import type { Order, StageStatus, WorkflowLog } from '../types/models';
 
 /**
@@ -75,132 +76,121 @@ interface OrderState {
   clearTodoProgress: (orderId: string) => void;
 }
 
-export const useOrderStore = create<OrderState>((set, get) => ({
-  orders: [],
-  sessionStatuses: {},
-  stageResults: {},
-  todoProgress: {},
-  
-  // Core actions
-  setOrders: (orders) => set({ orders }),
-  
-  addOrder: (order) => set((state) => ({ 
-    orders: [...state.orders, order] 
-  })),
-  
-  updateOrder: (id, updates) =>
-    set((state) => ({
-      orders: state.orders.map((o) => (o.id === id ? { ...o, ...updates } : o)),
-    })),
-    
-  removeOrder: (id) =>
-    set((state) => ({
-      orders: state.orders.filter((o) => o.id !== id),
-    })),
+export const useOrderStore = create<OrderState>()(
+  immer((set) => ({
+    orders: [],
+    sessionStatuses: {},
+    stageResults: {},
+    todoProgress: {},
 
-  appendOrderLog: (orderId, log) =>
-    set((state) => ({
-      orders: state.orders.map((o) =>
-        o.id === orderId
-          ? { ...o, logs: [...(o.logs || []), log] }
-          : o
-      ),
-    })),
+    // Core actions
+    setOrders: (orders) => set({ orders }),
 
-  // Session Status actions
-  updateSessionStatus: (orderId, status) =>
-    set((state) => ({
-      sessionStatuses: {
-        ...state.sessionStatuses,
-        [orderId]: {
-          ...state.sessionStatuses[orderId],
-          orderId,
-          ...status,
-        } as SessionStatus,
-      },
-    })),
-    
-  setAwaitingInput: (orderId, awaiting, prompt) =>
-    set((state) => ({
-      sessionStatuses: {
-        ...state.sessionStatuses,
-        [orderId]: {
-          ...state.sessionStatuses[orderId],
-          orderId,
-          awaitingInput: awaiting,
-          awaitingPrompt: prompt,
-        } as SessionStatus,
-      },
-    })),
-    
-  clearSessionStatus: (orderId) =>
-    set((state) => {
-      const { [orderId]: _, ...rest } = state.sessionStatuses;
-      return { sessionStatuses: rest };
-    }),
+    addOrder: (order) =>
+      set((state) => {
+        state.orders.push(order);
+      }),
 
-  // Stage Results actions
-  updateStageResult: (orderId, stageId, result) =>
-    set((state) => {
-      const orderStages = state.stageResults[orderId] || {};
-      const existingStage = orderStages[stageId] || { 
-        stageId, 
-        status: 'pending' as StageStatus, 
-        output: [] 
-      };
-      
-      return {
-        stageResults: {
-          ...state.stageResults,
-          [orderId]: {
-            ...orderStages,
-            [stageId]: { ...existingStage, ...result },
-          },
-        },
-      };
-    }),
-    
-  appendStageOutput: (orderId, stageId, output) =>
-    set((state) => {
-      const orderStages = state.stageResults[orderId] || {};
-      const existingStage = orderStages[stageId] || { 
-        stageId, 
-        status: 'running' as StageStatus, 
-        output: [] 
-      };
-      
-      return {
-        stageResults: {
-          ...state.stageResults,
-          [orderId]: {
-            ...orderStages,
-            [stageId]: { 
-              ...existingStage, 
-              output: [...existingStage.output, output] 
-            },
-          },
-        },
-      };
-    }),
-    
-  clearStageResults: (orderId) =>
-    set((state) => {
-      const { [orderId]: _, ...rest } = state.stageResults;
-      return { stageResults: rest };
-    }),
+    updateOrder: (id, updates) =>
+      set((state) => {
+        const index = state.orders.findIndex((o) => o.id === id);
+        if (index !== -1) {
+          Object.assign(state.orders[index], updates);
+        }
+      }),
 
-  // Todo Progress actions
-  updateTodoProgress: (progress) =>
-    set((state) => ({
-      todoProgress: {
-        ...state.todoProgress,
-        [progress.orderId]: progress,
-      },
-    })),
+    removeOrder: (id) =>
+      set((state) => {
+        state.orders = state.orders.filter((o) => o.id !== id);
+      }),
 
-  clearTodoProgress: (orderId) =>
-    set((state) => {
-      const { [orderId]: _, ...rest } = state.todoProgress;
-      return { todoProgress: rest };
-    }),
-}));
+    appendOrderLog: (orderId, log) =>
+      set((state) => {
+        const order = state.orders.find((o) => o.id === orderId);
+        if (order) {
+          if (!order.logs) order.logs = [];
+          order.logs.push(log);
+        }
+      }),
+
+    // Session Status actions
+    updateSessionStatus: (orderId, status) =>
+      set((state) => {
+        if (!state.sessionStatuses[orderId]) {
+          state.sessionStatuses[orderId] = {
+            orderId,
+            status: 'pending',
+            awaitingInput: false,
+          };
+        }
+        Object.assign(state.sessionStatuses[orderId], status);
+      }),
+
+    setAwaitingInput: (orderId, awaiting, prompt) =>
+      set((state) => {
+        if (!state.sessionStatuses[orderId]) {
+          state.sessionStatuses[orderId] = {
+            orderId,
+            status: 'pending',
+            awaitingInput: false,
+          };
+        }
+        state.sessionStatuses[orderId].awaitingInput = awaiting;
+        if (prompt !== undefined) {
+          state.sessionStatuses[orderId].awaitingPrompt = prompt;
+        }
+      }),
+
+    clearSessionStatus: (orderId) =>
+      set((state) => {
+        delete state.sessionStatuses[orderId];
+      }),
+
+    // Stage Results actions
+    updateStageResult: (orderId, stageId, result) =>
+      set((state) => {
+        if (!state.stageResults[orderId]) {
+          state.stageResults[orderId] = {};
+        }
+        if (!state.stageResults[orderId][stageId]) {
+          state.stageResults[orderId][stageId] = {
+            stageId,
+            status: 'pending',
+            output: [],
+          };
+        }
+        Object.assign(state.stageResults[orderId][stageId], result);
+      }),
+
+    appendStageOutput: (orderId, stageId, output) =>
+      set((state) => {
+        if (!state.stageResults[orderId]) {
+          state.stageResults[orderId] = {};
+        }
+        if (!state.stageResults[orderId][stageId]) {
+          state.stageResults[orderId][stageId] = {
+            stageId,
+            status: 'running',
+            output: [],
+          };
+        }
+        state.stageResults[orderId][stageId].output.push(output);
+      }),
+
+    clearStageResults: (orderId) =>
+      set((state) => {
+        delete state.stageResults[orderId];
+      }),
+
+    // Todo Progress actions
+    updateTodoProgress: (progress) =>
+      set((state) => {
+        state.todoProgress[progress.orderId] = progress;
+      }),
+
+    clearTodoProgress: (orderId) =>
+      set((state) => {
+        delete state.todoProgress[orderId];
+      }),
+  }))
+);

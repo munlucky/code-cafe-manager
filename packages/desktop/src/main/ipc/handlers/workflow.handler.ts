@@ -6,59 +6,13 @@
 import { ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-import { createLogger, toCodeCafeError } from '@codecafe/core';
+import { createLogger } from '@codecafe/core';
 import type { WorkflowInfo } from '@codecafe/core';
 import { WorkflowExecutor, WorkflowRun, ExecutionMode } from '@codecafe/orchestrator';
 import { WorkflowService } from '../../services/workflow-service.js';
+import { createIpcHandler, type IpcResponse } from '../utils/handler-wrapper.js';
 
 const logger = createLogger({ context: 'IPC:Workflow' });
-
-/**
- * IPC Response type
- */
-interface IpcResponse<T = void> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
-}
-
-/**
- * Standardized IPC handler wrapper
- */
-async function handleIpc<T>(
-  handler: () => Promise<T> | T,
-  context: string
-): Promise<IpcResponse<T>> {
-  try {
-    const data = await handler();
-    return { success: true, data };
-  } catch (error: unknown) {
-    const cafeError = toCodeCafeError(error);
-    logger.error(`Error in ${context}`, { error: cafeError.message });
-    return {
-      success: false,
-      error: {
-        code: cafeError.code,
-        message: cafeError.message,
-        details: cafeError.details,
-      },
-    };
-  }
-}
-
-/**
- * Helper to register IPC handler
- */
-function registerHandler<T extends unknown[], R>(
-  channel: string,
-  handler: (...args: T) => Promise<R> | R
-): void {
-  ipcMain.handle(channel, async (_, ...args) => handleIpc(async () => handler(...args as T), channel));
-}
 
 // Run management state
 let executorInstance: WorkflowExecutor | null = null;
@@ -91,24 +45,24 @@ export function registerWorkflowHandlers(): void {
   logger.debug('Initializing workflow handlers', { orchDir, cwd: process.cwd() });
 
   // Workflow CRUD
-  registerHandler('workflow:list', () => workflowService.listWorkflows());
-  registerHandler('workflow:get', (id: string) => {
+  createIpcHandler('workflow:list', () => workflowService.listWorkflows());
+  createIpcHandler('workflow:get', (id: string) => {
     const workflow = workflowService.getWorkflow(id);
     if (!workflow) {
       throw new Error(`Workflow not found: ${id}`);
     }
     return workflow;
   });
-  registerHandler('workflow:create', (workflowData: WorkflowInfo) =>
+  createIpcHandler('workflow:create', (workflowData: WorkflowInfo) =>
     workflowService.createWorkflow(workflowData)
   );
-  registerHandler('workflow:update', (workflowData: WorkflowInfo) =>
+  createIpcHandler('workflow:update', (workflowData: WorkflowInfo) =>
     workflowService.updateWorkflow(workflowData)
   );
-  registerHandler('workflow:delete', (id: string) => workflowService.deleteWorkflow(id));
+  createIpcHandler('workflow:delete', (id: string) => workflowService.deleteWorkflow(id));
 
   // Run operations
-  registerHandler(
+  createIpcHandler(
     'workflow:run',
     (workflowId: string, options?: { mode?: ExecutionMode; vars?: Record<string, string> }) => {
       const executor = getExecutor(orchDir);
@@ -122,7 +76,7 @@ export function registerWorkflowHandlers(): void {
     }
   );
 
-  registerHandler('run:list', () => {
+  createIpcHandler('run:list', () => {
     const executor = getExecutor(orchDir);
     const runs = executor.listRuns();
     return runs.map((run: WorkflowRun) => ({
@@ -138,7 +92,7 @@ export function registerWorkflowHandlers(): void {
     }));
   });
 
-  registerHandler('run:getStatus', (runId: string) => {
+  createIpcHandler('run:getStatus', (runId: string) => {
     const executor = getExecutor(orchDir);
     const run = executor.getRun(runId);
     if (!run) {
@@ -157,7 +111,7 @@ export function registerWorkflowHandlers(): void {
     };
   });
 
-  registerHandler('run:getDetail', (runId: string) => {
+  createIpcHandler('run:getDetail', (runId: string) => {
     const executor = getExecutor(orchDir);
     const run = executor.getRun(runId);
     if (!run) {
@@ -177,7 +131,7 @@ export function registerWorkflowHandlers(): void {
     };
   });
 
-  registerHandler('run:pause', (runId: string) => {
+  createIpcHandler('run:pause', (runId: string) => {
     const executor = getExecutor(orchDir);
     const success = executor.pause(runId);
     if (!success) {
@@ -185,7 +139,7 @@ export function registerWorkflowHandlers(): void {
     }
   });
 
-  registerHandler('run:resume', (runId: string) => {
+  createIpcHandler('run:resume', (runId: string) => {
     const executor = getExecutor(orchDir);
     const success = executor.resume(runId, {
       orchDir,
@@ -197,7 +151,7 @@ export function registerWorkflowHandlers(): void {
     }
   });
 
-  registerHandler('run:cancel', (runId: string) => {
+  createIpcHandler('run:cancel', (runId: string) => {
     const executor = getExecutor(orchDir);
     const success = executor.cancel(runId);
     if (!success) {
@@ -205,7 +159,7 @@ export function registerWorkflowHandlers(): void {
     }
   });
 
-  registerHandler('run:getLogs', (runId: string) => {
+  createIpcHandler('run:getLogs', (runId: string) => {
     const runEventsPath = path.join(orchDir, 'runs', runId, 'events.jsonl');
     if (!fs.existsSync(runEventsPath)) {
       return [];

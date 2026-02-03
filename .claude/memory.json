@@ -29,9 +29,33 @@
 {"type":"entity","name":"[codecafe]::Component::BaseProvider","entityType":"component","observations":["위치: packages/providers/common/src/base-provider.ts","역할: Provider 공통 로직 추상 클래스 (331줄)","제공 기능: run(), write(), stop(), isActive(), executeWithSchema(), validateEnvForCommand()","추상 메서드: getCommandName(), buildInteractiveCommand(), buildHeadlessArgs(), getAuthHint()","타임아웃 정리 로직 포함 (clearTimeout)"]}
 {"type":"entity","name":"[codecafe]::Component::Platform","entityType":"component","observations":["위치: packages/providers/common/src/utils/platform.ts","역할: 플랫폼 감지 유틸리티","제공: isWindows(), isMac(), isLinux(), getShell(), getLineEnding(), getCommandCheck(), getExecutableExtension()"]}
 {"type":"entity","name":"[codecafe]::Component::CLIConfig","entityType":"component","observations":["위치: packages/cli/src/config.ts","역할: CLI 설정 중앙 관리","CONFIG 객체: dir, dataDir, logsDir, defaultProvider, orchDir","함수: ensureConfigDir(), ensureAllDirs()"]}
+{"type":"entity","name":"codecafe::Component::OrderEventHandler","entityType":"component","observations":["execution-manager에서 분리된 order 이벤트 핸들러 (order:output, order:started, order:completed 등)","src/main/handlers/order-event-handler.ts에 위치","175줄로 구성","OrderEventHandler 클래스로 구현되며 setup(), cleanup() 메서드 제공"]}
+{"type":"entity","name":"codecafe::Component::StageEventHandler","entityType":"component","observations":["execution-manager에서 분리된 stage 이벤트 핸들러 (stage:started, stage:completed, stage:failed)","src/main/handlers/stage-event-handler.ts에 위치","95줄로 구성","StageEventHandler 클래스로 구현되며 setup(), cleanup() 메서드 제공"]}
+{"type":"entity","name":"codecafe::Component::SessionEventHandler","entityType":"component","observations":["execution-manager에서 분리된 session 이벤트 핸들러 (order:execution-started, order:input)","src/main/handlers/session-event-handler.ts에 위치","185줄로 구성","SessionEventHandler 클래스로 구현되며 setup(), cleanup() 메서드 제공","handleOrderExecution, handleOrderInput 로직 포함"]}
+{"type":"entity","name":"codecafe::Utility::IpcHandlerWrapper","entityType":"utility","observations":["IPC 핸들러 중복 제거를 위한 공통 유틸리티","src/main/ipc/utils/handler-wrapper.ts에 위치","IpcResponse, IpcError 타입 정의","handleIpc() 표준화된 에러 처리 함수","createIpcHandler() 핸들러 등록 헬퍼 함수"]}
+{"type":"entity","name":"codecafe::Utility::Logger","entityType":"utility","observations":["Production console.log 제거를 위한 개발 전용 로거","src/renderer/utils/logger.ts에 위치","isDev 기반으로 debug/info는 개발 환경에서만 출력","createDevLog() 함수로 컴포넌트별 로거 생성 가능"]}
+{"type":"entity","name":"codecafe::Component::ExecutionManager","entityType":"component","observations":["이벤트 핸들러를 3개 클래스로 분리하여 643줄 -> 309줄로 리팩토링 완료","OrderEventHandler, StageEventHandler, SessionEventHandler에 위임 패턴 적용","setupCustomOutputHandler()로 order:output 이벤트 파싱 처리"]}
+{"type":"entity","name":"codecafe::Convention::EventHandlerPattern","entityType":"convention","observations":["이벤트 핸들러 분리 패턴: 단일 책임 원칙(SRP) 준수","각 핸들러는 setup()에서 리스너 등록, cleanup()에서 제거","ExecutionManager에서 핸들러 인스턴스를 생성하고 위임"]}
+{"type":"entity","name":"codecafe::Convention::ImmerMiddleware","entityType":"convention","observations":["Zustand 스토어에서 immer 미들웨어 사용하여 불변성 유지하면서 mutate 패턴 사용","appendStageOutput 등에서 spread 대신 direct push 사용 가능","코드 단순화 및 성능 개선"]}
+{"type":"entity","name":"codecafe::Type::EventTypes","entityType":"type","observations":["src/renderer/types/events.ts에 이벤트 타입 정의","OutputEventType, OrderOutputEvent, SessionStatusEvent 등","타입 안전성 개선을 위해 별도 파일로 분리"]}
 {"type":"relation","from":"codecafe::Architecture::Layers","to":"codecafe::Documentation::ModuleSpecs","relationType":"documented_in"}
 {"type":"relation","from":"codecafe::Boundary::AlwaysDo","to":"codecafe::Documentation::ModuleSpecs","relationType":"enforces"}
 {"type":"relation","from":"codecafe::Component::ResourceLifecycleIntegrationTest","to":"codecafe::Project::OrchestratorWeek4Refactor","relationType":"part_of"}
 {"type":"relation","from":"codecafe::Component::ResourceLifecycleIntegrationTest","to":"codecafe::Convention::IntegrationTestPattern","relationType":"follows"}
 {"type":"relation","from":"[codecafe]::Component::BaseProvider","to":"[codecafe]::Component::Platform","relationType":"uses"}
 {"type":"relation","from":"[codecafe]::Convention::ProviderPattern","to":"[codecafe]::Component::BaseProvider","relationType":"describes"}
+{"type":"relation","from":"codecafe::Component::ExecutionManager","to":"codecafe::Component::OrderEventHandler","relationType":"delegates"}
+{"type":"relation","from":"codecafe::Component::ExecutionManager","to":"codecafe::Component::StageEventHandler","relationType":"delegates"}
+{"type":"relation","from":"codecafe::Component::ExecutionManager","to":"codecafe::Component::SessionEventHandler","relationType":"delegates"}
+{"type":"relation","from":"codecafe::Component::OrderEventHandler","to":"codecafe::Component::StageEventHandler","relationType":"collaborates_with"}
+{"type":"relation","from":"codecafe::Component::OrderEventHandler","to":"codecafe::Component::SessionEventHandler","relationType":"collaborates_with"}
+{"type":"relation","from":"codecafe::Component::SessionEventHandler","to":"codecafe::Component::ExecutionManager","relationType":"managed_by"}
+{"type":"relation","from":"codecafe::Utility::IpcHandlerWrapper","to":"codecafe::Component::OrderEventHandler","relationType":"used_by"}
+{"type":"relation","from":"codecafe::Utility::IpcHandlerWrapper","to":"codecafe::Component::StageEventHandler","relationType":"used_by"}
+{"type":"relation","from":"codecafe::Utility::IpcHandlerWrapper","to":"codecafe::Component::SessionEventHandler","relationType":"used_by"}
+{"type":"relation","from":"codecafe::Utility::Logger","to":"codecafe::Component::OrderEventHandler","relationType":"used_by"}
+{"type":"relation","from":"codecafe::Utility::Logger","to":"codecafe::Component::StageEventHandler","relationType":"used_by"}
+{"type":"relation","from":"codecafe::Utility::Logger","to":"codecafe::Component::SessionEventHandler","relationType":"used_by"}
+{"type":"relation","from":"codecafe::Type::EventTypes","to":"codecafe::Component::OrderEventHandler","relationType":"type_defined_for"}
+{"type":"relation","from":"codecafe::Type::EventTypes","to":"codecafe::Component::StageEventHandler","relationType":"type_defined_for"}
+{"type":"relation","from":"codecafe::Type::EventTypes","to":"codecafe::Component::SessionEventHandler","relationType":"type_defined_for"}
