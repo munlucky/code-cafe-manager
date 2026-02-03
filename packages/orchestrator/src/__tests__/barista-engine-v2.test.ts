@@ -3,14 +3,57 @@
  * Tests for Terminal Pool integration and Session-based execution
  */
 
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { EventEmitter } from 'events';
 import { BaristaEngineV2 } from '../barista/barista-engine-v2';
 import { Barista, BaristaStatus, Order, OrderStatus } from '@codecafe/core';
 import { OrderSession } from '../session';
 
+/**
+ * MockSession class that extends EventEmitter to properly simulate session events
+ */
+class MockSession extends EventEmitter {
+  execute = vi.fn();
+  executePrompt = vi.fn();
+  sendInput = vi.fn();
+  cancel = vi.fn();
+  getStatus = vi.fn().mockReturnValue({ status: 'idle' });
+  getContext = vi.fn().mockReturnValue({
+    getCurrentAttemptNumber: () => 1,
+  });
+  getFailedState = vi.fn().mockReturnValue(null);
+  getRetryOptions = vi.fn().mockReturnValue(null);
+  canFollowup = vi.fn().mockReturnValue(false);
+  retryFromStage = vi.fn();
+  retryFromBeginning = vi.fn();
+  enterFollowup = vi.fn();
+  executeFollowup = vi.fn();
+  finishFollowup = vi.fn();
+  restoreForFollowup = vi.fn();
+  setWorkflow = vi.fn();
+  dispose = vi.fn();
+
+  constructor() {
+    super();
+    // Default implementations that resolve immediately
+    this.execute.mockResolvedValue(undefined);
+    this.executePrompt.mockResolvedValue(undefined);
+    this.sendInput.mockResolvedValue(undefined);
+    this.cancel.mockResolvedValue(undefined);
+    this.retryFromStage.mockResolvedValue(undefined);
+    this.retryFromBeginning.mockResolvedValue(undefined);
+    this.enterFollowup.mockResolvedValue(undefined);
+    this.executeFollowup.mockResolvedValue(undefined);
+    this.finishFollowup.mockResolvedValue(undefined);
+    this.restoreForFollowup.mockResolvedValue(undefined);
+    this.dispose.mockResolvedValue(undefined);
+  }
+}
+
 describe('BaristaEngineV2', () => {
   let engine: BaristaEngineV2;
   let mockTerminalPool: any;
-  let mockSession: any;
+  let mockSession: MockSession;
 
   // Default Mock Data
   const mockBarista: Barista = {
@@ -44,10 +87,14 @@ describe('BaristaEngineV2', () => {
     ],
   };
 
-  // Helper to control execution flow
+  // Helper to control execution flow and emit session:started event
   const setupControlledExecution = () => {
     let resolveExecution: (value: any) => void;
     mockSession.execute.mockImplementation(() => {
+      // Emit session:started event after a microtask to ensure listeners are set up
+      queueMicrotask(() => {
+        mockSession.emit('session:started', { orderId: mockOrder.id, cafeId: 'default' });
+      });
       return new Promise(resolve => {
         resolveExecution = resolve;
       });
@@ -56,25 +103,8 @@ describe('BaristaEngineV2', () => {
   };
 
   beforeEach(() => {
-    // Initialize mock session
-    mockSession = {
-      execute: vi.fn().mockResolvedValue(undefined),
-      executePrompt: vi.fn().mockResolvedValue(undefined),
-      sendInput: vi.fn().mockResolvedValue(undefined),
-      cancel: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue({ status: 'idle' }),
-      getContext: vi.fn().mockReturnValue({
-        getCurrentAttemptNumber: () => 1,
-      }),
-      retryFromStage: vi.fn().mockResolvedValue(undefined),
-      retryFromBeginning: vi.fn().mockResolvedValue(undefined),
-      enterFollowup: vi.fn().mockResolvedValue(undefined),
-      executeFollowup: vi.fn().mockResolvedValue(undefined),
-      finishFollowup: vi.fn().mockResolvedValue(undefined),
-      restoreForFollowup: vi.fn().mockResolvedValue(undefined),
-      once: vi.fn().mockReturnValue(mockSession),
-      on: vi.fn().mockReturnValue(mockSession),
-    };
+    // Initialize mock session with EventEmitter capabilities
+    mockSession = new MockSession();
 
     mockTerminalPool = {
       acquireLease: vi.fn().mockResolvedValue(undefined),
@@ -82,10 +112,30 @@ describe('BaristaEngineV2', () => {
 
     engine = new BaristaEngineV2(mockTerminalPool as any);
 
-    // Mock sessionManager.createSession to return our mock session
+    // Mock sessionManager methods to return our mock session
+    // and set up event forwarding like the real createSession does
     const sessionManager = engine.getSessionManager();
-    vi.spyOn(sessionManager, 'createSession').mockReturnValue(mockSession as any);
-    vi.spyOn(sessionManager, 'createSessionWithWorkflow').mockReturnValue(mockSession as any);
+
+    const setupSessionEvents = () => {
+      // Forward session events to session manager (mimicking real behavior)
+      mockSession.on('session:started', (data: unknown) => sessionManager.emit('session:started', data));
+      mockSession.on('session:completed', (data: unknown) => sessionManager.emit('session:completed', data));
+      mockSession.on('session:failed', (data: unknown) => sessionManager.emit('session:failed', data));
+      mockSession.on('session:awaiting', (data: unknown) => sessionManager.emit('session:awaiting', data));
+      mockSession.on('output', (data: unknown) => sessionManager.emit('output', data));
+      mockSession.on('stage:started', (data: unknown) => sessionManager.emit('stage:started', data));
+      mockSession.on('stage:completed', (data: unknown) => sessionManager.emit('stage:completed', data));
+      mockSession.on('stage:failed', (data: unknown) => sessionManager.emit('stage:failed', data));
+    };
+
+    vi.spyOn(sessionManager, 'createSession').mockImplementation(() => {
+      setupSessionEvents();
+      return mockSession as unknown as OrderSession;
+    });
+    vi.spyOn(sessionManager, 'createSessionWithWorkflow').mockImplementation(() => {
+      setupSessionEvents();
+      return mockSession as unknown as OrderSession;
+    });
   });
 
   afterEach(() => {
@@ -188,10 +238,16 @@ describe('BaristaEngineV2', () => {
 
   describe('Resource Cleanup', () => {
     it('should dispose resources and cancel active orders', async () => {
-      // Setup blocked execution
-      mockSession.execute.mockImplementation(() => new Promise(() => {}));
+      // Setup blocked execution that emits session:started
+      mockSession.execute.mockImplementation(() => {
+        // Emit session:started event
+        queueMicrotask(() => {
+          mockSession.emit('session:started', { orderId: mockOrder.id, cafeId: 'default' });
+        });
+        return new Promise(() => {});  // Never resolves
+      });
 
-      const executePromise = engine.executeOrder(mockOrder, mockBarista);
+      engine.executeOrder(mockOrder, mockBarista);
       await new Promise(resolve => engine.once('order:started', resolve));
 
       await engine.dispose();
@@ -370,12 +426,12 @@ describe('BaristaEngineV2', () => {
 
       await new Promise(resolve => engine.once('order:started', resolve));
 
-      // Mock getRetryOptions on session
+      // Mock getFailedState to return retryOptions (engine uses session.getFailedState().retryOptions)
       const mockRetryOptions = [
         { stageId: 'stage-1', stageName: 'Analyze', batchIndex: 0 },
         { stageId: 'stage-2', stageName: 'Code', batchIndex: 1 },
       ];
-      mockSession.getRetryOptions = vi.fn().mockReturnValue(mockRetryOptions);
+      mockSession.getFailedState.mockReturnValue({ retryOptions: mockRetryOptions });
 
       const options = engine.getRetryOptions('order-1');
 
@@ -440,8 +496,8 @@ describe('BaristaEngineV2', () => {
 
       await new Promise(resolve => engine.once('order:started', resolve));
 
-      // Mock canFollowup on session
-      mockSession.canFollowup = vi.fn().mockReturnValue(true);
+      // Mock getStatus to return 'completed' (engine checks session.getStatus().status === 'completed' || 'followup')
+      mockSession.getStatus.mockReturnValue({ status: 'completed' });
 
       const canFollow = engine.canFollowup('order-1');
 

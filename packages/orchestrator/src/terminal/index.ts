@@ -4,6 +4,12 @@
 
 export { TerminalLease, TerminalPool } from './terminal-pool.js';
 export { LeaseRequest, PoolSemaphore } from './pool-semaphore.js';
+export {
+  TerminalStatus,
+  isTerminalStatus,
+  isAvailableStatus,
+  needsRestart,
+} from './types.js';
 export { IPty, IProviderAdapter, MockProviderAdapter, ProviderAdapterFactory } from './provider-adapter.js';
 export { ClaudeCodeAdapter } from './adapters/claude-code-adapter.js';
 export { CodexAdapter } from './adapters/codex-adapter.js';

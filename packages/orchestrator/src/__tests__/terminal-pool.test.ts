@@ -87,8 +87,9 @@ describe('TerminalPool', () => {
       }
 
       // Third acquisition should timeout (pool size is 2)
+      // Note: acquireLease(provider, baristaId, cwd?, timeoutMs?)
       await expect(
-        terminalPool.acquireLease(PROVIDER_ID, 'barista-overflow', 100)
+        terminalPool.acquireLease(PROVIDER_ID, 'barista-overflow', undefined, 100)
       ).rejects.toThrow();
 
       // Release one lease

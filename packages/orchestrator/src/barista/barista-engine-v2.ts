@@ -21,6 +21,12 @@ import * as fs from 'fs/promises';
 
 
 import { EventEmitter } from 'events';
+import {
+  getRoleDescription,
+  getRoleInstructions,
+  SIGNAL_FORMAT_TEMPLATE,
+  CRITICAL_REMINDER,
+} from './prompts';
 
 /**
  * Order 인터페이스 확장 (orchestrator 전용 속성)
@@ -332,84 +338,37 @@ export class BaristaEngineV2 extends EventEmitter {
 
   /**
    * Build stage prompt with skill instructions
+   * Refactored to use extracted constants from ./prompts
    */
   private buildStagePrompt(
     stageId: string,
     orderPrompt: string,
     skillContents: string[]
   ): string {
-    const roleDescriptions: Record<string, string> = {
-      analyze: 'You are an ANALYZER. Your task is to analyze the project and understand what needs to be done.',
-      plan: 'You are a PLANNER. Your task is to create a detailed implementation plan.',
-      code: 'You are a CODER. Your task is to implement the changes according to the plan.',
-      review: 'You are a REVIEWER. Your task is to review the implementation and verify quality.',
-    };
-
-    const roleInstructions: Record<string, string> = {
-      analyze: `
-IMPORTANT: You MUST perform analysis immediately. Do NOT ask questions.
-1. Read and understand the user request
-2. Analyze the codebase structure
-3. Identify files that need to be modified
-4. Output a structured analysis with: task type, complexity estimate, and affected files`,
-      plan: `
-IMPORTANT: You MUST create a plan immediately. Do NOT ask questions.
-1. Based on the analysis, create an implementation plan
-2. List specific files to create/modify
-3. Define the order of changes
-4. Output a structured plan with steps and files`,
-      code: `
-IMPORTANT: You MUST implement the changes immediately. Do NOT ask questions.
-1. Follow the plan from previous stages
-2. Create or modify files as needed
-3. Implement all required functionality
-4. Output the changes made with file paths`,
-      review: `
-IMPORTANT: You MUST review the implementation immediately. Do NOT ask questions.
-1. Review all changes made in previous stages
-2. Check for bugs, security issues, and best practices
-3. Verify the implementation meets requirements
-4. Output a review summary with any issues found`,
-    };
-
-    let prompt = `# Stage: ${stageId.toUpperCase()}\n\n`;
-    prompt += `${roleDescriptions[stageId] || `You are working on stage: ${stageId}`}\n\n`;
-    prompt += `## Role Instructions\n${roleInstructions[stageId] || ''}\n\n`;
+    const parts: string[] = [
+      `# Stage: ${stageId.toUpperCase()}`,
+      '',
+      getRoleDescription(stageId),
+      '',
+      '## Role Instructions',
+      getRoleInstructions(stageId),
+      '',
+    ];
 
     // Add skill instructions if available
     if (skillContents.length > 0) {
-      prompt += `## Skills to Execute\n\n`;
-      prompt += `Follow these skill instructions in order:\n\n`;
+      parts.push('## Skills to Execute', '');
+      parts.push('Follow these skill instructions in order:', '');
       for (const skillContent of skillContents) {
-        prompt += `---\n${skillContent}\n---\n\n`;
+        parts.push(`---\n${skillContent}\n---`, '');
       }
     }
 
-    prompt += `## User Request\n\n${orderPrompt}\n\n`;
-    
-    // Add mandatory signals block requirement with examples
-    prompt += `## MANDATORY OUTPUT FORMAT\n\n`;
-    prompt += `You MUST end your response with a signals block in this EXACT format:\n\n`;
-    prompt += `\`\`\`yaml\n`;
-    prompt += `signals:\n`;
-    prompt += `  nextAction: proceed  # proceed | await_user | skip_next | retry\n`;
-    prompt += `  needsUserInput: false  # true only if you MUST ask the user something\n`;
-    prompt += `  complexity: medium  # simple | medium | complex\n`;
-    prompt += `  uncertainties:  # optional: list questions only if needsUserInput is true\n`;
-    prompt += `    - "Question for user"\n`;
-    prompt += `\`\`\`\n\n`;
-    prompt += `**Examples of valid signals:**\n`;
-    prompt += `- Work completed successfully: nextAction=proceed, needsUserInput=false\n`;
-    prompt += `- Need clarification: nextAction=await_user, needsUserInput=true, uncertainties=[...]\n`;
-    prompt += `- Simple task, skip review: nextAction=skip_next, skipStages=[review]\n\n`;
-    
-    prompt += `## CRITICAL REMINDER\n`;
-    prompt += `- You are in NON-INTERACTIVE mode. Do NOT ask questions unless absolutely necessary.\n`;
-    prompt += `- Make reasonable assumptions and proceed with the task.\n`;
-    prompt += `- Output structured results, not conversational responses.\n`;
-    prompt += `- **ALWAYS output a signals block at the end - this is MANDATORY!**\n`;
+    parts.push('## User Request', '', orderPrompt, '');
+    parts.push(SIGNAL_FORMAT_TEMPLATE, '');
+    parts.push(CRITICAL_REMINDER);
 
-    return prompt;
+    return parts.join('\n');
   }
 
   /**
