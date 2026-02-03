@@ -146,6 +146,49 @@ export class ValidationError extends CodeCafeError {
 }
 
 /**
+ * Resource type for NotFoundError
+ */
+export type ResourceType = 'barista' | 'order' | 'worktree' | 'workflow' | 'cafe';
+
+/**
+ * Not found error - resource not found failures
+ * Examples: barista not found, order not found
+ */
+export class NotFoundError extends CodeCafeError {
+  readonly code: ErrorCode;
+  readonly isRetryable = false as const;
+
+  /**
+   * Type of resource that was not found
+   */
+  readonly resourceType: ResourceType;
+
+  /**
+   * ID of the resource that was not found
+   */
+  readonly resourceId?: string;
+
+  constructor(
+    code: ErrorCode,
+    options?: ErrorOptions & { resourceType: ResourceType; resourceId?: string }
+  ) {
+    const message = options?.message ?? ErrorMessages[code];
+    super(message, { details: options?.details, cause: options?.cause });
+    this.code = code;
+    this.resourceType = options?.resourceType ?? 'barista';
+    this.resourceId = options?.resourceId;
+  }
+
+  override toJSON(): Record<string, unknown> {
+    return {
+      ...super.toJSON(),
+      resourceType: this.resourceType,
+      resourceId: this.resourceId,
+    };
+  }
+}
+
+/**
  * IPC error - failures in inter-process communication
  * Examples: channel not found, timeout, message delivery failures
  */

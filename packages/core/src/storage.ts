@@ -1,7 +1,61 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { Order, Barista, Receipt } from './types.js';
+import { Order, Barista, Receipt, OrderStatus, BaristaStatus, ProviderType } from './types.js';
+
+/**
+ * Raw JSON types for type-safe parsing
+ */
+interface OrderJson {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  baristaId: string | null;
+  status: string;
+  counter: string;
+  provider: string;
+  vars: Record<string, string>;
+  prompt?: string;
+  createdAt: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  error?: string;
+  worktreeInfo?: {
+    path: string;
+    branch: string;
+    baseBranch: string;
+    repoPath?: string;
+    removed?: boolean;
+    merged?: boolean;
+    mergedTo?: string;
+    mergeCommit?: string;
+  };
+  cafeId?: string;
+  recipeId?: string;
+  recipeName?: string;
+}
+
+interface BaristaJson {
+  id: string;
+  status: string;
+  currentOrderId: string | null;
+  provider: string;
+  role?: string;
+  createdAt: string;
+  lastActivityAt: string;
+}
+
+interface ReceiptJson {
+  orderId: string;
+  status: string;
+  startedAt: string;
+  endedAt: string;
+  provider: string;
+  counter: string;
+  errorSummary?: string;
+  changedFiles?: string[];
+  logs?: string;
+}
 
 /**
  * JSON 기반 데이터 저장소
@@ -40,6 +94,29 @@ export class Storage {
   }
 
   /**
+   * Generic JSON file loader with transformation
+   */
+  private async loadJsonFile<TRaw, TResult>(
+    filepath: string,
+    transformer: (data: TRaw) => TResult
+  ): Promise<TResult[]> {
+    if (!existsSync(filepath)) {
+      return [];
+    }
+    const content = await readFile(filepath, 'utf-8');
+    if (!content) {
+      return [];
+    }
+    try {
+      const rawData = JSON.parse(content) as TRaw[];
+      return rawData.map(transformer);
+    } catch {
+      // JSON 파싱 실패 시 빈 배열 반환하여 애플리케이션 충돌 방지
+      return [];
+    }
+  }
+
+  /**
    * Orders 저장/로드
    */
   async saveOrders(orders: Order[]): Promise<void> {
@@ -47,21 +124,20 @@ export class Storage {
   }
 
   async loadOrders(): Promise<Order[]> {
-    if (!existsSync(this.ordersFile)) {
-      return [];
-    }
-    const content = await readFile(this.ordersFile, 'utf-8');
-    if (!content) {
-      return [];
-    }
-    const orders = JSON.parse(content);
-    // Date 복원
-    return orders.map((order: any) => ({
-      ...order,
-      createdAt: new Date(order.createdAt),
-      startedAt: order.startedAt ? new Date(order.startedAt) : null,
-      endedAt: order.endedAt ? new Date(order.endedAt) : null,
-    }));
+    return this.loadJsonFile<OrderJson, Order>(
+      this.ordersFile,
+      (order: OrderJson): Order => {
+        const { createdAt, startedAt, endedAt, status, provider, ...rest } = order;
+        return {
+          ...rest,
+          status: status as OrderStatus,
+          provider: provider as ProviderType,
+          createdAt: new Date(createdAt),
+          startedAt: startedAt ? new Date(startedAt) : null,
+          endedAt: endedAt ? new Date(endedAt) : null,
+        };
+      }
+    );
   }
 
   /**
@@ -72,20 +148,19 @@ export class Storage {
   }
 
   async loadBaristas(): Promise<Barista[]> {
-    if (!existsSync(this.baristasFile)) {
-      return [];
-    }
-    const content = await readFile(this.baristasFile, 'utf-8');
-    if (!content) {
-      return [];
-    }
-    const baristas = JSON.parse(content);
-    // Date 복원
-    return baristas.map((barista: any) => ({
-      ...barista,
-      createdAt: new Date(barista.createdAt),
-      lastActivityAt: new Date(barista.lastActivityAt),
-    }));
+    return this.loadJsonFile<BaristaJson, Barista>(
+      this.baristasFile,
+      (barista: BaristaJson): Barista => {
+        const { createdAt, lastActivityAt, status, provider, ...rest } = barista;
+        return {
+          ...rest,
+          status: status as BaristaStatus,
+          provider: provider as ProviderType,
+          createdAt: new Date(createdAt),
+          lastActivityAt: new Date(lastActivityAt),
+        };
+      }
+    );
   }
 
   /**
@@ -96,20 +171,19 @@ export class Storage {
   }
 
   async loadReceipts(): Promise<Receipt[]> {
-    if (!existsSync(this.receiptsFile)) {
-      return [];
-    }
-    const content = await readFile(this.receiptsFile, 'utf-8');
-    if (!content) {
-      return [];
-    }
-    const receipts = JSON.parse(content);
-    // Date 복원
-    return receipts.map((receipt: any) => ({
-      ...receipt,
-      startedAt: new Date(receipt.startedAt),
-      endedAt: new Date(receipt.endedAt),
-    }));
+    return this.loadJsonFile<ReceiptJson, Receipt>(
+      this.receiptsFile,
+      (receipt: ReceiptJson): Receipt => {
+        const { startedAt, endedAt, status, provider, ...rest } = receipt;
+        return {
+          ...rest,
+          status: status as OrderStatus,
+          provider: provider as ProviderType,
+          startedAt: new Date(startedAt),
+          endedAt: new Date(endedAt),
+        };
+      }
+    );
   }
 
   /**

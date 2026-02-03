@@ -36,6 +36,18 @@ export enum ErrorCode {
   IPC_TIMEOUT = 'IPC_TIMEOUT',
   IPC_CHANNEL_NOT_FOUND = 'IPC_CHANNEL_NOT_FOUND',
 
+  // Barista errors
+  BARISTA_NOT_FOUND = 'BARISTA_NOT_FOUND',
+  BARISTA_RUNNING = 'BARISTA_RUNNING',
+  MAX_BARISTAS_REACHED = 'MAX_BARISTAS_REACHED',
+  INVALID_STATE_TRANSITION = 'INVALID_STATE_TRANSITION',
+
+  // Order errors
+  ORDER_NOT_FOUND = 'ORDER_NOT_FOUND',
+  ORDER_NOT_PENDING = 'ORDER_NOT_PENDING',
+  ORDER_CANNOT_CANCEL = 'ORDER_CANNOT_CANCEL',
+  ORDER_CANNOT_DELETE = 'ORDER_CANNOT_DELETE',
+
   // Unknown/generic errors
   UNKNOWN_ERROR = 'UNKNOWN_ERROR',
 }
@@ -66,6 +78,16 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   [ErrorCode.IPC_ERROR]: 'IPC communication failed',
   [ErrorCode.IPC_TIMEOUT]: 'IPC request timed out',
   [ErrorCode.IPC_CHANNEL_NOT_FOUND]: 'IPC channel not found',
+
+  [ErrorCode.BARISTA_NOT_FOUND]: 'Barista not found',
+  [ErrorCode.BARISTA_RUNNING]: 'Cannot operate on running barista',
+  [ErrorCode.MAX_BARISTAS_REACHED]: 'Maximum baristas limit reached',
+  [ErrorCode.INVALID_STATE_TRANSITION]: 'Invalid state transition',
+
+  [ErrorCode.ORDER_NOT_FOUND]: 'Order not found',
+  [ErrorCode.ORDER_NOT_PENDING]: 'Order is not in pending state',
+  [ErrorCode.ORDER_CANNOT_CANCEL]: 'Cannot cancel order in current state',
+  [ErrorCode.ORDER_CANNOT_DELETE]: 'Cannot delete order in current state',
 
   [ErrorCode.UNKNOWN_ERROR]: 'An unknown error occurred',
 };

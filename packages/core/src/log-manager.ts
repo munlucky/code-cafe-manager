@@ -1,15 +1,13 @@
 import { appendFile, mkdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { LOG_DEFAULTS } from './constants/logging.js';
 
 /**
  * 로그 파일 관리
  */
 export class LogManager {
   private logsDir: string;
-
-  // Maximum length for a single log entry to prevent excessive file growth
-  private static readonly MAX_LOG_ENTRY_LENGTH = 500;
 
   constructor(logsDir: string) {
     this.logsDir = logsDir;
@@ -39,8 +37,8 @@ export class LogManager {
     const timestamp = new Date().toISOString();
 
     // Truncate long messages to prevent excessive file growth
-    const truncatedMessage = message.length > LogManager.MAX_LOG_ENTRY_LENGTH
-      ? message.substring(0, LogManager.MAX_LOG_ENTRY_LENGTH) + '...(truncated)'
+    const truncatedMessage = message.length > LOG_DEFAULTS.MAX_ENTRY_LENGTH
+      ? message.substring(0, LOG_DEFAULTS.MAX_ENTRY_LENGTH) + '...(truncated)'
       : message;
 
     const logLine = `[${timestamp}] ${truncatedMessage}\n`;
@@ -61,7 +59,7 @@ export class LogManager {
   /**
    * 로그 tail (마지막 N줄)
    */
-  async tailLog(orderId: string, lines: number = 100): Promise<string> {
+  async tailLog(orderId: string, lines: number = LOG_DEFAULTS.DEFAULT_TAIL_LINES): Promise<string> {
     const content = await this.readLog(orderId);
     if (!content) {
       return '';
