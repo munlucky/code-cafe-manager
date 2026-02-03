@@ -8,6 +8,9 @@ import type { SharedContext } from '../shared-context';
 import type { StageOrchestrator } from '../stage-orchestrator';
 import type { OrchestratorDecision } from '../stage-signals';
 import type { StageConfig, AwaitingState } from '../order-session';
+import { RetryPolicyManager, createDefaultRetryPolicy } from '../retry';
+import { ParallelStageProcessor, createParallelStageProcessor } from './parallel-stage-processor';
+import type { StageResult } from './parallel-stage-processor';
 
 const logger = createLogger({ context: 'StageCoordinator' });
 
@@ -31,12 +34,25 @@ export interface StageCoordinatorCallbacks {
  * Stage 실행 조율 클래스
  */
 export class StageCoordinator {
+  private readonly retryPolicyManager: RetryPolicyManager;
+  private readonly parallelProcessor: ParallelStageProcessor;
+
   constructor(
     private readonly orchestrator: StageOrchestrator,
     private readonly terminalGroup: TerminalGroup,
     private readonly sharedContext: SharedContext,
-    private readonly callbacks: StageCoordinatorCallbacks
-  ) {}
+    private readonly callbacks: StageCoordinatorCallbacks,
+    retryPolicyManager?: RetryPolicyManager
+  ) {
+    this.retryPolicyManager = retryPolicyManager ?? new RetryPolicyManager(createDefaultRetryPolicy());
+    this.parallelProcessor = createParallelStageProcessor(
+      orchestrator,
+      sharedContext,
+      terminalGroup,
+      callbacks,
+      this.retryPolicyManager.getMaxRetries()
+    );
+  }
 
   /**
    * 단일 Stage 실행 및 오케스트레이터 판단
@@ -79,7 +95,7 @@ export class StageCoordinator {
   }
 
   /**
-   * 병렬 Stage들의 결과 처리 (A안: 부분 재시도 정책)
+   * 병렬 Stage들의 결과 처리 (ParallelStageProcessor 위임)
    */
   async processParallelResults(
     results: Array<{ stageId: string; success: boolean; output?: string; error?: string }>,
@@ -89,132 +105,16 @@ export class StageCoordinator {
     stagesMap: Map<string, StageConfig>,
     interpolatePrompt: (prompt: string) => string
   ): Promise<StageExecutionAction> {
-    const MAX_RETRIES = 2;
+    const result = await this.parallelProcessor.process(
+      results as StageResult[],
+      executionPlan,
+      batchIndex,
+      cwd,
+      stagesMap,
+      interpolatePrompt
+    );
 
-    // 1. 실패한 Stage 확인 → failedState 생성 + throw
-    const failed = results.filter((r) => !r.success);
-    if (failed.length > 0) {
-      // 성공한 stage들 완료 기록
-      const succeeded = results.filter((r) => r.success);
-      for (const s of succeeded) {
-        this.callbacks.onStageCompleted(s.stageId);
-      }
-
-      const firstFailed = failed[0];
-      const errorMsg = `Parallel stages failed: ${failed.map((f) => `${f.stageId}: ${f.error}`).join(', ')}`;
-      this.callbacks.onBuildFailedState(errorMsg, batchIndex, firstFailed.stageId);
-      throw new Error(errorMsg);
-    }
-
-    // 2. 결정 수집 및 분류
-    let currentResults = results;
-    let retryCount = 0;
-
-    while (true) {
-      const toRetry: Array<{ stageId: string; output: string }> = [];
-      const completed: string[] = [];
-
-      // 모든 결과에 대해 orchestrator 결정 수집
-      for (const result of currentResults) {
-        const decision = await this.orchestrator.evaluate(
-          result.stageId,
-          result.output || '',
-          this.sharedContext
-        );
-
-        logger.debug(`Orchestrator decision for parallel stage ${result.stageId}`, { decision });
-
-        const handled = this.handleDecision(
-          decision,
-          result.stageId,
-          executionPlan,
-          batchIndex,
-          cwd
-        );
-
-        if (handled === 'retry') {
-          toRetry.push({ stageId: result.stageId, output: result.output || '' });
-        } else if (handled === 'awaiting') {
-          // awaiting 외의 완료된 stage들은 기록
-          for (const r of currentResults) {
-            if (r.stageId !== result.stageId) {
-              const otherDecision = await this.orchestrator.evaluate(
-                r.stageId,
-                r.output || '',
-                this.sharedContext
-              );
-              if (otherDecision.action === 'proceed' || otherDecision.action === 'skip_next') {
-                this.callbacks.onStageCompleted(r.stageId);
-              }
-            }
-          }
-          return 'awaiting';
-        } else {
-          // proceed 또는 skip_next
-          completed.push(result.stageId);
-        }
-      }
-
-      // 3. retry가 없으면 완료 처리 후 proceed
-      if (toRetry.length === 0) {
-        for (const stageId of completed) {
-          this.callbacks.onStageCompleted(stageId);
-        }
-        return 'proceed';
-      }
-
-      // 4. retry 처리
-      retryCount++;
-      if (retryCount > MAX_RETRIES) {
-        // MAX_RETRIES 초과 - 완료된 것들은 기록하고 실패 처리
-        for (const stageId of completed) {
-          this.callbacks.onStageCompleted(stageId);
-        }
-
-        const firstRetry = toRetry[0];
-        const errorMsg = `Parallel stage ${firstRetry.stageId} failed after ${MAX_RETRIES} retries`;
-        this.callbacks.onBuildFailedState(errorMsg, batchIndex, firstRetry.stageId);
-        throw new Error(errorMsg);
-      }
-
-      logger.debug(`Retrying ${toRetry.length} parallel stages (${retryCount}/${MAX_RETRIES})`, {
-        stageIds: toRetry.map((r) => r.stageId),
-      });
-
-      // 완료된 stage들 기록
-      for (const stageId of completed) {
-        this.callbacks.onStageCompleted(stageId);
-      }
-
-      // 재시도할 stage들만 다시 실행
-      const retryStages = toRetry.map((r) => {
-        const stage = stagesMap.get(r.stageId);
-        if (!stage) {
-          throw new Error(`Stage config not found for retry: ${r.stageId}`);
-        }
-        return {
-          stageId: stage.id,
-          provider: stage.provider,
-          prompt: interpolatePrompt(stage.prompt),
-          role: stage.role,
-          skills: stage.skills,
-        };
-      });
-
-      const retryResults = await this.terminalGroup.executeStagesParallel(retryStages);
-
-      // 재실행 결과 중 실패 확인
-      const retryFailed = retryResults.filter((r) => !r.success);
-      if (retryFailed.length > 0) {
-        const firstFailed = retryFailed[0];
-        const errorMsg = `Parallel stage retry failed: ${retryFailed.map((f) => `${f.stageId}: ${f.error}`).join(', ')}`;
-        this.callbacks.onBuildFailedState(errorMsg, batchIndex, firstFailed.stageId);
-        throw new Error(errorMsg);
-      }
-
-      // 다음 루프에서 재시도 결과 처리
-      currentResults = retryResults;
-    }
+    return result;
   }
 
   /**
@@ -270,7 +170,7 @@ export class StageCoordinator {
     interpolatePrompt: (prompt: string) => string,
     shouldSkipStage: (stageId: string) => boolean
   ): Promise<{ action: StageExecutionAction; shouldBreak: boolean }> {
-    const MAX_RETRIES = 2;
+    const MAX_RETRIES = this.retryPolicyManager.getMaxRetries();
 
     // 스킵할 stage 필터링
     const filteredBatch = batch.filter(stage => !shouldSkipStage(stage.id));

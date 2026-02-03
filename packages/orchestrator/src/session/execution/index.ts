@@ -11,3 +11,10 @@ export type {
   StageExecutionResult,
   StageCoordinatorCallbacks,
 } from './stage-coordinator';
+
+export { ParallelStageProcessor, createParallelStageProcessor } from './parallel-stage-processor';
+export type {
+  StageResult,
+  HandlerDecision,
+  ParallelProcessorCallbacks,
+} from './parallel-stage-processor';

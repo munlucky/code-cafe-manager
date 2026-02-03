@@ -24,15 +24,19 @@ import { TerminalGroup } from './terminal-group';
 import { StageOrchestrator, OrchestratorConfig } from './stage-orchestrator';
 
 // Internal modules
-import { SessionLifecycle, SessionStatus } from './lifecycle';
+import { SessionStateMachine, SessionState } from './state-machine';
+import type { SessionStateMachineState } from './state-machine';
 import { ExecutionPlanner, StageCoordinator } from './execution';
 import { SessionContextManager } from './resources';
 import { SessionEventPropagator } from './events';
 
 const logger = createLogger({ context: 'OrderSession' });
 
+// Internal type alias
+type SessionStatus = SessionState;
+
 // Re-export types for public API compatibility
-export type { SessionStatus } from './lifecycle';
+export type { SessionState as SessionStatus } from './state-machine';
 
 export interface StageConfig {
   id: string;
@@ -89,7 +93,7 @@ export class OrderSession extends EventEmitter {
   private readonly orchestrator: StageOrchestrator;
 
   // Internal modules
-  private readonly lifecycle: SessionLifecycle;
+  private readonly stateMachine: SessionStateMachine;
   private readonly planner: ExecutionPlanner;
   private readonly contextManager: SessionContextManager;
   private readonly eventPropagator: SessionEventPropagator;
@@ -122,7 +126,7 @@ export class OrderSession extends EventEmitter {
     this.orchestrator = new StageOrchestrator(orchestratorConfig);
 
     // Initialize internal modules
-    this.lifecycle = new SessionLifecycle('created');
+    this.stateMachine = new SessionStateMachine('created');
     this.planner = new ExecutionPlanner(this.sharedContext);
     this.contextManager = new SessionContextManager(this.sharedContext);
     this.eventPropagator = new SessionEventPropagator(order.id, cafeId);
@@ -165,11 +169,11 @@ export class OrderSession extends EventEmitter {
    * 단순 프롬프트 실행 (Legacy Order 호환)
    */
   async executePrompt(prompt: string, cwd: string): Promise<void> {
-    if (this.lifecycle.getStatus() !== 'created') {
+    if (this.stateMachine.getStatus() !== 'created') {
       throw new Error(`Session ${this.orderId} is not in created state`);
     }
 
-    this.lifecycle.start();
+    this.stateMachine.start();
     this.emit('session:started', { orderId: this.orderId, cafeId: this.cafeId });
 
     try {
@@ -193,29 +197,29 @@ export class OrderSession extends EventEmitter {
       );
 
       if (result.success) {
-        this.lifecycle.complete();
+        this.stateMachine.complete();
         this.emit('session:completed', {
           orderId: this.orderId,
           output: result.output,
         });
       } else {
-        this.lifecycle.fail(result.error || 'Unknown error');
+        this.stateMachine.fail(result.error || 'Unknown error');
         this.emit('session:failed', {
           orderId: this.orderId,
-          error: this.lifecycle.getError(),
+          error: this.stateMachine.getError(),
         });
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      this.lifecycle.fail(errorMsg);
+      this.stateMachine.fail(errorMsg);
       this.emit('session:failed', {
         orderId: this.orderId,
         error: errorMsg,
       });
       throw error;
     } finally {
-      if (this.lifecycle.getStatus() !== 'awaiting_input') {
-        this.lifecycle.setCompletedAt(new Date());
+      if (this.stateMachine.getStatus() !== 'awaiting_input') {
+        this.stateMachine.setCompletedAt(new Date());
       }
     }
   }
@@ -228,11 +232,11 @@ export class OrderSession extends EventEmitter {
       throw new Error(`No workflow configured for session ${this.orderId}`);
     }
 
-    if (this.lifecycle.getStatus() !== 'created') {
+    if (this.stateMachine.getStatus() !== 'created') {
       throw new Error(`Session ${this.orderId} is not in created state`);
     }
 
-    this.lifecycle.start();
+    this.stateMachine.start();
     this.currentCwd = cwd;
     this.emit('session:started', { orderId: this.orderId, cafeId: this.cafeId });
 
@@ -258,7 +262,7 @@ export class OrderSession extends EventEmitter {
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      this.lifecycle.fail(errorMsg);
+      this.stateMachine.fail(errorMsg);
 
       if (!this.contextManager.getFailedState() && this.currentExecutionPlan) {
         this.contextManager.buildFailedState({
@@ -277,9 +281,9 @@ export class OrderSession extends EventEmitter {
       });
       throw error;
     } finally {
-      const status = this.lifecycle.getStatus();
+      const status = this.stateMachine.getStatus();
       if (status !== 'awaiting_input' && status !== 'failed') {
-        this.lifecycle.setCompletedAt(new Date());
+        this.stateMachine.setCompletedAt(new Date());
       }
     }
   }
@@ -303,7 +307,7 @@ export class OrderSession extends EventEmitter {
           }
         },
         onAwaitingState: (state) => {
-          this.lifecycle.setAwaiting();
+          this.stateMachine.setAwaiting();
           this.contextManager.setAwaitingState(state);
           this.emit('session:awaiting', {
             orderId: this.orderId,
@@ -344,8 +348,8 @@ export class OrderSession extends EventEmitter {
     }
 
     // 모든 Stage 완료
-    if (this.lifecycle.getStatus() !== 'awaiting_input') {
-      this.lifecycle.complete();
+    if (this.stateMachine.getStatus() !== 'awaiting_input') {
+      this.stateMachine.complete();
       this.emit('session:completed', {
         orderId: this.orderId,
         context: this.sharedContext.snapshot(),
@@ -358,7 +362,7 @@ export class OrderSession extends EventEmitter {
    */
   async resume(userInput: string): Promise<void> {
     const awaitingState = this.contextManager.getAwaitingState();
-    if (this.lifecycle.getStatus() !== 'awaiting_input' || !awaitingState) {
+    if (this.stateMachine.getStatus() !== 'awaiting_input' || !awaitingState) {
       throw new Error(`Session ${this.orderId} is not awaiting input`);
     }
 
@@ -368,7 +372,7 @@ export class OrderSession extends EventEmitter {
     const { remainingPlan, cwd } = awaitingState;
 
     this.contextManager.clearAwaitingState();
-    this.lifecycle.resume();
+    this.stateMachine.resume();
 
     this.emit('session:resumed', { orderId: this.orderId, userInput });
 
@@ -376,15 +380,15 @@ export class OrderSession extends EventEmitter {
       await this.executeWithOrchestrator(remainingPlan, cwd, 0);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      this.lifecycle.fail(errorMsg);
+      this.stateMachine.fail(errorMsg);
       this.emit('session:failed', {
         orderId: this.orderId,
         error: errorMsg,
       });
       throw error;
     } finally {
-      if (this.lifecycle.getStatus() !== 'awaiting_input') {
-        this.lifecycle.setCompletedAt(new Date());
+      if (this.stateMachine.getStatus() !== 'awaiting_input') {
+        this.stateMachine.setCompletedAt(new Date());
       }
     }
   }
@@ -400,11 +404,11 @@ export class OrderSession extends EventEmitter {
    * 세션 취소
    */
   async cancel(): Promise<void> {
-    if (this.lifecycle.getStatus() !== 'running') {
+    if (this.stateMachine.getStatus() !== 'running') {
       return;
     }
 
-    this.lifecycle.cancel();
+    this.stateMachine.cancel();
 
     if (this.terminalGroup) {
       await this.terminalGroup.dispose();
@@ -438,19 +442,19 @@ export class OrderSession extends EventEmitter {
     duration: number | null;
     error: string | null;
   } {
-    const state = this.lifecycle.getState();
-    const duration = this.lifecycle.getDuration();
+    const fullState = this.stateMachine.getFullState();
+    const duration = this.stateMachine.getDuration();
 
     return {
       orderId: this.orderId,
       cafeId: this.cafeId,
-      status: state.status,
+      status: fullState.status,
       terminals: this.terminalGroup?.getStatus() || null,
       context: this.sharedContext.snapshot(),
-      startedAt: state.startedAt?.toISOString() || null,
-      completedAt: state.completedAt?.toISOString() || null,
+      startedAt: fullState.startedAt?.toISOString() || null,
+      completedAt: fullState.completedAt?.toISOString() || null,
       duration,
-      error: state.error,
+      error: fullState.error,
     };
   }
 
@@ -473,7 +477,7 @@ export class OrderSession extends EventEmitter {
    */
   async retryFromStage(fromStageId?: string): Promise<void> {
     const failedState = this.contextManager.getFailedState();
-    if (this.lifecycle.getStatus() !== 'failed' || !failedState) {
+    if (this.stateMachine.getStatus() !== 'failed' || !failedState) {
       throw new Error(`Session ${this.orderId} is not in failed state or has no retry info`);
     }
 
@@ -500,7 +504,7 @@ export class OrderSession extends EventEmitter {
 
     const originalFailedStageId = failedState.failedStageId;
 
-    this.lifecycle.resume();
+    this.stateMachine.resume();
     this.contextManager.clearFailedState();
 
     this.emit('session:resumed', {
@@ -529,7 +533,7 @@ export class OrderSession extends EventEmitter {
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      this.lifecycle.fail(errorMsg);
+      this.stateMachine.fail(errorMsg);
       this.emit('session:failed', {
         orderId: this.orderId,
         error: errorMsg,
@@ -538,9 +542,9 @@ export class OrderSession extends EventEmitter {
       });
       throw error;
     } finally {
-      const status = this.lifecycle.getStatus();
+      const status = this.stateMachine.getStatus();
       if (status !== 'awaiting_input' && status !== 'failed') {
-        this.lifecycle.setCompletedAt(new Date());
+        this.stateMachine.setCompletedAt(new Date());
       }
     }
   }
@@ -550,7 +554,7 @@ export class OrderSession extends EventEmitter {
    */
   async retryFromBeginning(preserveContext: boolean = true): Promise<void> {
     const failedState = this.contextManager.getFailedState();
-    if (this.lifecycle.getStatus() !== 'failed' || !failedState) {
+    if (this.stateMachine.getStatus() !== 'failed' || !failedState) {
       throw new Error(`Session ${this.orderId} is not in failed state or has no retry info`);
     }
 
@@ -570,8 +574,8 @@ export class OrderSession extends EventEmitter {
     this.sharedContext.resetStages();
     this.contextManager.clearCompletedStages();
 
-    this.lifecycle.resume();
-    this.lifecycle.setStartedAt(new Date());
+    this.stateMachine.resume();
+    this.stateMachine.setStartedAt(new Date());
     this.contextManager.clearFailedState();
 
     this.emit('session:resumed', {
@@ -603,7 +607,7 @@ export class OrderSession extends EventEmitter {
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      this.lifecycle.fail(errorMsg);
+      this.stateMachine.fail(errorMsg);
       this.emit('session:failed', {
         orderId: this.orderId,
         error: errorMsg,
@@ -612,9 +616,9 @@ export class OrderSession extends EventEmitter {
       });
       throw error;
     } finally {
-      const status = this.lifecycle.getStatus();
+      const status = this.stateMachine.getStatus();
       if (status !== 'awaiting_input' && status !== 'failed') {
-        this.lifecycle.setCompletedAt(new Date());
+        this.stateMachine.setCompletedAt(new Date());
       }
     }
   }
@@ -623,12 +627,12 @@ export class OrderSession extends EventEmitter {
    * Followup 모드 진입
    */
   async enterFollowup(): Promise<void> {
-    if (this.lifecycle.getStatus() !== 'completed') {
-      throw new Error(`Session ${this.orderId} is not in completed state. Current: ${this.lifecycle.getStatus()}`);
+    if (this.stateMachine.getStatus() !== 'completed') {
+      throw new Error(`Session ${this.orderId} is not in completed state. Current: ${this.stateMachine.getStatus()}`);
     }
 
     logger.debug(`Entering followup mode for order ${this.orderId}`);
-    this.lifecycle.enterFollowup();
+    this.stateMachine.enterFollowup();
     this.emit('session:followup', { orderId: this.orderId });
   }
 
@@ -636,7 +640,7 @@ export class OrderSession extends EventEmitter {
    * Followup 프롬프트 실행
    */
   async executeFollowup(prompt: string): Promise<void> {
-    const status = this.lifecycle.getStatus();
+    const status = this.stateMachine.getStatus();
     if (status !== 'completed' && status !== 'followup') {
       throw new Error(`Session ${this.orderId} must be in completed or followup state. Current: ${status}`);
     }
@@ -648,7 +652,7 @@ export class OrderSession extends EventEmitter {
 
     logger.debug(`Executing followup prompt for order ${this.orderId}`);
 
-    this.lifecycle.setStatus('followup');
+    this.stateMachine.setStatus('followup');
     this.emit('session:followup-started', { orderId: this.orderId, prompt });
 
     try {
@@ -678,7 +682,7 @@ export class OrderSession extends EventEmitter {
       );
 
       if (result.success) {
-        this.lifecycle.complete();
+        this.stateMachine.complete();
         this.emit('session:followup-completed', {
           orderId: this.orderId,
           stageId: followupStageId,
@@ -706,14 +710,14 @@ export class OrderSession extends EventEmitter {
    * Followup 모드 종료 및 세션 완전 종료
    */
   async finishFollowup(): Promise<void> {
-    const status = this.lifecycle.getStatus();
+    const status = this.stateMachine.getStatus();
     if (status !== 'followup' && status !== 'completed') {
       throw new Error(`Session ${this.orderId} is not in followup or completed state`);
     }
 
     logger.debug(`Finishing followup mode for order ${this.orderId}`);
-    this.lifecycle.setStatus('completed');
-    this.lifecycle.setCompletedAt(new Date());
+    this.stateMachine.setStatus('completed');
+    this.stateMachine.setCompletedAt(new Date());
     this.emit('session:followup-finished', { orderId: this.orderId });
   }
 
@@ -723,7 +727,7 @@ export class OrderSession extends EventEmitter {
   restoreForFollowup(cwd: string): void {
     logger.debug(`Restoring session ${this.orderId} for followup with cwd: ${cwd}`);
 
-    this.lifecycle.setStatus('completed');
+    this.stateMachine.setStatus('completed');
     this.currentCwd = cwd;
 
     if (!this.terminalGroup) {

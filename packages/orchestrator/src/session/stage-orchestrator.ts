@@ -17,6 +17,8 @@ import {
 import { SignalParser, ParseResult } from './signal-parser';
 import { SharedContext } from './shared-context';
 import { OUTPUT_THRESHOLDS } from '../constants/thresholds';
+import { RetryPolicyManager, createDefaultRetryPolicy } from './retry';
+import { createDefaultEvaluatorChain, type EvaluationContext } from './orchestration';
 
 const logger = createLogger({ context: 'StageOrchestrator' });
 
@@ -30,17 +32,16 @@ export interface OrchestratorConfig {
   /** 불확실성 임계값 (이 이상이면 사용자 입력 요청) */
   uncertaintyThreshold?: number;
 
-  /** 최대 재시도 횟수 */
-  maxRetries?: number;
+  /** 재시도 정책 관리자 (기본값: ExponentialBackoffPolicy, maxRetries=3) */
+  retryPolicyManager?: RetryPolicyManager;
 
   /** 단순 작업 시 스킵 가능한 stage 목록 */
   skippableOnSimple?: string[];
 }
 
-const DEFAULT_CONFIG: Required<OrchestratorConfig> = {
+const DEFAULT_CONFIG: Required<Omit<OrchestratorConfig, 'retryPolicyManager'>> = {
   enableAIFallback: true,
   uncertaintyThreshold: 3,
-  maxRetries: 2,
   skippableOnSimple: ['review'],
 };
 
@@ -48,14 +49,16 @@ const DEFAULT_CONFIG: Required<OrchestratorConfig> = {
  * Stage Orchestrator
  */
 export class StageOrchestrator extends EventEmitter {
-  private readonly config: Required<OrchestratorConfig>;
+  private readonly config: Omit<Required<OrchestratorConfig>, 'retryPolicyManager'>;
   private readonly signalParser: SignalParser;
-  private retryCount: Map<string, number> = new Map();
+  private readonly retryPolicyManager: RetryPolicyManager;
+  private readonly evaluatorChain = createDefaultEvaluatorChain();
 
   constructor(config?: OrchestratorConfig) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.signalParser = new SignalParser();
+    this.retryPolicyManager = config?.retryPolicyManager ?? new RetryPolicyManager(createDefaultRetryPolicy());
   }
 
   /**
@@ -135,11 +138,13 @@ export class StageOrchestrator extends EventEmitter {
 
     // Rule 5: 재시도 요청
     if (signals.nextAction === 'retry') {
-      const currentRetries = this.retryCount.get(stageId) || 0;
-      const maxRetries = signals.maxRetries || this.config.maxRetries;
+      const maxRetries = signals.maxRetries ?? this.retryPolicyManager.getMaxRetries();
 
-      if (currentRetries < maxRetries) {
-        this.retryCount.set(stageId, currentRetries + 1);
+      // Check if should retry using policy
+      const shouldRetry = this.retryPolicyManager.shouldRetry(stageId, new Error(signals.retryReason || 'Stage requested retry'));
+
+      if (shouldRetry) {
+        this.retryPolicyManager.increment(stageId);
         return {
           action: 'retry',
           reason: signals.retryReason || 'Stage requested retry',
@@ -164,8 +169,7 @@ export class StageOrchestrator extends EventEmitter {
   /**
    * AI 기반 판단 (신호 파싱 실패 시 폴백)
    *
-   * signals 블록이 없더라도 출력 내용을 분석하여 작업 완료 여부를 추론
-   * 실질적인 작업이 수행되었다면 proceed, 그렇지 않으면 await_user
+   * StageEvaluator Strategy Chain을 사용하여 판단
    */
   private async evaluateWithAI(
     stageId: string,
@@ -174,98 +178,32 @@ export class StageOrchestrator extends EventEmitter {
   ): Promise<OrchestratorDecision> {
     logger.debug(` AI evaluation for stage ${stageId} (no signals block found)`);
 
-    // 1. 출력 길이 확인 - 실질적인 출력이 있는가?
+    // 1. 출력 길이 확인
     const outputLength = output.length;
-    const hasSubstantialOutput = outputLength > 500;
-    const hasVerySubstantialOutput = outputLength > OUTPUT_THRESHOLDS.VERY_SUBSTANTIAL; // 10KB 이상이면 매우 충분한 출력
-
-    // 2. 작업 완료 지표 확인
-    const completionIndicators = [
-      /(?:created|modified|updated|wrote|generated)\s+(?:file|files)/i,  // File operations
-      /(?:analysis|plan|implementation|review)\s+(?:complete|completed|done)/i,  // Task completion
-      /```(?:yaml|json|markdown)/i,  // Structured output blocks
-      /^##?\s+/m,  // Markdown headers (structured output)
-      /complexity:\s*(?:simple|medium|complex)/i,  // Complexity assessment
-      /taskType:\s*(?:feature|modification|bugfix|refactor)/i,  // Task classification
-    ];
-
-    const hasCompletionIndicators = completionIndicators.some(pattern => pattern.test(output));
-
-    // 3. 불확실성 지표 확인
-    const hasUncertainty = this.hasUncertaintyIndicators(output);
     const questionCount = (output.match(/\?/g) || []).length;
-    // 출력 대비 질문 비율 계산 (긴 출력에서는 질문이 자연스럽게 많을 수 있음)
-    const questionDensity = questionCount / (outputLength / OUTPUT_THRESHOLDS.QUESTION_DENSITY); // 1KB당 질문 수
-    const hasExcessiveQuestions = questionCount >= 5 && questionDensity > 2; // 1KB당 2개 이상의 질문이면 과다
+    const questionDensity = questionCount / (outputLength / OUTPUT_THRESHOLDS.QUESTION_DENSITY);
 
-    // 4. 스테이지별 특화 처리
-    const isAnalyzeStage = stageId === 'analyze' || stageId.includes('analyze');
-    const isPlanStage = stageId === 'plan' || stageId.includes('plan');
+    // 2. EvaluationContext 구성
+    const evalContext: EvaluationContext = {
+      stageId,
+      output,
+      outputLength,
+      hasSignalsBlock: false,
+      questionCount,
+      questionDensity,
+    };
 
-    // analyze/plan 스테이지에서는 질문이 많아도 출력이 충분하면 완료로 판단
-    // 분석 과정에서 "이 파일을 수정해야 하나?" 같은 질문이 자연스럽게 포함됨
-    if ((isAnalyzeStage || isPlanStage) && hasVerySubstantialOutput && hasCompletionIndicators) {
-      logger.debug(` Inferring completion for ${stageId}: very substantial output (${outputLength} chars) with completion indicators (ignoring ${questionCount} questions)`);
-      return {
-        action: 'proceed',
-        reason: `Inferred completion from substantial ${stageId} output (questions are part of analysis)`,
-        usedAI: true,
-      };
-    }
+    // 3. Strategy Chain 실행
+    const result = this.evaluatorChain.evaluate(evalContext);
 
-    // 5. 일반 판단 로직
-    if (hasSubstantialOutput && hasCompletionIndicators && !hasExcessiveQuestions) {
-      // 실질적인 작업이 수행된 것으로 보임 - proceed
-      logger.debug(` Inferring completion: substantial output (${outputLength} chars) with completion indicators`);
-      return {
-        action: 'proceed',
-        reason: 'Inferred completion from output content (no signals block but work appears done)',
-        usedAI: true,
-      };
-    }
+    logger.debug(` Evaluator chain result: ${result.action} (reason: ${result.reason || 'N/A'})`);
 
-    if (hasUncertainty || hasExcessiveQuestions) {
-      // 명확한 불확실성이 있음 - await_user
-      logger.debug(` Inferring uncertainty: ${questionCount} questions (density: ${questionDensity.toFixed(2)}/KB), uncertainty indicators: ${hasUncertainty}`);
-      return {
-        action: 'await_user',
-        reason: 'No signals block found and output contains uncertainty indicators',
-        userMessage: `Stage ${stageId} did not produce a signals block. The stage may need clarification.`,
-        usedAI: true,
-      };
-    }
-
-    // 6. 기본: signals 블록이 없고 판단하기 어려우면 await_user
-    logger.debug(` Cannot infer completion: insufficient indicators (output: ${outputLength} chars)`);
+    // 4. OrchestratorDecision으로 변환
     return {
-      action: 'await_user',
-      reason: 'No signals block found and cannot infer completion',
-      userMessage: `Stage ${stageId} did not produce a signals block. Please review the output.`,
+      action: result.action === 'await_user' ? 'await_user' : 'proceed',
+      reason: result.reason || 'No signals block found - evaluated with strategy chain',
       usedAI: true,
     };
-  }
-
-  /**
-   * Detect uncertainty indicators in output
-   */
-  private hasUncertaintyIndicators(output: string): boolean {
-    const indicators = [
-      /\?\s*$/gm,                    // Question mark at end of line
-      /확인.*필요/g,                  // Korean: "confirmation needed"
-      /명확하지 않/g,                 // Korean: "not clear"
-      /clarification needed/gi,
-      /please confirm/gi,
-      /not sure/gi,
-      /ambiguous/gi,
-    ];
-
-    for (const pattern of indicators) {
-      if (pattern.test(output)) {
-        return true;
-      }
-    }
-
-    return false;
   }
 
   /**
@@ -311,9 +249,9 @@ export class StageOrchestrator extends EventEmitter {
    */
   resetRetryCount(stageId?: string): void {
     if (stageId) {
-      this.retryCount.delete(stageId);
+      this.retryPolicyManager.reset(stageId);
     } else {
-      this.retryCount.clear();
+      this.retryPolicyManager.resetAll();
     }
   }
 

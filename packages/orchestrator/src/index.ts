@@ -18,6 +18,7 @@ export type { TerminalPoolConfig, ProviderTerminalConfig, PoolStatus, PoolMetric
 
 // Export barista engine
 export { BaristaEngineV2 } from './barista/barista-engine-v2.js';
+export * from './barista/services';
 
 // Export facades (Public API for external consumers)
 export * from './facades';
