@@ -38,6 +38,9 @@
 {"type":"entity","name":"codecafe::Convention::EventHandlerPattern","entityType":"convention","observations":["이벤트 핸들러 분리 패턴: 단일 책임 원칙(SRP) 준수","각 핸들러는 setup()에서 리스너 등록, cleanup()에서 제거","ExecutionManager에서 핸들러 인스턴스를 생성하고 위임"]}
 {"type":"entity","name":"codecafe::Convention::ImmerMiddleware","entityType":"convention","observations":["Zustand 스토어에서 immer 미들웨어 사용하여 불변성 유지하면서 mutate 패턴 사용","appendStageOutput 등에서 spread 대신 direct push 사용 가능","코드 단순화 및 성능 개선"]}
 {"type":"entity","name":"codecafe::Type::EventTypes","entityType":"type","observations":["src/renderer/types/events.ts에 이벤트 타입 정의","OutputEventType, OrderOutputEvent, SessionStatusEvent 등","타입 안전성 개선을 위해 별도 파일로 분리"]}
+{"type":"entity","name":"codecafe::Component::ESLintConfig","entityType":"component","observations":["파일: eslint.config.js (루트)","ESLint 9.39.2 flat config 적용","@eslint/js 사용한 기본 설정","TypeScript 파서 사용","globals로 Node.js/Browser globals 정의","no-undef 규칙 비활성화 (TypeScript가 더 잘 처리)","무시 패턴: node_modules/**, dist/**, *.tsbuildinfo, .claude/**, packages/*/dist/**"]}
+{"type":"entity","name":"codecafe::Dependency::ESLint","entityType":"dependency","observations":["버전: 8.57.1 → 9.39.2 (보안 패치)","CVE-2025-50537 Stack Overflow 취약점 해결","devDependencies에 추가 (workspace root)","@eslint/js 추가","globals ^17.3.0 추가","pnpm.overrides에 eslint >=9.26.0 지정"]}
+{"type":"entity","name":"codecafe::Security::CVE-2025-50537","entityType":"security","observations":["영향 받은 버전: eslint <9.26.0","취약점: 순환 참조 객체 직렬화 시 Stack Overflow","해결: eslint 9.39.2로 업그레이드 완료","검증 완료: pnpm audit 통과 (No known vulnerabilities)"]}
 {"type":"relation","from":"codecafe::Architecture::Layers","to":"codecafe::Documentation::ModuleSpecs","relationType":"documented_in"}
 {"type":"relation","from":"codecafe::Boundary::AlwaysDo","to":"codecafe::Documentation::ModuleSpecs","relationType":"enforces"}
 {"type":"relation","from":"codecafe::Component::ResourceLifecycleIntegrationTest","to":"codecafe::Project::OrchestratorWeek4Refactor","relationType":"part_of"}
@@ -59,3 +62,5 @@
 {"type":"relation","from":"codecafe::Type::EventTypes","to":"codecafe::Component::OrderEventHandler","relationType":"type_defined_for"}
 {"type":"relation","from":"codecafe::Type::EventTypes","to":"codecafe::Component::StageEventHandler","relationType":"type_defined_for"}
 {"type":"relation","from":"codecafe::Type::EventTypes","to":"codecafe::Component::SessionEventHandler","relationType":"type_defined_for"}
+{"type":"relation","from":"codecafe::Component::ESLintConfig","to":"codecafe::Dependency::ESLint","relationType":"uses"}
+{"type":"relation","from":"codecafe::Dependency::ESLint","to":"codecafe::Security::CVE-2025-50537","relationType":"fixes"}
