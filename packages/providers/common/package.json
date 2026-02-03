@@ -20,6 +20,9 @@
   "keywords": ["codecafe", "provider", "interface"],
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "node-pty": "^1.0.0"
+  },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "typescript": "^5.3.3"

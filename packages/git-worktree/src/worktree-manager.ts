@@ -10,6 +10,7 @@ import {
   WorktreeRemoveOptions,
   WorktreeMergeOptions,
   MergeResult,
+  isValidWorktreeInfo,
 } from './types.js';
 import {
   WorktreeError,
@@ -425,8 +426,8 @@ export class WorktreeManager {
 
     for (const line of lines) {
       if (line.startsWith('worktree ')) {
-        if (current.path) {
-          worktrees.push(current as WorktreeInfo);
+        if (isValidWorktreeInfo(current)) {
+          worktrees.push(current);
         }
         current = { path: line.substring(9) };
       } else if (line.startsWith('branch ')) {
@@ -442,8 +443,8 @@ export class WorktreeManager {
       }
     }
 
-    if (current.path) {
-      worktrees.push(current as WorktreeInfo);
+    if (isValidWorktreeInfo(current)) {
+      worktrees.push(current);
     }
 
     return worktrees;

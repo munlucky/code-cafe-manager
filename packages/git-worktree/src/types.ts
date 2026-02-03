@@ -11,6 +11,19 @@ export interface WorktreeInfo {
 }
 
 /**
+ * WorktreeInfo 타입 가드
+ * Partial<WorktreeInfo>가 유효한 WorktreeInfo인지 확인
+ */
+export function isValidWorktreeInfo(obj: Partial<WorktreeInfo>): obj is WorktreeInfo {
+  return (
+    typeof obj.path === 'string' &&
+    obj.path.length > 0 &&
+    typeof obj.branch === 'string' &&
+    typeof obj.commit === 'string'
+  );
+}
+
+/**
  * Worktree 생성 옵션
  */
 export interface WorktreeCreateOptions {

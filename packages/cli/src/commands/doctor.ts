@@ -4,28 +4,7 @@ import ora from 'ora';
 import { ClaudeCodeProvider } from '@codecafe/provider-claude-code';
 import { CodexProvider } from '@codecafe/providers-codex';
 import { spawn } from 'child_process';
-import { homedir } from 'os';
-import { join } from 'path';
-import { mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
-
-/**
- * Get configuration directory from environment or default
- */
-function getConfigDir(): string {
-  return process.env.CODECAFE_CONFIG_DIR || join(homedir(), '.codecafe');
-}
-
-/**
- * Initialize configuration directory if not exists
- */
-async function ensureConfigDir(): Promise<string> {
-  const configDir = getConfigDir();
-  if (!existsSync(configDir)) {
-    await mkdir(configDir, { recursive: true });
-  }
-  return configDir;
-}
+import { ensureConfigDir } from '../config.js';
 
 export function registerDoctorCommand(program: Command): void {
   program
@@ -84,7 +63,8 @@ export function registerDoctorCommand(program: Command): void {
           console.log(
             chalk.yellow(`  Install: https://claude.com/claude-code`)
           );
-          console.log(chalk.yellow(`  Hint: ${ClaudeCodeProvider.getAuthHint()}`));
+          const provider = new ClaudeCodeProvider();
+          console.log(chalk.yellow(`  Hint: ${provider.getAuthHint()}`));
           hasErrors = true;
         }
       } catch (error) {
@@ -103,7 +83,8 @@ export function registerDoctorCommand(program: Command): void {
           console.log(
             chalk.yellow(`  Install: https://github.com/google/codex`)
           );
-          console.log(chalk.yellow(`  Hint: ${CodexProvider.getAuthHint()}`));
+          const provider = new CodexProvider();
+          console.log(chalk.yellow(`  Hint: ${provider.getAuthHint()}`));
         }
       } catch (error) {
         codexSpinner.warn('Codex CLI not found (optional)');
@@ -121,24 +102,12 @@ export function registerDoctorCommand(program: Command): void {
 
       console.log();
       if (hasErrors) {
-        console.log(chalk.red.bold('✗ Some checks failed'));
+        console.log(chalk.red.bold('[FAIL] Some checks failed'));
         process.exit(1);
       } else {
-        console.log(chalk.green.bold('✓ All checks passed!'));
+        console.log(chalk.green.bold('[OK] All checks passed!'));
       }
     });
-}
-
-async function checkCommand(
-  command: string,
-  args: string[]
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    const proc = spawn(command, args, { stdio: 'ignore' });
-
-    proc.on('error', () => resolve(false));
-    proc.on('exit', (code) => resolve(code === 0));
-  });
 }
 
 async function getGitVersion(): Promise<string | null> {

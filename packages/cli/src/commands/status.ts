@@ -1,29 +1,8 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { ExecutionFacade } from '@codecafe/orchestrator';
-import { homedir } from 'os';
-import { join } from 'path';
-
-/**
- * Get configuration directory from environment or default
- */
-function getConfigDir(): string {
-  return process.env.CODECAFE_CONFIG_DIR || join(homedir(), '.codecafe');
-}
-
-/**
- * Get data directory from environment or default
- */
-function getDataDir(): string {
-  return process.env.CODECAFE_DATA_DIR || join(getConfigDir(), 'data');
-}
-
-/**
- * Get logs directory from environment or default
- */
-function getLogsDir(): string {
-  return process.env.CODECAFE_LOGS_DIR || join(getConfigDir(), 'logs');
-}
+import { CONFIG } from '../config.js';
+import { handleError } from '../utils/error-handler.js';
 
 export function registerStatusCommand(program: Command): void {
   program
@@ -32,15 +11,15 @@ export function registerStatusCommand(program: Command): void {
     .action(async () => {
       try {
         const facade = new ExecutionFacade({
-          dataDir: getDataDir(),
-          logsDir: getLogsDir(),
+          dataDir: CONFIG.dataDir,
+          logsDir: CONFIG.logsDir,
         });
         await facade.initState();
 
         const baristas = facade.getAllBaristas();
         const orders = facade.getAllOrders();
 
-        console.log(chalk.cyan.bold('\n📋 CodeCafe Status\n'));
+        console.log(chalk.cyan.bold('\n CodeCafe Status\n'));
 
         // Baristas
         console.log(chalk.yellow('Baristas:'));
@@ -55,10 +34,10 @@ export function registerStatusCommand(program: Command): void {
                 ? chalk.blue
                 : chalk.red;
             console.log(
-              `  ${statusColor('●')} ${barista.id} - ${barista.status} (${barista.provider})`
+              `  ${statusColor('*')} ${barista.id} - ${barista.status} (${barista.provider})`
             );
             if (barista.currentOrderId) {
-              console.log(chalk.gray(`    → Order: ${barista.currentOrderId}`));
+              console.log(chalk.gray(`    -> Order: ${barista.currentOrderId}`));
             }
           }
         }
@@ -98,8 +77,7 @@ export function registerStatusCommand(program: Command): void {
 
         console.log();
       } catch (error) {
-        console.error(chalk.red('Failed to get status'));
-        console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+        handleError(error, { command: 'status' });
         process.exit(1);
       }
     });
